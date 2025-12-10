@@ -25,7 +25,24 @@ impl Handler {
         self.handles.get(url)
     }
 }
-
+/// Route types (Beautified):
+/// 1. Exact route
+///    - Example: /hello/world
+///    - Matches every path segment exactly. Highest priority.
+/// 2. Path parameters
+///    - Example: /hello/{name}
+///    - Uses braces {} to capture a single path segment as a parameter (e.g. name).
+/// 3. Single-segment wildcard
+///    - Example: /hello/*/world
+///    - A single asterisk * matches exactly one path segment (does not cross slashes).
+/// 4. Multi-segment wildcard
+///    - Example: /hello/**
+///    - A double asterisk ** matches any number of subsequent path segments (including zero).
+///
+///
+///Note: Typical matching precedence is —
+///
+/// Exact > Path parameters > Single-segment wildcard > Multi-segment wildcard.
 #[derive(Default)]
 pub struct HandlerTire {
     path: HashMap<String, Box<Self>>,

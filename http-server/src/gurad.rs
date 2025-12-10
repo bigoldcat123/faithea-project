@@ -43,18 +43,14 @@ impl GurardTire {
             }
         }
     }
-    pub async fn guard(&self,url:&str,req:HttpRequest) -> Result<HttpRequest,HttpResponse> {
+    pub async fn guard(&self, url: &str, req: HttpRequest) -> Result<HttpRequest, HttpResponse> {
         let chain = self.get(url);
         let mut res = Some(req);
         for c in chain {
             if let Some(req) = res.take() {
                 match c.1(req).await {
-                    Ok(req) => {
-                        res  = Some(req)
-                    }
-                    Err(res) => {
-                        return Err(res)
-                    }
+                    Ok(req) => res = Some(req),
+                    Err(res) => return Err(res),
                 }
             }
         }
@@ -99,10 +95,8 @@ impl GurardTire {
                         idx + 1,
                         format!("{}/{}", current_path, n.0),
                     );
-                } else {
-                    if let Some(f) = n.1.f.as_ref() {
-                        candidates.push((format!("{}/{}", current_path, n.0), f));
-                    }
+                } else if let Some(f) = n.1.f.as_ref() {
+                    candidates.push((format!("{}/{}", current_path, n.0), f));
                 }
             }
         }
@@ -117,7 +111,7 @@ mod test {
     fn t1() {
         let mut g = GurardTire::default();
         g.add("/url/*/efg".to_string(), async |e| Ok(e));
-         g.add("/url/abc/efg".to_string(), async |e| Ok(e));
+        g.add("/url/abc/efg".to_string(), async |e| Ok(e));
         g.add("/url/**".to_string(), async |e| Ok(e));
         g.add("/url/abc".to_string(), async |e| Ok(e));
         g.get("/url/abc/efg/asdas");
