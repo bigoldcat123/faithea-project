@@ -4,16 +4,17 @@ use std::{net::{SocketAddr, ToSocketAddrs}, sync::Arc};
 use bytes::BytesMut;
 use tokio::{net::{TcpListener, TcpStream}, sync::mpsc};
 
-use crate::{handler::{HandlerTire}, request::parse_http_frame, response::HttpResponse};
+use crate::{gurad::GurardTire, handler::HandlerTire, request::parse_http_frame, response::HttpResponse};
 
 pub struct HttpServer {
     addr: SocketAddr,
-    handlers:Arc<HandlerTire>
+    handlers:Arc<HandlerTire>,
+    gurads:Arc<GurardTire>
 }
 
 impl HttpServer {
-    pub fn new<A: ToSocketAddrs>(a: A,handler:HandlerTire) -> Self {
-        Self { addr: a.to_socket_addrs().unwrap().next().unwrap(),handlers:Arc::new(handler)}
+    pub fn new<A: ToSocketAddrs>(a: A,handler:HandlerTire,gurads:GurardTire) -> Self {
+        Self { addr: a.to_socket_addrs().unwrap().next().unwrap(),handlers:Arc::new(handler),gurads:Arc::new(gurads)}
     }
 
     pub async fn start(self) {
@@ -22,8 +23,9 @@ impl HttpServer {
             let (socket, add) = server.accept().await.unwrap();
             println!("new client -> {}", add);
             let handlers = Arc::clone(&self.handlers);
+            let guards = Arc::clone(&self.gurads);
             tokio::spawn(async move {
-                let e = process(socket,handlers).await;
+                let e = process(socket,handlers,guards).await;
                 println!("{:?}", e);
                 println!(" client left -> {}", add);
             });
@@ -32,7 +34,7 @@ impl HttpServer {
 }
 
 
-async fn process(socket: TcpStream,handlers:Arc<HandlerTire>) -> Result<(), String> {
+async fn process(socket: TcpStream,handlers:Arc<HandlerTire>,guards:Arc<GurardTire>) -> Result<(), String> {
     let (mut r, mut w) = socket.into_split();
     let (_tx, mut rx) = mpsc::channel::<HttpResponse>(10);
     tokio::spawn(async move {
@@ -46,8 +48,15 @@ async fn process(socket: TcpStream,handlers:Arc<HandlerTire>) -> Result<(), Stri
         println!("{:?}", req);
 
         if let Some((_url,handle)) = handlers.get(&req.req_line.url) {
-            let res = handle(req).await;
-            let _ =_tx.send(res).await;
+            match guards.guard(&req.req_line.url.clone()[..], req).await {
+                Ok(req) => {
+                    let res = handle(req).await;
+                    let _ =_tx.send(res).await;
+                }
+                Err(res) => {
+                    let _ =_tx.send(res).await;
+                }
+            }
         }else {
             let _ =_tx.send(HttpResponse::not_found()).await;
         }

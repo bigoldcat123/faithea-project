@@ -1,4 +1,4 @@
-use http_server::{handler::{HandlerTire}, request::HttpRequest, response::HttpResponse, server::HttpServer};
+use http_server::{gurad::GurardTire, handler::HandlerTire, request::HttpRequest, response::HttpResponse, server::HttpServer};
 use tokio::fs::File;
 
 async fn handle1(_req:HttpRequest) -> HttpResponse {
@@ -24,7 +24,25 @@ async fn main() {
     handler.add("/hello/{abc}".to_string(), handle1);
     handler.add("/file".to_string(), handle2);
     handler.add("/".to_string(), handle2);
-    let  server = HttpServer::new("127.0.0.1:8899",handler);
+
+    let mut gurads = GurardTire::default();
+
+
+    gurads.add("/hello/*".to_string(), async |req| {
+        println!("哈哈哈");
+        // Err(HttpResponse::not_found())
+        Ok(req)
+    });
+    gurads.add("/hello/asdasd".to_string(), async |req| {
+        println!("哈哈哈2");
+        Ok(req)
+    });
+    gurads.add("/**".to_string(), async |req| {
+        println!("哈哈哈3");
+        Ok(req)
+    });
+
+    let  server = HttpServer::new("127.0.0.1:8899",handler,gurads);
 
     server.start().await
 }

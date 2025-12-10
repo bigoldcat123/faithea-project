@@ -6,6 +6,7 @@ pub mod request;
 pub mod response;
 pub mod server;
 pub mod handler;
+pub mod gurad;
 
 #[macro_export]
 macro_rules! map_str {
