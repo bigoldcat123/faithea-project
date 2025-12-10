@@ -21,7 +21,8 @@ impl HttpResponse {
         let mut r = Self::new();
         r.status_line.status = "404".to_string();
         r.status_line.info = "Not Found".to_string();
-        r.headers.add("Content-length", "0");
+        r.headers.add("Content-length", "9");
+        r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
     pub fn set_body(&mut self, body: ResponseBody) {

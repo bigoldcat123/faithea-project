@@ -4,15 +4,15 @@ use std::{net::{SocketAddr, ToSocketAddrs}, sync::Arc};
 use bytes::BytesMut;
 use tokio::{net::{TcpListener, TcpStream}, sync::mpsc};
 
-use crate::{handler::Handler, request::parse_http_frame, response::HttpResponse};
+use crate::{handler::{HandlerTire}, request::parse_http_frame, response::HttpResponse};
 
 pub struct HttpServer {
     addr: SocketAddr,
-    handlers:Arc<Handler>
+    handlers:Arc<HandlerTire>
 }
 
 impl HttpServer {
-    pub fn new<A: ToSocketAddrs>(a: A,handler:Handler) -> Self {
+    pub fn new<A: ToSocketAddrs>(a: A,handler:HandlerTire) -> Self {
         Self { addr: a.to_socket_addrs().unwrap().next().unwrap(),handlers:Arc::new(handler)}
     }
 
@@ -32,7 +32,7 @@ impl HttpServer {
 }
 
 
-async fn process(socket: TcpStream,handlers:Arc<Handler>) -> Result<(), String> {
+async fn process(socket: TcpStream,handlers:Arc<HandlerTire>) -> Result<(), String> {
     let (mut r, mut w) = socket.into_split();
     let (_tx, mut rx) = mpsc::channel::<HttpResponse>(10);
     tokio::spawn(async move {
@@ -45,15 +45,11 @@ async fn process(socket: TcpStream,handlers:Arc<Handler>) -> Result<(), String> 
         let req = parse_http_frame(&mut r, &mut buf).await?;
         println!("{:?}", req);
 
-        if let Some(handle) = handlers.get(&req.req_line.url) {
+        if let Some((_url,handle)) = handlers.get(&req.req_line.url) {
             let res = handle(req).await;
             let _ =_tx.send(res).await;
         }else {
             let _ =_tx.send(HttpResponse::not_found()).await;
         }
     }
-}
-
-fn calc() {
-
 }

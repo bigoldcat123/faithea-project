@@ -1,4 +1,4 @@
-use http_server::{handler::Handler, request::HttpRequest, response::HttpResponse, server::HttpServer};
+use http_server::{handler::{HandlerTire}, request::HttpRequest, response::HttpResponse, server::HttpServer};
 use tokio::fs::File;
 
 async fn handle1(_req:HttpRequest) -> HttpResponse {
@@ -20,10 +20,10 @@ async fn handle2(_req:HttpRequest) -> HttpResponse {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let mut handler = Handler::default();
-    handler.add("/hello".to_string(), handle1);
+    let mut handler = HandlerTire::default();
+    handler.add("/hello/{abc}".to_string(), handle1);
     handler.add("/file".to_string(), handle2);
-
+    handler.add("/".to_string(), handle2);
     let  server = HttpServer::new("127.0.0.1:8899",handler);
 
     server.start().await
