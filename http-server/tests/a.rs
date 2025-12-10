@@ -9,4 +9,5 @@ fn a() {
     let b = a.get_u32();
     println!("{:X} {b}", b);
     println!("{:#?}", a);
+    asdasd
 }
