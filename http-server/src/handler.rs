@@ -37,7 +37,6 @@ impl HandlerTire {
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
         O: Future<Output = HttpResponse> + 'static + Send + Sync,
     {
-
         let mut url: Vec<&str> = url.split("/").collect();
         url.reverse();
         self.add_url(url, f);
@@ -59,25 +58,28 @@ impl HandlerTire {
             }
         }
     }
-    pub fn get(&self, url: &str) -> Option<(String,&Fu)> {
+    pub fn get(&self, url: &str) -> Option<(String, &Fu)> {
         let url: Vec<&str> = url.split("/").collect();
         let mut candidates: Vec<(String, &Fu)> = vec![];
         self.get_candidates(&url, &mut candidates, 0, String::new());
 
-        candidates.sort_by(|a,b| {
+        candidates.sort_by(|a, b| {
             if a.0.starts_with("{") && b.0.starts_with("{") {
                 std::cmp::Ordering::Equal
-            }else if a.0.starts_with("{")  {
+            } else if a.0.starts_with("{") {
                 std::cmp::Ordering::Greater
-            }else if b.0.starts_with("{")  {
+            } else if b.0.starts_with("{") {
                 std::cmp::Ordering::Less
-            }else {
+            } else {
                 std::cmp::Ordering::Equal
             }
         });
         println!(
             "{:?}",
-            candidates.iter().map(|x| x.0.as_str()).collect::<Vec<&str>>()
+            candidates
+                .iter()
+                .map(|x| x.0.as_str())
+                .collect::<Vec<&str>>()
         );
         candidates.pop()
     }
@@ -102,10 +104,8 @@ impl HandlerTire {
                         idx + 1,
                         format!("{}/{}", current_path, n.0),
                     );
-                } else {
-                    if let Some(f) = n.1.f.as_ref() {
-                        candidates.push((format!("{}/{}", current_path, n.0), f));
-                    }
+                } else if let Some(f) = n.1.f.as_ref() {
+                    candidates.push((format!("{}/{}", current_path, n.0), f));
                 }
             }
         }
@@ -119,12 +119,14 @@ mod test {
     fn t1() {
         let mut handler = HandlerTire::default();
         handler.add("/url/abc/efg".to_string(), async |_| HttpResponse::new());
-        handler.add("/url/{abc}/{efg}".to_string(), async |_| HttpResponse::new());
+        handler.add("/url/{abc}/{efg}".to_string(), async |_| {
+            HttpResponse::new()
+        });
         handler.add("/url/abc".to_string(), async |_| HttpResponse::new());
         let a = handler.get("/url/abc/efg").unwrap();
-        assert_eq!(a.0,"//url/abc/efg");
+        assert_eq!(a.0, "//url/abc/efg");
         let a = handler.get("/url/abc/asd").unwrap();
 
-        assert_eq!(a.0,"//url/{abc}/{efg}")
+        assert_eq!(a.0, "//url/{abc}/{efg}")
     }
 }
