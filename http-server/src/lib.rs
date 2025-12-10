@@ -2,10 +2,10 @@ use std::collections::{HashMap};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-pub mod httpserver;
 pub mod request;
 pub mod response;
 pub mod server;
+pub mod handler;
 
 #[macro_export]
 macro_rules! map_str {

@@ -3,7 +3,7 @@ use tokio::{fs::File, io::AsyncWriteExt, net::tcp::OwnedWriteHalf};
 
 use crate::HttpHeader;
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub struct HttpResponse {
     status_line: ResponseStatusLine,
     headers: HttpHeader,
@@ -16,6 +16,13 @@ impl HttpResponse {
             headers: Default::default(),
             body: ResponseBody::Empty,
         }
+    }
+    pub fn not_found() -> Self {
+        let mut r = Self::new();
+        r.status_line.status = "404".to_string();
+        r.status_line.info = "Not Found".to_string();
+        r.headers.add("Content-length", "0");
+        r
     }
     pub fn set_body(&mut self, body: ResponseBody) {
         self.body = body
@@ -45,13 +52,13 @@ impl HttpResponse {
                 let _ = tokio::io::copy(&mut f, socket).await;
             }
             Empty => {
-
             }
         }
+        let _ = socket.flush().await;
     }
 }
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub enum ResponseBody {
     Simple(Bytes),
     File(File),
@@ -59,7 +66,7 @@ pub enum ResponseBody {
     Empty,
 }
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub struct ResponseStatusLine {
     version: String,
     status: String,
