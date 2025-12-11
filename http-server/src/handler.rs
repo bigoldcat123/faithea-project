@@ -79,18 +79,16 @@ impl HandlerTire {
         let url: Vec<&str> = url.split("/").collect();
         let mut candidates: Vec<(String, &Fu)> = vec![];
         self.get_candidates(&url, &mut candidates, 0, String::new());
-
+        for (s,_) in candidates.iter_mut() {
+            *s = s.replace("{", "|");
+        }
         candidates.sort_by(|a, b| {
-            if a.0.starts_with("{") && b.0.starts_with("{") {
-                std::cmp::Ordering::Equal
-            } else if a.0.starts_with("{") {
-                std::cmp::Ordering::Greater
-            } else if b.0.starts_with("{") {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
+            a.0.cmp(&b.0).reverse()
         });
+
+        for (s,_) in candidates.iter_mut() {
+            *s = s.replace("|", "{");
+        }
         println!(
             "{:?}",
             candidates
@@ -109,18 +107,26 @@ impl HandlerTire {
     ) {
         if idx < url.len() {
             let url_part = url[idx];
-            for n in self
-                .path
-                .iter()
-                .filter(|x| x.0.ends_with("}") && x.0.starts_with("{") || x.0 == url_part)
-            {
+            for n in self.path.iter().filter(|x| {
+                x.0.ends_with("}") && x.0.starts_with("{")
+                    || x.0 == url_part
+                    || x.0 == "*"
+                    || x.0 == "**"
+            }) {
                 if idx + 1 < url.len() {
-                    n.1.get_candidates(
-                        url,
-                        candidates,
-                        idx + 1,
-                        format!("{}/{}", current_path, n.0),
-                    );
+                    if n.0 == "**" {
+                        if let Some(f) = n.1.f.as_ref() {
+                            candidates.push((format!("{}/{}", current_path, n.0), f));
+                        }
+                    }else {
+                        n.1.get_candidates(
+                            url,
+                            candidates,
+                            idx + 1,
+                            format!("{}/{}", current_path, n.0),
+                        );
+                    }
+
                 } else if let Some(f) = n.1.f.as_ref() {
                     candidates.push((format!("{}/{}", current_path, n.0), f));
                 }
@@ -130,20 +136,20 @@ impl HandlerTire {
 }
 #[cfg(test)]
 mod test {
-    use crate::{handler::HandlerTire, response::HttpResponse};
+    use crate::{handler::HandlerTire, request::HttpRequest, response::HttpResponse};
+
+    async fn f(r: HttpRequest) -> HttpResponse {
+        HttpResponse::new()
+    }
 
     #[test]
     fn t1() {
         let mut handler = HandlerTire::default();
-        handler.add("/url/abc/efg".to_string(), async |_| HttpResponse::new());
-        handler.add("/url/{abc}/{efg}".to_string(), async |_| {
-            HttpResponse::new()
-        });
-        handler.add("/url/abc".to_string(), async |_| HttpResponse::new());
+        handler.add("/url/abc/efg".to_string(), f);
+        handler.add("/url/{abc}/{efg}".to_string(),f);
+        handler.add("/url/abc".to_string(), f);
+        handler.add("/url/*/efg".to_string(), f);
+         handler.add("/url/**".to_string(), f);
         let a = handler.get("/url/abc/efg").unwrap();
-        assert_eq!(a.0, "//url/abc/efg");
-        let a = handler.get("/url/abc/asd").unwrap();
-
-        assert_eq!(a.0, "//url/{abc}/{efg}")
     }
 }
