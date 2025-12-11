@@ -63,7 +63,7 @@ impl PartialOrd for RouteComponent {
 
 impl RouteComponent {
     pub fn match_url(&self,s:&str) -> bool {
-        // s == "*" || s == "**" || *self == Self::from(s)
+
         match self {
             Self::Exact(ss) => s == ss,
             _ => {
