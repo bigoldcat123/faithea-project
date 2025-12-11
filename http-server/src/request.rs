@@ -207,7 +207,7 @@ impl HttpReqLine {
 ///
 /// * `r` - The read half of a TCP stream to read HTTP data from
 /// * `buf` - A reusable buffer for reading data (must be empty or contain
-///           partial data from a previous read)
+///   partial data from a previous read)
 ///
 /// # Returns
 ///
@@ -347,7 +347,7 @@ async fn parse_line_header_frame(
 /// # Arguments
 ///
 /// * `raw_header` - Byte slice containing the complete HTTP headers
-///                  (must end with "\r\n\r\n")
+///   (must end with "\r\n\r\n")
 ///
 /// # Returns
 ///

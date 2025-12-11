@@ -56,7 +56,7 @@ pub enum RouteComponent {
     /// - `"api"` matches `/api` but not `/Api` or `/api/v1`
     /// - `"users"` matches `/users` but not `/user` or `/Users`
     Exact(String),
-    
+
     /// Captures a path segment as a named parameter.
     ///
     /// This variant matches any single path segment and captures its value
@@ -67,7 +67,7 @@ pub enum RouteComponent {
     /// - `"{id}"` matches `/users/123` and captures `"123"` as `id`
     /// - `"{username}"` matches `/profile/alice` and captures `"alice"` as `username`
     PathParam(String),
-    
+
     /// Matches exactly one arbitrary path segment.
     ///
     /// This variant, represented by a single asterisk `*` in route patterns,
@@ -78,7 +78,7 @@ pub enum RouteComponent {
     /// - `*` matches any single segment like `"api"`, `"v1"`, or `"users"`
     /// - `/api/*/status` matches `/api/v1/status` and `/api/v2/status`
     SingleSegWildCard,
-    
+
     /// Matches any number of remaining path segments (including zero).
     ///
     /// This variant, represented by double asterisks `**` in route patterns,
@@ -235,8 +235,8 @@ impl From<&str> for RouteComponent {
 /// # Fields
 ///
 /// * `r` - A vector of route components in the order they appear in the URL path.
-///         For example, the route `/api/users/{id}` would have components:
-///         `[Exact("api"), Exact("users"), PathParam("id")]`
+///   For example, the route `/api/users/{id}` would have components:
+///   `[Exact("api"), Exact("users"), PathParam("id")]`
 ///
 /// # Ordering and Comparison
 ///
@@ -245,6 +245,7 @@ impl From<&str> for RouteComponent {
 /// matching route when multiple patterns match a request URL.
 ///
 /// The ordering follows the component precedence rules:
+///
 /// `Exact > PathParam > SingleSegWildCard > MultiSegWildCard`
 ///
 /// # Examples
@@ -264,7 +265,7 @@ pub struct Route {
 
 impl TryFrom<&str> for Route {
     type Error = String;
-    
+
     /// Parses a string representation of a route into a structured `Route`.
     ///
     /// This conversion normalizes the input string and parses it into
@@ -363,8 +364,16 @@ mod tests {
     /// - Any component conversion fails
     #[test]
     fn create() {
+        use super::RouteComponent::*;
         let r = "/hello/abc/*/{efg}/**";
         let a = Route::try_from(r).unwrap();
-        println!("{:?}", a);
+        assert_eq!(Route{r:vec![
+            Exact("".to_string()),
+            Exact("hello".to_string()),
+            Exact("abc".to_string()),
+            SingleSegWildCard,
+            PathParam("efg".to_string()),
+            MultiSegWildCard
+        ]},a);
     }
 }
