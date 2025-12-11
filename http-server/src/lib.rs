@@ -7,6 +7,7 @@ pub mod response;
 pub mod server;
 pub mod handler;
 pub mod gurad;
+pub mod route;
 
 #[macro_export]
 macro_rules! map_str {
@@ -61,6 +62,18 @@ impl From<&HttpHeader> for Bytes {
     }
 }
 
+
+pub fn regulate_url_path<T:AsRef<str>>(s:T) -> String {
+    let a:&str = s.as_ref();
+    let mut v = a.into();
+    if !a.starts_with("/") {
+        v = format!("/{}",a);
+    }
+    if v.ends_with("/") && v.len() != 1 {
+        v.pop();
+    }
+    v.to_string()
+}
 
 
 

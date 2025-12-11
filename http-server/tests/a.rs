@@ -1,7 +1,7 @@
 #[test]
 fn a() {
-    let a = "a/b/c/d/";
+    let a = "/a/";
     for i in a.split("/") {
-        println!("{}",i);
+        println!("-> [{}]",i);
     }
 }

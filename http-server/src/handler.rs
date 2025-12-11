@@ -1,6 +1,8 @@
 use std::{collections::HashMap, pin::Pin};
 
-use crate::{request::HttpRequest, response::HttpResponse};
+use crate::{
+    regulate_url_path, request::HttpRequest, response::HttpResponse, route::{Route, RouteComponent}
+};
 type Fu = Box<
     dyn Fn(HttpRequest) -> Pin<Box<dyn Future<Output = HttpResponse> + Send + Sync + 'static>>
         + Send
@@ -45,90 +47,77 @@ impl Handler {
 /// Exact > Path parameters > Single-segment wildcard > Multi-segment wildcard.
 #[derive(Default)]
 pub struct HandlerTire {
-    path: HashMap<String, Box<Self>>,
+    path: HashMap<RouteComponent, Box<Self>>,
     f: Option<Fu>,
 }
 impl HandlerTire {
-    pub fn add<F, O>(&mut self, url: String, f: F)
+    pub fn add<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
         O: Future<Output = HttpResponse> + 'static + Send + Sync,
+        P: AsRef<str>
     {
-        let mut url: Vec<&str> = url.split("/").collect();
-        url.reverse();
-        self.add_url(url, f);
+        let url = regulate_url_path(url);
+        let mut route = Route::try_from(url.as_str()).unwrap();
+        route.r.reverse();
+        self.add_url(route.r, f);
     }
-    fn add_url<F, O>(&mut self, mut url: Vec<&str>, f: F)
+    fn add_url<F, O>(&mut self, mut url: Vec<RouteComponent>, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
         O: Future<Output = HttpResponse> + 'static + Send + Sync,
     {
         if let Some(next) = url.pop() {
-            if !self.path.contains_key(next) {
-                self.path.insert(next.to_string(), Default::default());
+            if !self.path.contains_key(&next) {
+                self.path.insert(next.clone(), Default::default());
             }
             if url.is_empty() {
-                self.path.get_mut(next).unwrap().f =
+                self.path.get_mut(&next).unwrap().f =
                     Some(Box::new(move |r: HttpRequest| Box::pin(f(r))));
             } else {
-                self.path.get_mut(next).unwrap().add_url(url, f);
+                self.path.get_mut(&next).unwrap().add_url(url, f);
             }
         }
     }
-    pub fn get(&self, url: &str) -> Option<(String, &Fu)> {
+    pub fn get(&self, url: &str) -> Option<(Route, &Fu)> {
+        let url = regulate_url_path(url);
         let url: Vec<&str> = url.split("/").collect();
-        let mut candidates: Vec<(String, &Fu)> = vec![];
-        self.get_candidates(&url, &mut candidates, 0, String::new());
-        for (s,_) in candidates.iter_mut() {
-            *s = s.replace("{", "|");
-        }
-        candidates.sort_by(|a, b| {
-            a.0.cmp(&b.0).reverse()
-        });
+        let mut candidates: Vec<(Route, &Fu)> = vec![];
+        self.get_candidates(&url, &mut candidates, 0, Route { r: vec![] });
 
-        for (s,_) in candidates.iter_mut() {
-            *s = s.replace("|", "{");
-        }
-        println!(
-            "{:?}",
-            candidates
-                .iter()
-                .map(|x| x.0.as_str())
-                .collect::<Vec<&str>>()
-        );
+        candidates.sort_by(|a, b| a.0.cmp(&b.0));
+        // for i in candidates.iter().map(|x| &x.0).collect::<Vec<&Route>>() {
+        //     println!("{:?}", i);
+        // }
+
         candidates.pop()
     }
     fn get_candidates<'a>(
         &'a self,
         url: &Vec<&str>,
-        candidates: &mut Vec<(String, &'a Fu)>,
+        candidates: &mut Vec<(Route, &'a Fu)>,
         idx: usize,
-        current_path: String,
+        current_path: Route,
     ) {
         if idx < url.len() {
             let url_part = url[idx];
-            for n in self.path.iter().filter(|x| {
-                x.0.ends_with("}") && x.0.starts_with("{")
-                    || x.0 == url_part
-                    || x.0 == "*"
-                    || x.0 == "**"
-            }) {
+            for n in self.path.iter().filter(|x| x.0.match_url(url_part)) {
                 if idx + 1 < url.len() {
-                    if n.0 == "**" {
+                    if *n.0 == RouteComponent::MutiSegWildCard {
                         if let Some(f) = n.1.f.as_ref() {
-                            candidates.push((format!("{}/{}", current_path, n.0), f));
+                            let mut p = current_path.clone();
+                            p.r.push(n.0.clone());
+                            candidates.push((p, f));
                         }
-                    }else {
-                        n.1.get_candidates(
-                            url,
-                            candidates,
-                            idx + 1,
-                            format!("{}/{}", current_path, n.0),
-                        );
+                    } else {
+                        let mut p = current_path.clone();
+                        p.r.push(n.0.clone());
+                        n.1.get_candidates(url, candidates, idx + 1, p);
                     }
-
                 } else if let Some(f) = n.1.f.as_ref() {
-                    candidates.push((format!("{}/{}", current_path, n.0), f));
+                    let mut p = current_path.clone();
+                    p.r.push(n.0.clone());
+                    candidates.push((p, f));
                 }
             }
         }
@@ -138,18 +127,19 @@ impl HandlerTire {
 mod test {
     use crate::{handler::HandlerTire, request::HttpRequest, response::HttpResponse};
 
-    async fn f(r: HttpRequest) -> HttpResponse {
+    async fn f(_: HttpRequest) -> HttpResponse {
         HttpResponse::new()
     }
 
     #[test]
     fn t1() {
         let mut handler = HandlerTire::default();
-        handler.add("/url/abc/efg".to_string(), f);
-        handler.add("/url/{abc}/{efg}".to_string(),f);
-        handler.add("/url/abc".to_string(), f);
-        handler.add("/url/*/efg".to_string(), f);
-         handler.add("/url/**".to_string(), f);
-        let a = handler.get("/url/abc/efg").unwrap();
+        handler.add("/url/abc/efg", f);
+        handler.add("/url/{abc}/{efg}", f);
+        handler.add("/url/abc", f);
+        handler.add("/url/*/efg", f);
+        handler.add("/url/**", f);
+        let a = handler.get("/url/ab2c/efg").unwrap();
+        assert_eq!("Route { r: [Exact(\"\"), Exact(\"url\"), PathParam(\"abc\"), PathParam(\"efg\")] }",format!("{:?}",a.0));
     }
 }

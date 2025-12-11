@@ -21,23 +21,23 @@ async fn handle2(_req:HttpRequest) -> HttpResponse {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let mut handler = HandlerTire::default();
-    handler.add("/hello/{abc}".to_string(), handle1);
-    handler.add("/file".to_string(), handle2);
-    handler.add("/".to_string(), handle2);
+    handler.add("/hello/{abc}", handle1);
+    handler.add("/file", handle2);
+    handler.add("/", handle2);
 
     let mut gurads = GurardTire::default();
 
 
-    gurads.add("/hello/*".to_string(), async |req| {
+    gurads.add("/hello/*", async |req| {
         println!("哈哈哈");
         // Err(HttpResponse::not_found())
         Ok(req)
     });
-    gurads.add("/hello/asdasd".to_string(), async |req| {
+    gurads.add("/hello/asdasd", async |req| {
         println!("哈哈哈2");
         Ok(req)
     });
-    gurads.add("/**".to_string(), async |req| {
+    gurads.add("/**", async |req| {
         println!("哈哈哈3");
         Ok(req)
     });

@@ -47,18 +47,19 @@ async fn process(socket: TcpStream,handlers:Arc<HandlerTire>,guards:Arc<GurardTi
         let req = parse_http_frame(&mut r, &mut buf).await?;
         println!("{:?}", req);
 
-        if let Some((_url,handle)) = handlers.get(&req.req_line.url) {
-            match guards.guard(&req.req_line.url.clone()[..], req).await {
-                Ok(req) => {
+        match guards.guard(&req.req_line.url.clone()[..], req).await {
+            Ok(req) => {
+                if let Some((_url,handle)) = handlers.get(&req.req_line.url) {
+                    println!(" {} -> \n{:?}",req.req_line.url,_url);
                     let res = handle(req).await;
                     let _ =_tx.send(res).await;
-                }
-                Err(res) => {
-                    let _ =_tx.send(res).await;
+                }else {
+                    let _ =_tx.send(HttpResponse::not_found()).await;
                 }
             }
-        }else {
-            let _ =_tx.send(HttpResponse::not_found()).await;
+            Err(res) => {
+                let _ =_tx.send(res).await;
+            }
         }
     }
 }
