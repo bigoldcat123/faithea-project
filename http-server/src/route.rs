@@ -1,4 +1,4 @@
-/// Route types (Beautified):
+/// # Route types (Beautified):
 /// 1. Exact route
 ///    - Example: /hello/world
 ///    - Matches every path segment exactly. Highest priority.
