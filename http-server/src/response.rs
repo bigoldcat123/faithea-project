@@ -114,6 +114,14 @@ impl HttpResponse {
         r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
+    pub fn error() -> Self {
+        let mut r = Self::new();
+        r.status_line.status = "500".to_string();
+        r.status_line.info = "error!".to_string();
+        r.headers.add("Content-length", "13");
+        r.set_body(ResponseBody::Simple("server error!".into()));
+        r
+    }
     /// Sets the response body content.
     ///
     /// This method replaces the current body with the provided value.
@@ -153,7 +161,7 @@ impl HttpResponse {
     /// response.add_header(("Content-Type", "text/html"));
     /// response.add_header(("Cache-Control", "no-cache"));
     /// ```
-    pub fn add_header(&mut self, header_k_v: (&str, &str)) {
+    pub fn add_header<S: AsRef<str>>(&mut self, header_k_v: (S, S)) {
         self.headers.add(header_k_v.0, header_k_v.1);
     }
     /// Serializes the status line and headers to bytes.
@@ -361,6 +369,34 @@ impl From<&ResponseStatusLine> for Bytes {
         let mut bytes = BytesMut::with_capacity(64);
         bytes.put(format!("{} {} {}\r\n", value.version, value.status, value.info).as_bytes());
         bytes.freeze()
+    }
+}
+
+pub trait HttpResponseModifier {
+    fn modify(&self, res: &mut HttpResponse) -> Result<(), String>;
+}
+
+impl HttpResponseModifier for HttpHeader {
+    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
+        for kv in self.headers.iter() {
+            res.add_header(kv);
+        }
+        Ok(())
+    }
+}
+impl HttpResponseModifier for ResponseStatusLine {
+    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
+        res.status_line.info = self.status.to_string();
+        res.status_line.info = self.info.to_string();
+        Ok(())
+    }
+}
+impl<T: HttpResponseModifier + ?Sized> HttpResponseModifier for Vec<Box<T>> {
+    fn modify(&self, res: &mut HttpResponse) -> Result<(),String> {
+        for m in self {
+            m.modify(res)?;
+        }
+        Ok(())
     }
 }
 

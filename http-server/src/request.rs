@@ -1,4 +1,3 @@
-
 //! HTTP request parsing and data structures.
 //!
 //! This module provides functionality for parsing HTTP requests from raw bytes
@@ -30,10 +29,42 @@
 //! # }
 //! ```
 
+use std::{collections::HashMap};
+
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
-use crate::{HttpHeader, map_str};
+use crate::{HttpHeader, impl_convert_from_ref_string, map_str, route::Route};
+
+#[derive(Debug)]
+pub struct PathParam {
+    _inner: HashMap<String, String>,
+}
+impl PathParam {
+    pub fn get<S: AsRef<str>>(&self, key: S) -> Option<&String> {
+        self._inner.get(key.as_ref())
+    }
+    pub fn try_from_route(handler_route: &Route, incoming_route: &Route) -> Result<Self, String> {
+        use crate::route::RouteComponent::*;
+        let mut _inner = HashMap::new();
+        if handler_route.r.len() != incoming_route.r.len() {
+            return Err("route len not match!".to_string());
+        }
+        for cmp in handler_route.r.iter().zip(incoming_route.r.iter()) {
+            match cmp {
+                (PathParam(p), Exact(v)) => {
+                    _inner.insert(p.to_string(), v.to_string());
+                }
+                _ => {}
+            }
+        }
+        if _inner.is_empty() {
+            Err("no path params".to_string())
+        } else {
+            Ok(Self { _inner })
+        }
+    }
+}
 
 /// Represents a complete HTTP request.
 ///
@@ -65,6 +96,7 @@ pub struct HttpRequest {
     pub req_line: HttpReqLine,
     pub headers: HttpHeader,
     pub body: Option<Bytes>,
+    pub path_param: Option<PathParam>,
 }
 
 impl HttpRequest {
@@ -100,6 +132,25 @@ impl HttpRequest {
             req_line,
             headers,
             body,
+            path_param: None,
+        }
+    }
+    pub fn fake() -> Self {
+        let req_line = HttpReqLine::parse("POST /api/data HTTP/1.1").unwrap();
+        let headers = HttpHeader::new();
+        let body = Some(Bytes::from("request payload"));
+        HttpRequest::new(req_line, headers, body)
+    }
+    pub fn assamble_pathparam(&mut self, handler_route: &Route, incoming_route: &Route) {
+        if let Ok(p) = PathParam::try_from_route(handler_route, incoming_route) {
+            self.path_param = Some(p)
+        }
+    }
+    pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
+        if let Some(ref p) = self.path_param {
+            p.get(key)
+        } else {
+            None
         }
     }
 }
@@ -405,4 +456,52 @@ fn check_header(c: &[u8]) -> (bool, usize) {
         }
     }
     (false, 0)
+}
+
+pub trait ConvertFromRefString<'a,O> {
+    fn convert(self) -> Result<O, String>;
+}
+impl_convert_from_ref_string!(
+    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+);
+
+impl<'a,T> ConvertFromRefString<'a,T> for T {
+    fn convert(self) -> Result<T, String> {
+        Ok(self)
+    }
+}
+
+impl <'a> ConvertFromRefString<'a,&'a str> for &'a String {
+    fn convert(self) -> Result<&'a str, String> {
+        Ok(self.as_str())
+    }
+}
+impl <'a> ConvertFromRefString<'a,String> for &'a String {
+    fn convert(self) -> Result<String, String> {
+        Ok(self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_single_param_parsing_test() {
+        let handler_route = Route::try_from("/hello/{name}").unwrap();
+        let incoming_route = Route::try_from("/hello/chenzhonghai").unwrap();
+        let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
+        let a = p.get("name").unwrap();
+        assert_eq!(a, "chenzhonghai")
+    }
+    #[test]
+    fn path_multi_param_parsing_test() {
+        let handler_route = Route::try_from("/hello/{name}/{age}/dadigua").unwrap();
+        let incoming_route = Route::try_from("/hello/chenzhonghai/22/dadigua").unwrap();
+        let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
+        let a = p.get("name").unwrap();
+        let age = p.get("age").unwrap();
+        assert_eq!(a, "chenzhonghai");
+        assert_eq!(age, "22");
+    }
 }

@@ -22,16 +22,17 @@
 //! - `guard`: Guard middleware for request validation
 //! - `route`: Route pattern matching components
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
+pub mod data;
+pub mod guard;
+pub mod handler;
 pub mod request;
 pub mod response;
-pub mod server;
-pub mod handler;
-pub mod guard;
 pub mod route;
+pub mod server;
 
 /// Converts any value to a string using its `Display` implementation.
 ///
@@ -52,6 +53,26 @@ macro_rules! map_str {
         |x| format!("{}", x)
     };
 }
+// impl ConvertFromRefString<i32> for  &String {
+//     fn convert(self) -> Result<i32,String> {
+//         self.parse::<i32>().map_err(|_|"convert error!".to_string())
+//     }
+// }
+
+#[macro_export]
+macro_rules! impl_convert_from_ref_string {
+    ($($t:ty),*) => {
+        $(
+            impl <'a> $crate::request::ConvertFromRefString<'a,$t> for  &String {
+                fn convert(self) -> Result<$t,String> {
+                    self.parse::<$t>().map_err(|_|"convert error!".to_string())
+                }
+            }
+        )*
+    };
+}
+
+
 
 /// Represents HTTP headers as a key-value store.
 ///
@@ -160,8 +181,9 @@ impl HttpHeader {
     /// # Arguments
     /// * `key` - The header name
     /// * `value` - The header value
-    fn add(&mut self, key: &str, value: &str) {
-        self.headers.insert(key.into(), value.into());
+    pub fn add<K: AsRef<str>,V:AsRef<str>>(&mut self, key: K, value: V) {
+        self.headers
+            .insert(key.as_ref().to_string(), value.as_ref().to_string());
     }
 }
 
@@ -196,7 +218,6 @@ impl From<&HttpHeader> for Bytes {
     }
 }
 
-
 /// Normalizes a URL path to a consistent format.
 ///
 /// This function ensures URL paths follow consistent rules:
@@ -220,19 +241,17 @@ impl From<&HttpHeader> for Bytes {
 /// assert_eq!(regulate_url_path("api/users/"), "/api/users");
 /// assert_eq!(regulate_url_path("/"), "/");
 /// ```
-pub fn regulate_url_path<T:AsRef<str>>(s:T) -> String {
-    let a:&str = s.as_ref();
+pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
+    let a: &str = s.as_ref();
     let mut v = a.into();
     if !a.starts_with("/") {
-        v = format!("/{}",a);
+        v = format!("/{}", a);
     }
     if v.ends_with("/") && v.len() != 1 {
         v.pop();
     }
     v.to_string()
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -265,5 +284,36 @@ mod test {
         expected.sort();
         assert_eq!(got, expected);
         assert!(s.ends_with("\r\n\r\n"));
+    }
+}
+
+
+#[macro_export]
+macro_rules! res_modifiers {
+    ($($e:expr),*) => {
+        {
+            let a:Vec<Box<dyn $crate::response::HttpResponseModifier>> = vec![
+               $( Box::new($e),)*
+            ];
+            a
+        }
+
+    };
+}
+
+
+#[cfg(test)]
+mod tests {
+
+
+    use crate::response::{ResponseStatusLine};
+
+    use super::*;
+
+    #[test]
+    fn macro_test() {
+        let a = HttpHeader::new();
+        let b = ResponseStatusLine::default();
+        let _ = res_modifiers!(a,b);
     }
 }

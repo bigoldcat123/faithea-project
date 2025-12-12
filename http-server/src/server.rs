@@ -29,7 +29,7 @@ use std::{net::{SocketAddr, ToSocketAddrs}, sync::Arc};
 use bytes::BytesMut;
 use tokio::{net::{TcpListener, TcpStream}, sync::mpsc};
 
-use crate::{guard::GuardTire, handler::HandlerTire, request::parse_http_frame, response::HttpResponse};
+use crate::{guard::GuardTire, handler::HandlerTire, request::{parse_http_frame}, response::HttpResponse, route::Route};
 
 /// Main HTTP server that listens for incoming connections and processes requests.
 ///
@@ -92,9 +92,9 @@ impl HttpServer {
     /// let server = HttpServer::new("127.0.0.1:8080", handlers, guards);
     /// ```
     pub fn new<A: ToSocketAddrs>(a: A, handler: HandlerTire, guards: GuardTire) -> Self {
-        Self { 
+        Self {
             addr: a.to_socket_addrs().unwrap().next().unwrap(),
-            handlers: Arc::new(handler), 
+            handlers: Arc::new(handler),
             guards: Arc::new(guards)
         }
     }
@@ -176,25 +176,32 @@ async fn process(
 ) -> Result<(), String> {
     let (mut reader, mut writer) = socket.into_split();
     let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
-    
+
     // Spawn writer task that consumes responses from the channel and writes them to the socket
     tokio::spawn(async move {
         while let Some(message) = rx.recv().await {
             message.serialize_to_socket(&mut writer).await;
         }
     });
-    
+
     let mut buf = BytesMut::with_capacity(4096);
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
         println!("{:?}", req);
 
         match guards.guard(&req.req_line.url.clone()[..], req).await {
-            Ok(req) => {
-                if let Some((_matched_url, handler)) = handlers.get(&req.req_line.url) {
-                    println!("{} -> \n{:?}", req.req_line.url, _matched_url);
-                    let res = handler(req).await;
-                    let _ = tx.send(res).await;
+            Ok(mut req) => {
+                if let Some((_matched_url, handler)) = handlers.get_handler(&req.req_line.url,&req.req_line.method) {
+                    req.assamble_pathparam(&_matched_url, &Route::try_from(req.req_line.url.as_str()).unwrap());
+
+                    match handler(req).await {
+                        Ok(res) => {
+                            let _ = tx.send(res).await;
+                        }
+                        Err(_s) => {
+                            let _ = tx.send(HttpResponse::error()).await;
+                        }
+                    }
                 } else {
                     let _ = tx.send(HttpResponse::not_found()).await;
                 }
