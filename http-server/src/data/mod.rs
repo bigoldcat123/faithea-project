@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 
 pub mod inbound;
@@ -7,6 +9,7 @@ pub mod outbound;
 pub struct Json<T>(pub T);
 
 
+pub type Shared<T> = Arc<T>;
 
 
 #[cfg(test)]

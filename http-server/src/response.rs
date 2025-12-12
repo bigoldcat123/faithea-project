@@ -114,12 +114,13 @@ impl HttpResponse {
         r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
-    pub fn error() -> Self {
+    pub fn error(err_message:String) -> Self {
         let mut r = Self::new();
         r.status_line.status = "500".to_string();
         r.status_line.info = "error!".to_string();
-        r.headers.add("Content-length", "13");
-        r.set_body(ResponseBody::Simple("server error!".into()));
+        let body:Bytes = err_message.into();
+        r.headers.add("Content-length", body.len().to_string());
+        r.set_body(ResponseBody::Simple(body));
         r
     }
     /// Sets the response body content.

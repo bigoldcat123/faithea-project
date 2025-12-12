@@ -1,4 +1,13 @@
 # TODOS
-1. handler shoule be `(req) => Resule(res,err)` ✅
-2. clear all unwrap!
-3. add method route support!
+-  handler shoule be `(req) => Resule(res,err)` ✅
+-  clear all unwrap!
+-  add method route support! ✅
+-  shared values
+-  using builder to create server
+-  File Transfor
+-  static mapping~
+-  guard ✅
+-  basic httpserver ✅
+-  dynamic route matching ✅
+-  suppor for json inbound and outbound ✅
+-  pathparam ✅

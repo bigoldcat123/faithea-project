@@ -139,7 +139,7 @@ impl HandlerTire {
         P: AsRef<str>
     {
         let url = regulate_url_path(url);
-        let mut route = Route::try_from(url.as_str()).unwrap();
+        let mut route = Route::from(url.as_str());
         route.r.reverse();
         self.add_route(route.r,Box::new(move |r: HttpRequest| Box::pin(f(r))),"get");
     }
@@ -150,7 +150,7 @@ impl HandlerTire {
         P: AsRef<str>
     {
         let url = regulate_url_path(url);
-        let mut route = Route::try_from(url.as_str()).unwrap();
+        let mut route = Route::from(url.as_str());
         route.r.reverse();
         self.add_route(route.r,Box::new(move |r: HttpRequest| Box::pin(f(r))),"post");
     }

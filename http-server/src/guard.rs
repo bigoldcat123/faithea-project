@@ -131,7 +131,7 @@ impl GuardTire {
         P: AsRef<str>
     {
         let url = regulate_url_path(url);
-        let mut url_route = Route::try_from(url.as_str()).unwrap();
+        let mut url_route = Route::from(url.as_str());
         url_route.r.reverse();
         self.add_url(url_route, f);
     }

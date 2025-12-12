@@ -24,12 +24,24 @@
 //! }
 //! ```
 
-use std::{net::{SocketAddr, ToSocketAddrs}, sync::Arc};
+use std::{
+    net::{SocketAddr, ToSocketAddrs},
+    sync::Arc,
+};
 
 use bytes::BytesMut;
-use tokio::{net::{TcpListener, TcpStream}, sync::mpsc};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::mpsc::{self, Sender},
+};
 
-use crate::{guard::GuardTire, handler::HandlerTire, request::{parse_http_frame}, response::HttpResponse, route::Route};
+use crate::{
+    guard::GuardTire,
+    handler::HandlerTire,
+    request::{HttpRequest, parse_http_frame},
+    response::HttpResponse,
+    route::Route,
+};
 
 /// Main HTTP server that listens for incoming connections and processes requests.
 ///
@@ -95,7 +107,7 @@ impl HttpServer {
         Self {
             addr: a.to_socket_addrs().unwrap().next().unwrap(),
             handlers: Arc::new(handler),
-            guards: Arc::new(guards)
+            guards: Arc::new(guards),
         }
     }
 
@@ -147,28 +159,6 @@ impl HttpServer {
     }
 }
 
-/// Processes a single TCP connection through the HTTP pipeline.
-///
-/// This function handles the complete lifecycle of an HTTP connection:
-///
-/// 1. **Split socket** into read and write halves for concurrent processing
-/// 2. **Create channel** for sending responses from handler to writer task
-/// 3. **Spawn writer task** that serializes responses to the socket
-/// 4. **Read loop** that parses requests, executes guards, and routes to handlers
-///
-/// The function returns when the client disconnects or an unrecoverable
-/// error occurs.
-///
-/// # Arguments
-///
-/// * `socket` - The TCP stream for the connection
-/// * `handlers` - Shared reference to handler routing trie
-/// * `guards` - Shared reference to guard middleware trie
-///
-/// # Returns
-///
-/// * `Ok(())` - The connection was processed successfully (client disconnected normally)
-/// * `Err(String)` - An error occurred during processing
 async fn process(
     socket: TcpStream,
     handlers: Arc<HandlerTire>,
@@ -187,28 +177,41 @@ async fn process(
     let mut buf = BytesMut::with_capacity(4096);
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
-        println!("{:?}", req);
+        // println!("{:?}", req);
 
         match guards.guard(&req.req_line.url.clone()[..], req).await {
-            Ok(mut req) => {
-                if let Some((_matched_url, handler)) = handlers.get_handler(&req.req_line.url,&req.req_line.method) {
-                    req.assamble_pathparam(&_matched_url, &Route::try_from(req.req_line.url.as_str()).unwrap());
-
-                    match handler(req).await {
-                        Ok(res) => {
-                            let _ = tx.send(res).await;
-                        }
-                        Err(_s) => {
-                            let _ = tx.send(HttpResponse::error()).await;
-                        }
-                    }
-                } else {
-                    let _ = tx.send(HttpResponse::not_found()).await;
-                }
+            Ok(req) => {
+                handle_request(handlers.clone(), req, tx.clone()).await;
             }
             Err(res) => {
                 let _ = tx.send(res).await;
             }
         }
+    }
+}
+
+async fn handle_request(
+    handlers: Arc<HandlerTire>,
+    mut req: HttpRequest,
+    tx: Sender<HttpResponse>,
+) {
+    if let Some((_matched_url, handler)) =
+        handlers.get_handler(&req.req_line.url, &req.req_line.method)
+    {
+        req.assamble_pathparam(
+            &_matched_url,
+            &Route::from(req.req_line.url.as_str()),
+        );
+
+        match handler(req).await {
+            Ok(res) => {
+                let _ = tx.send(res).await;
+            }
+            Err(_s) => {
+                let _ = tx.send(HttpResponse::error(_s)).await;
+            }
+        }
+    } else {
+        let _ = tx.send(HttpResponse::not_found()).await;
     }
 }

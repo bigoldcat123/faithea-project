@@ -488,16 +488,16 @@ mod tests {
 
     #[test]
     fn path_single_param_parsing_test() {
-        let handler_route = Route::try_from("/hello/{name}").unwrap();
-        let incoming_route = Route::try_from("/hello/chenzhonghai").unwrap();
+        let handler_route = Route::from("/hello/{name}");
+        let incoming_route = Route::from("/hello/chenzhonghai");
         let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
         let a = p.get("name").unwrap();
         assert_eq!(a, "chenzhonghai")
     }
     #[test]
     fn path_multi_param_parsing_test() {
-        let handler_route = Route::try_from("/hello/{name}/{age}/dadigua").unwrap();
-        let incoming_route = Route::try_from("/hello/chenzhonghai/22/dadigua").unwrap();
+        let handler_route = Route::from("/hello/{name}/{age}/dadigua");
+        let incoming_route = Route::from("/hello/chenzhonghai/22/dadigua");
         let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
         let a = p.get("name").unwrap();
         let age = p.get("age").unwrap();

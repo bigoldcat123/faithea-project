@@ -44,7 +44,7 @@
 /// # Variants
 ///
 /// Each variant corresponds to a different type of path segment matching.
-#[derive(Debug,Hash,PartialEq,Eq,Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum RouteComponent {
     /// Matches a path segment exactly (case-sensitive).
     ///
@@ -257,65 +257,14 @@ impl From<&str> for RouteComponent {
 /// assert_eq!(route.r.len(), 3);
 /// assert!(matches!(&route.r[0], RouteComponent::Exact(ref s) if s == "api"));
 /// ```
-#[derive(Debug,Clone,PartialEq, PartialOrd, Ord,Eq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Route {
     /// The sequence of route components that make up this route pattern.
     pub r: Vec<RouteComponent>,
 }
 
-impl TryFrom<&str> for Route {
-    type Error = String;
-
-    /// Parses a string representation of a route into a structured `Route`.
-    ///
-    /// This conversion normalizes the input string and parses it into
-    /// a sequence of route components. The parsing process:
-    ///
-    /// 1. Ensures the route starts with "/" (adds one if missing)
-    /// 2. Removes trailing "/" unless it's the root path "/"
-    /// 3. Splits the path by "/" into segments
-    /// 4. Converts each segment to a [`RouteComponent`] using [`From<&str>`]
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The route pattern string to parse (e.g., `/api/users/{id}`)
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Route)` - Successfully parsed route
-    /// * `Err(String)` - Malformed route pattern (should not happen with valid patterns)
-    ///
-    /// # Errors
-    ///
-    /// Currently, this method doesn't return errors for typical route patterns,
-    /// but the `TryFrom` trait allows for future validation of malformed patterns
-    /// (e.g., unmatched braces or invalid characters).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use http_server::route::{Route, RouteComponent};
-    ///
-    /// // Basic route parsing
-    /// let route = Route::try_from("/api/users").unwrap();
-    /// assert_eq!(route.r.len(), 2);
-    ///
-    /// // Route with path parameter
-    /// let route = Route::try_from("/users/{id}/profile").unwrap();
-    /// assert_eq!(route.r.len(), 3);
-    /// assert!(matches!(&route.r[1], RouteComponent::PathParam(ref s) if s == "id"));
-    ///
-    /// // Route with wildcards
-    /// let route = Route::try_from("/api/*/v*/**").unwrap();
-    /// assert!(matches!(&route.r[2], RouteComponent::SingleSegWildCard));
-    /// assert!(matches!(&route.r[4], RouteComponent::MultiSegWildCard));
-    ///
-    /// // Automatic normalization
-    /// let route1 = Route::try_from("api/users").unwrap();  // No leading slash
-    /// let route2 = Route::try_from("/api/users/").unwrap(); // Trailing slash
-    /// assert_eq!(route1, route2); // Both normalize to "/api/users"
-    /// ```
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl From<&str> for Route {
+    fn from(value: &str) -> Self {
         let mut v = value.into();
         if !value.starts_with("/") {
             v = format!("/{}", value);
@@ -327,10 +276,9 @@ impl TryFrom<&str> for Route {
         for p in v.split("/") {
             r.push(p.into());
         }
-        Ok(Self { r })
+        Self { r }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -367,13 +315,18 @@ mod tests {
         use super::RouteComponent::*;
         let r = "/hello/abc/*/{efg}/**";
         let a = Route::try_from(r).unwrap();
-        assert_eq!(Route{r:vec![
-            Exact("".to_string()),
-            Exact("hello".to_string()),
-            Exact("abc".to_string()),
-            SingleSegWildCard,
-            PathParam("efg".to_string()),
-            MultiSegWildCard
-        ]},a);
+        assert_eq!(
+            Route {
+                r: vec![
+                    Exact("".to_string()),
+                    Exact("hello".to_string()),
+                    Exact("abc".to_string()),
+                    SingleSegWildCard,
+                    PathParam("efg".to_string()),
+                    MultiSegWildCard
+                ]
+            },
+            a
+        );
     }
 }
