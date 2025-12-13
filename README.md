@@ -5,7 +5,7 @@
 -  clear all unwrap!
 -  add method route support! ✅
 -  shared values
--  using builder to create server
+-  using Builder to create server ✅
 -  File Transfor ✅
 -  static mapping~ ✅
 -  basic httpserver ✅
@@ -17,4 +17,4 @@
 -  add error information for dynamic route defination ✅
 -  implememt `HttpResponseModifier` for some basic types 👷
 -  serachParam ✅
--  many guard could share one route!
+-  many guard could share one route!✅

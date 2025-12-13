@@ -1,4 +1,3 @@
-
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
@@ -18,6 +17,57 @@ use crate::{
     route::Route,
 };
 
+pub struct HttpServerBuilder {
+    handlers: HandlerTire,
+    guards: GuardTire,
+    addr: SocketAddr,
+}
+impl HttpServerBuilder {
+    pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self
+    where
+        F: Fn(HttpRequest) -> O + 'static + Send + Sync,
+        O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
+        P: AsRef<str>,
+    {
+        self.guards.add(route, f);
+        self
+    }
+
+    pub fn mount(
+        mut self,
+        pre_fix: &'static str,
+        modifiers: Vec<Box<dyn Fn(&mut HandlerTire, &str)>>,
+    ) -> Self {
+        self.handlers.mount(pre_fix, modifiers);
+        self
+    }
+
+    pub fn port(mut self, p: u16) -> Self {
+        self.addr.set_port(p);
+        self
+    }
+    pub fn host(mut self, host: &str) -> Self {
+        self.addr
+            .set_ip(host.parse().expect("in correct ip host eg. 0.0.0.0"));
+        self
+    }
+    pub fn build(self) -> HttpServer {
+        HttpServer {
+            addr: self.addr,
+            handlers: Arc::new(self.handlers),
+            guards: Arc::new(self.guards),
+        }
+    }
+}
+impl Default for HttpServerBuilder {
+    fn default() -> Self {
+        Self {
+            handlers: Default::default(),
+            guards: Default::default(),
+            addr: "127.0.0.1:8899".to_socket_addrs().unwrap().next().unwrap(),
+        }
+    }
+}
 
 pub struct HttpServer {
     /// Socket address the server is bound to
@@ -30,12 +80,8 @@ pub struct HttpServer {
 
 impl HttpServer {
 
-    pub fn new<A: ToSocketAddrs>(a: A, handler: HandlerTire, guards: GuardTire) -> Self {
-        Self {
-            addr: a.to_socket_addrs().unwrap().next().unwrap(),
-            handlers: Arc::new(handler),
-            guards: Arc::new(guards),
-        }
+    pub fn builder() -> HttpServerBuilder {
+        Default::default()
     }
 
     pub async fn start(self) {
@@ -94,10 +140,7 @@ async fn handle_request(
     if let Some((_matched_url, handler)) =
         handlers.get_handler(&req.req_line.url, &req.req_line.method)
     {
-        req.process_routes(
-            &_matched_url,
-            &Route::from(req.req_line.url.as_str()),
-        );
+        req.process_routes(&_matched_url, &Route::from(req.req_line.url.as_str()));
         req.process_search_param(&req_url);
         match handler(req).await {
             Ok(res) => {
