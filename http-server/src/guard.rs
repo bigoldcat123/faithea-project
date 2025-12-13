@@ -1,9 +1,10 @@
-
-
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use crate::{
-    regulate_url_path, request::HttpRequest, response::HttpResponse, route::{Route, RouteComponent}
+    regulate_url_path,
+    request::HttpRequest,
+    response::HttpResponse,
+    route::{Route, RouteComponent},
 };
 
 pub type Guard = Box<
@@ -16,29 +17,26 @@ pub type Guard = Box<
         + 'static,
 >;
 
-
 #[derive(Default)]
 pub struct GuardTire {
     /// Child nodes in the trie, keyed by route components
     path: HashMap<RouteComponent, Box<Self>>,
     /// Guard function stored at this node (if this is a terminal node)
-    f: Option<Guard>,
+    f: Vec<Guard>,
 }
 
 impl GuardTire {
-
     pub fn add<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
         O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
-        P: AsRef<str>
+        P: AsRef<str>,
     {
         let url = regulate_url_path(url);
         let mut url_route = Route::from(url.as_str());
         url_route.r.reverse();
         self.add_url(url_route, f);
     }
-
 
     fn add_url<F, O>(&mut self, mut url: Route, f: F)
     where
@@ -50,14 +48,16 @@ impl GuardTire {
                 self.path.insert(next.clone(), Default::default());
             }
             if url.r.is_empty() {
-                self.path.get_mut(&next).unwrap().f =
-                    Some(Box::new(move |r: HttpRequest| Box::pin(f(r))));
+                self.path
+                    .get_mut(&next)
+                    .unwrap()
+                    .f
+                    .push(Box::new(move |r: HttpRequest| Box::pin(f(r))))
             } else {
                 self.path.get_mut(&next).unwrap().add_url(url, f);
             }
         }
     }
-
 
     pub async fn guard(&self, url: &str, req: HttpRequest) -> Result<HttpRequest, HttpResponse> {
         let url = regulate_url_path(url);
@@ -73,7 +73,6 @@ impl GuardTire {
         }
         Ok(res.unwrap())
     }
-
 
     fn get_guard_chain(&self, url: &str) -> Vec<(Route, &Guard)> {
         let url_parts: Vec<&str> = url.split("/").collect();
@@ -98,27 +97,32 @@ impl GuardTire {
     ) {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
-            for (component, child) in self.path.iter().filter(|(comp, _)| comp.match_url(url_part)) {
+            for (component, child) in self
+                .path
+                .iter()
+                .filter(|(comp, _)| comp.match_url(url_part))
+            {
                 // Debug logging (commented out in production)
                 // println!("{}, {:?}", url_part, component);
 
                 if *component == RouteComponent::MultiSegWildCard {
                     // Multi-segment wildcard matches the rest of the path
-                    if let Some(f) = child.f.as_ref() {
-                        let mut path = current_path.clone();
-                        path.r.push(component.clone());
-                        candidates.push((path, f));
+                    let mut path = current_path.clone();
+                    path.r.push(component.clone());
+                    for g in child.f.iter() {
+                        candidates.push((path.clone(), g));
                     }
                 } else if idx + 1 < url_parts.len() {
                     // Continue matching deeper path segments
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
                     child.get_candidates(url_parts, candidates, idx + 1, path);
-                } else if let Some(f) = child.f.as_ref() {
-                    // Reached the end of the URL, add guard if present
+                } else {
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
-                    candidates.push((path, f));
+                    for g in child.f.iter() {
+                        candidates.push((path.clone(), g));
+                    }
                 }
             }
         }
@@ -128,7 +132,6 @@ impl GuardTire {
 #[cfg(test)]
 mod test {
     use crate::guard::GuardTire;
-
 
     #[test]
     fn test_guard_chain_ordering() {
@@ -140,8 +143,25 @@ mod test {
 
         let chain = guards.get_guard_chain("/url/abc/efg");
         let routes: Vec<_> = chain.iter().map(|x| &x.0).collect();
-        assert_eq!(r#"[Route { r: [Exact(""), Exact("url"), Exact("abc"), Exact("efg")] }, Route { r: [Exact(""), Exact("url"), SingleSegWildCard, Exact("efg")] }, Route { r: [Exact(""), Exact("url"), MultiSegWildCard] }]"#,
-            format!("{:?}",routes));
+        assert_eq!(
+            r#"[Route { r: [Exact(""), Exact("url"), Exact("abc"), Exact("efg")] }, Route { r: [Exact(""), Exact("url"), SingleSegWildCard, Exact("efg")] }, Route { r: [Exact(""), Exact("url"), MultiSegWildCard] }]"#,
+            format!("{:?}", routes)
+        );
+    }
+    #[test]
+    fn test_guard_chain_ordering2() {
+        let mut guards = GuardTire::default();
+        guards.add("/url/*/efg", async |e| Ok(e));
+        guards.add("/url/abc/efg", async |e| Ok(e));
+        guards.add("/url/abc/efg", async |e| Ok(e));
+        guards.add("/url/**", async |e| Ok(e));
+        guards.add("/url/abc", async |e| Ok(e));
 
+        let chain = guards.get_guard_chain("/url/abc/efg");
+        let routes: Vec<_> = chain.iter().map(|x| &x.0).collect();
+
+        assert_eq!(
+            routes.len(),4
+        );
     }
 }

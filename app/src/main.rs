@@ -40,7 +40,10 @@ async fn main() {
     let mut guards = GuardTire::default();
     guards.add("/**", async |e| {
         println!("new req -> ");
-
+        Ok(e)
+    });
+    guards.add("/**", async |e| {
+        println!("new req2 -> ");
         Ok(e)
     });
     let server = HttpServer::new("127.0.0.1:8899", handler, guards);
