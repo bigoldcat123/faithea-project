@@ -1,6 +1,9 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{FnArg, Ident, ItemFn, LitStr, Pat, PatIdent,  Type, TypePath, parse_quote, punctuated::Punctuated, token::Comma};
+use syn::{
+    FnArg, Ident, ItemFn, LitStr, Pat, PatIdent, Type, TypePath, parse_quote,
+    punctuated::Punctuated, token::Comma,
+};
 
 pub fn add_return_type(f: &mut ItemFn) {
     f.sig.output = syn::parse_quote! {
@@ -9,6 +12,7 @@ pub fn add_return_type(f: &mut ItemFn) {
 }
 pub enum FromHttpRequest {
     PathParam(LitStr),
+    _SearchParam(LitStr),
     _Shared(LitStr),
     Body,
 }
@@ -18,7 +22,7 @@ impl FromHttpRequest {
         match self {
             PathParam(name) => {
                 quote! {
-                    _req.get_pathparam(#name).ok_or("err".to_string())?.convert()?,
+                    _req.get_pathparam(#name).ok_or(format!("no such pathParam named <{}>",#name))?.convert()?,
                 }
             }
             Body => {
@@ -31,35 +35,59 @@ impl FromHttpRequest {
                     _req.get_shared(#name).ok_or("err".to_string())?.clone(),
                 }
             }
+            _SearchParam(name) => {
+                quote! {
+                    _req.get_search_param(#name).ok_or(format!("no such searchParam named <{}>",#name))?.convert()?,
+                }
+            }
         }
     }
 }
 
-pub fn generate_from_httprequest_list(
-    args: &Punctuated<FnArg, Comma>
-) -> Vec<FromHttpRequest> {
-    args.iter().map(|arg| parse_arg(arg)).collect()
+pub fn generate_from_httprequest_list(args: &mut Punctuated<FnArg, Comma>) -> Vec<FromHttpRequest> {
+    args.iter_mut().filter_map(|arg| parse_arg(arg)).collect()
 }
 
-fn parse_arg(arg: &FnArg) -> FromHttpRequest {
-    let (name, ty) = extract_ident_and_type(arg)
-        .expect("Only typed `ident: Type` arguments are supported");
-
-    let outer = outer_type_name(ty);
-
-    match outer.as_deref() {
-        Some("Json")   => FromHttpRequest::Body,
-        Some("Shared") => FromHttpRequest::_Shared(name),
-        _              => FromHttpRequest::PathParam(name),
+fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
+    if let Some((name, ty,is_search_param)) = extract_ident_and_type(arg) {
+        let outer = outer_type_name(ty);
+        Some(
+            match outer.as_deref() {
+                Some("Json") => FromHttpRequest::Body,
+                Some("Shared") => FromHttpRequest::_Shared(name),
+                _ => {
+                    if is_search_param {
+                        FromHttpRequest::_SearchParam(name)
+                    }else {
+                        FromHttpRequest::PathParam(name)
+                    }
+                },
+            }
+        )
+    }else {
+        None
     }
 }
 
 /// 提取参数名 (LitStr) 和 类型 (Type)
-fn extract_ident_and_type(arg: &FnArg) -> Option<(LitStr, &Type)> {
+fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type,bool)> {
     if let FnArg::Typed(t) = arg {
+        let mut is_search_param = false ;
+        for i in 0..t.attrs.len() {
+            let x = &t.attrs[i];
+            let a = &x.meta;
+            let name = quote! {#a}.to_string();
+            if name == "search_param" {
+                is_search_param = true;
+                t.attrs.remove(0);
+                break;
+            }
+        }
+
         if let Pat::Ident(PatIdent { ident, .. }) = t.pat.as_ref() {
+
             let name = LitStr::new(&ident.to_string(), ident.span());
-            return Some((name, t.ty.as_ref()));
+            return Some((name, t.ty.as_ref(),is_search_param));
         }
     }
     None
@@ -68,9 +96,7 @@ fn extract_ident_and_type(arg: &FnArg) -> Option<(LitStr, &Type)> {
 /// 获取类型外层名字：Json<T> → Some("Json")
 fn outer_type_name(ty: &Type) -> Option<String> {
     match ty {
-        Type::Path(TypePath { path, .. }) => {
-            path.segments.last().map(|seg| seg.ident.to_string())
-        }
+        Type::Path(TypePath { path, .. }) => path.segments.last().map(|seg| seg.ident.to_string()),
         _ => None,
     }
 }
@@ -131,11 +157,13 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
         }
     }
 }
-fn add_req_param(f:&mut ItemFn) {
-    f.sig.inputs.push(parse_quote!(_req:http_server::request::HttpRequest));
+fn add_req_param(f: &mut ItemFn) {
+    f.sig
+        .inputs
+        .push(parse_quote!(_req:http_server::request::HttpRequest));
 }
 pub fn handler_fn(f: &mut ItemFn, name: &str) -> TokenStream {
-    let ipt_args = generate_from_httprequest_list(&f.sig.inputs);
+    let ipt_args = generate_from_httprequest_list(&mut f.sig.inputs);
     add_req_param(f);
     conbine_outter_fn(f, ipt_args, name)
 }
@@ -163,8 +191,63 @@ fn modify_fn_name(f: &mut ItemFn, name: &str) {
     let name = format!("{}_origin", name);
     f.sig.ident = Ident::new(&name, Span::call_site());
 }
+fn check(f: &mut ItemFn, route: &LitStr) -> Option<TokenStream> {
+    let mut args: Vec<String> = generate_from_httprequest_list(&mut f.sig.inputs)
+        .into_iter()
+        .filter_map(|x| {
+            if let FromHttpRequest::PathParam(name) = x {
+                Some(name.value())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut path_component = route
+        .value()
+        .split("/")
+        .filter_map(|x| {
+            if x.starts_with("{") && x.ends_with("}") {
+                Some(x[1..x.len() - 1].to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<String>>();
+    args.sort();
+    path_component.sort();
+    if path_component.len() >= args.len() {
+        for i in 0..path_component.len() {
+            if i >= args.len() || path_component[i] != args[i] {
+                return Some(
+                    syn::Error::new(
+                        route.span().clone(),
+                        format!(" missing <{}> in your args", path_component[i]),
+                    )
+                    .to_compile_error(),
+                );
+            }
+        }
+    } else {
+        for i in 0..args.len() {
+            if i >= path_component.len() || path_component[i] != args[i] {
+                return Some(
+                    syn::Error::new(
+                        route.span().clone(),
+                        format!(" missing <{}> in your route", args[i]),
+                    )
+                    .to_compile_error(),
+                );
+            }
+        }
+    }
 
+    None
+}
 pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
+    if let Some(err) = check(&mut f, &route) {
+        return err.into();
+    }
+
     let name = f.sig.ident.to_string();
     add_return_type(&mut f);
     modify_fn_name(&mut f, name.as_str());

@@ -1,6 +1,5 @@
 use app::{Stu, hello_world_v2, m2, test_pathparam};
 use http_server::{
-    HttpHeader,
     data::{Json},
     guard::GuardTire,
     handler::HandlerTire,
@@ -10,18 +9,16 @@ use http_server::{
 };
 use http_server_macro::{get, handlers, post};
 
-#[post("/modifier/{name}")]
-async fn m(name: String, stu: http_server::data::Json<Stu>) {
+#[post("/modifier/{name}/{age}")]
+async fn m(name: String, stu: http_server::data::Json<Stu>,age:usize,#[search_param]_a:usize) {
     let r: Json<Stu> = Json(Stu {
-        name: format!("hello da大地瓜 -> {}", name),
+        name: format!("hello da大地瓜 -> {} my ange is {} --- {}", name,age,stu.0.name),
     });
-    let mut header = HttpHeader::new();
-    header.add("hello", serde_json::to_string(&stu).unwrap());
-    res_modifiers!(header, r)
+    res_modifiers!( r)
 }
-#[get("/static/**")]
+#[get("/**")]
 async fn static_file_map() {
-    static_map(&_req, "/Users/dadigua/Desktop/graduation/app/src").await
+    static_map(&_req, "/Users/dadigua/Desktop/graduation/front-end-app").await
 }
 
 #[tokio::main(flavor = "current_thread")]

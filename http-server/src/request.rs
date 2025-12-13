@@ -175,12 +175,20 @@ impl HttpRequest {
         self.assamble_multi_seg_param(handler_route, incoming_route);
     }
 
+    pub(crate) fn process_search_param(&mut self,url:&str) {
+        unimplemented!()
+    }
+
     pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
         if let Some(ref p) = self.path_param {
             p.get(key)
         } else {
             None
         }
+    }
+
+    pub fn get_search_param<S: AsRef<str>>(&self, _key: S) -> Option<&String> {
+        unimplemented!()
     }
 }
 

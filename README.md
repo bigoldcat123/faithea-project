@@ -1,14 +1,19 @@
 # TODOS
+-  a basic http server ✅
+-  handler guard 👷
 -  handler shoule be `(req) => Resule(res,err)` ✅
 -  clear all unwrap!
 -  add method route support! ✅
 -  shared values
 -  using builder to create server
--  File Transfor
--  static mapping~ 👷
--  guard ✅
+-  File Transfor ✅
+-  static mapping~ ✅
 -  basic httpserver ✅
 -  dynamic route matching ✅
 -  suppor for json inbound and outbound ✅
 -  pathparam ✅
 -  add `_req:HttpRequest` param for handler! ✅
+-  add `mount('/',handlers!(..))`
+-  add error information for dynamic route defination
+-  implememt `HttpResponseModifier` for some basic types
+-  serachParam

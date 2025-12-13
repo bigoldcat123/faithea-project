@@ -195,6 +195,7 @@ async fn handle_request(
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
 ) {
+    let req_url = req.req_line.url.to_string();
     if let Some((_matched_url, handler)) =
         handlers.get_handler(&req.req_line.url, &req.req_line.method)
     {
@@ -202,7 +203,7 @@ async fn handle_request(
             &_matched_url,
             &Route::from(req.req_line.url.as_str()),
         );
-
+        req.process_search_param(&req_url);
         match handler(req).await {
             Ok(res) => {
                 let _ = tx.send(res).await;

@@ -41,12 +41,9 @@ fn t3() {
 
 #[test]
 fn path() {
-    let mut a  = PathBuf::from("/Users/dadigua/Desktop/graduation/http-server/src/data/inbound.rs");
-    a.push("/hello");
-    println!("{:?}",a);
-    let a = vec!["a","b","c"];
-    let a =a.join("/");
-    println!("{}",a);
+    let a  = PathBuf::from("/Users/dadigua/Desktop/graduation/http-server/src/data/inbound");
+    println!("{:?}",a.extension());
+
 
 
 
