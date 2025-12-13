@@ -52,7 +52,7 @@ macro_rules! impl_convert_from_ref_string {
         $(
             impl <'a> $crate::request::ConvertFromRefString<'a,$t> for  &String {
                 fn convert(self) -> Result<$t,String> {
-                    self.parse::<$t>().map_err(|_|format!("can not convert {} to {}",self,stringify!($ty)))
+                    self.parse::<$t>().map_err(|_|format!("can not convert {} to {}",self,stringify!($t)))
                 }
             }
         )*

@@ -1,14 +1,10 @@
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum RouteComponent {
-
     Exact(String),
-
 
     PathParam(String),
 
-
     SingleSegWildCard,
-
 
     MultiSegWildCard,
 }
@@ -51,7 +47,6 @@ impl PartialOrd for RouteComponent {
 }
 
 impl RouteComponent {
-
     pub fn match_url(&self, s: &str) -> bool {
         match self {
             Self::Exact(ss) => s == ss,
@@ -60,7 +55,6 @@ impl RouteComponent {
     }
 }
 impl From<&str> for RouteComponent {
-
     fn from(value: &str) -> Self {
         if value.starts_with("{") {
             // Extract the parameter name from between braces
@@ -76,7 +70,7 @@ impl From<&str> for RouteComponent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq,Default)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Default)]
 pub struct Route {
     /// The sequence of route components that make up this route pattern.
     pub r: Vec<RouteComponent>,
@@ -92,13 +86,20 @@ impl From<&str> for Route {
             v.pop();
         }
         let mut r: Vec<RouteComponent> = vec![];
-        for p in v.split("/") {
-            r.push(p.into());
+
+        if let Some((url, _)) = v.split_once("?") {
+            for p in url.split("/") {
+                r.push(p.into());
+            }
+        } else {
+            for p in v.split("/") {
+                r.push(p.into());
+            }
         }
+
         Self { r }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

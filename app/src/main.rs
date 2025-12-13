@@ -1,33 +1,48 @@
 use app::{Stu, hello_world_v2, m2, test_pathparam};
 use http_server::{
-    data::{Json},
-    guard::GuardTire,
-    handler::HandlerTire,
-    request::static_map,
-    res_modifiers,
+    data::Json, guard::GuardTire, handler::HandlerTire, request::static_map, res_modifiers,
     server::HttpServer,
 };
 use http_server_macro::{get, handlers, post};
 
 #[post("/modifier/{name}/{age}")]
-async fn m(name: String, stu: http_server::data::Json<Stu>,age:usize,#[search_param]_a:usize) {
+async fn m(name: String, stu:Json<Stu>, age: usize, #[search_param] _a: usize,#[search_param] new_name:String) {
     let r: Json<Stu> = Json(Stu {
-        name: format!("hello da大地瓜 -> {} my ange is {} --- {}", name,age,stu.0.name),
+        name: format!(
+            "hello da大地瓜 -> {} my ange is {} --- {} search param is {} and {}",
+            name, age, stu.0.name, _a,new_name
+        ),
     });
-    res_modifiers!( r)
+    res_modifiers!(r)
 }
 #[get("/**")]
 async fn static_file_map() {
     static_map(&_req, "/Users/dadigua/Desktop/graduation/front-end-app").await
 }
 
+#[get("/")]
+async fn get_user() {
+    "new user"
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     // Set up the handler routing trie
     let mut handler = HandlerTire::default();
-    handler.mount(handlers!(m, m2, hello_world_v2, test_pathparam, static_file_map));
-    let guards = GuardTire::default();
+    handler.mount("/",handlers!(
+        m,
+        m2,
+        hello_world_v2,
+        test_pathparam,
+        static_file_map
+    ));
+    handler.mount("/user", handlers!(get_user));
+    let mut guards = GuardTire::default();
+    guards.add("/**", async |e| {
+        println!("new req -> ");
 
+        Ok(e)
+    });
     let server = HttpServer::new("127.0.0.1:8899", handler, guards);
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");

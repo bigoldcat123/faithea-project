@@ -50,6 +50,7 @@ pub fn generate_from_httprequest_list(args: &mut Punctuated<FnArg, Comma>) -> Ve
 
 fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
     if let Some((name, ty,is_search_param)) = extract_ident_and_type(arg) {
+        // println!("{} {} {}",quote! {#name}.to_string(),quote!{#ty}.to_string(),is_search_param);
         let outer = outer_type_name(ty);
         Some(
             match outer.as_deref() {
@@ -100,34 +101,7 @@ fn outer_type_name(ty: &Type) -> Option<String> {
         _ => None,
     }
 }
-// pub fn generate_from_httprequest_list(ipt: &Punctuated<FnArg, Comma>) -> Vec<FromHttpRequest> {
-//     ipt.iter()
-//         .map(|i| {
-//             if let FnArg::Typed(t) = i {
-//                 if let Pat::Ident(arg_name) = t.pat.as_ref() {
-//                     let arg_name =
-//                         LitStr::new(arg_name.ident.to_string().as_str(), Span::call_site());
-//                     let ty = t.ty.as_ref();
-//                     if let Type::Path(p) = ty {
-//                         let p = &p.path.segments;
-//                         let  seg:Vec<&Ident> = p.iter().map(|x| &x.ident).collect();
-//                         if let Some(s) = seg.last() {
-//                             match s.to_string().as_str() {
-//                                 "Json" => {
-//                                     return FromHttpRequest::Body;
-//                                 }
-//                                 "Shared" => return FromHttpRequest::_Shared(arg_name),
-//                                 _ => {}
-//                             }
-//                         }
-//                         return FromHttpRequest::PathParam(arg_name);
-//                     }
-//                 }
-//             }
-//             unreachable!()
-//         })
-//         .collect::<Vec<FromHttpRequest>>()
-// }
+
 
 fn create_handler_fn_name(sig: &str) -> Ident {
     let new_fn_name = format!("{}_handler", sig);
@@ -162,8 +136,8 @@ fn add_req_param(f: &mut ItemFn) {
         .inputs
         .push(parse_quote!(_req:http_server::request::HttpRequest));
 }
-pub fn handler_fn(f: &mut ItemFn, name: &str) -> TokenStream {
-    let ipt_args = generate_from_httprequest_list(&mut f.sig.inputs);
+pub fn handler_fn(f: &mut ItemFn, name: &str,ipt_args:Vec<FromHttpRequest>) -> TokenStream {
+
     add_req_param(f);
     conbine_outter_fn(f, ipt_args, name)
 }
@@ -178,11 +152,15 @@ pub fn handler_modifier_fn(
     let handler_fn_name = create_handler_fn_name(origin_name);
     let method_name = Ident::new(method, Span::call_site());
     quote! {
-        pub fn #handler_modifier_fn_name(h:&mut http_server::handler::HandlerTire) {
+        pub fn #handler_modifier_fn_name(h:&mut http_server::handler::HandlerTire,pre_fix:&str) {
 
             #handler_fn
-
-            h.#method_name(#route, #handler_fn_name);
+            let mut r = format!("{}{}",pre_fix,#route);
+            if r.ends_with("/") {
+                r.pop();
+            }
+            println!("-> {:?}",r);
+            h.#method_name(r, #handler_fn_name);
         }
     }
 }
@@ -191,8 +169,8 @@ fn modify_fn_name(f: &mut ItemFn, name: &str) {
     let name = format!("{}_origin", name);
     f.sig.ident = Ident::new(&name, Span::call_site());
 }
-fn check(f: &mut ItemFn, route: &LitStr) -> Option<TokenStream> {
-    let mut args: Vec<String> = generate_from_httprequest_list(&mut f.sig.inputs)
+fn check(route: &LitStr,args:&Vec<FromHttpRequest>) -> Option<TokenStream> {
+    let mut args: Vec<String> = args
         .into_iter()
         .filter_map(|x| {
             if let FromHttpRequest::PathParam(name) = x {
@@ -244,7 +222,8 @@ fn check(f: &mut ItemFn, route: &LitStr) -> Option<TokenStream> {
     None
 }
 pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
-    if let Some(err) = check(&mut f, &route) {
+    let args = generate_from_httprequest_list(&mut f.sig.inputs);
+    if let Some(err) = check(&route,&args) {
         return err.into();
     }
 
@@ -252,7 +231,7 @@ pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
     add_return_type(&mut f);
     modify_fn_name(&mut f, name.as_str());
 
-    let handler_fn = handler_fn(&mut f, name.as_str());
+    let handler_fn = handler_fn(&mut f, name.as_str(),args);
     let handler_modifier_fn = handler_modifier_fn(handler_fn, route, method, name.as_str());
     // println!("{}",handler_modifier_fn);
     quote! {

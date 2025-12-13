@@ -1,6 +1,6 @@
 
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-pub struct SearchParam {
+pub(crate) struct SearchParam {
     _inner: HashMap<String, String>,
 }
 
@@ -23,7 +23,9 @@ impl SearchParam {
         let mut map = HashMap::new();
         if let Some((_, search_params)) = url.split_once("?") {
             for (k, v) in search_params.split("&").filter_map(|x| x.split_once("=")) {
-                map.insert(k.into(), v.into());
+                if let Ok(ok) = urlencoding::decode(v) {
+                    map.insert(k.into(), ok.to_string());
+                }
             }
         }
         Self { _inner: map }
@@ -66,7 +68,7 @@ pub struct HttpRequest {
     pub(crate) headers: HttpHeader,
     pub(crate) body: Option<Bytes>,
     pub(crate) path_param: Option<PathParam>,
-    pub(crate) search_param: Option<PathParam>,
+    pub(crate) search_param: Option<SearchParam>,
     pub(crate) multi_seg_param: Option<String>,
 }
 
@@ -127,7 +129,7 @@ impl HttpRequest {
     }
 
     pub(crate) fn process_search_param(&mut self, url: &str) {
-        unimplemented!()
+        self.search_param = Some(SearchParam::from_url(url));
     }
 
     pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
@@ -139,7 +141,11 @@ impl HttpRequest {
     }
 
     pub fn get_search_param<S: AsRef<str>>(&self, _key: S) -> Option<&String> {
-        unimplemented!()
+        if let Some(s) = self.search_param.as_ref() {
+            s._inner.get(_key.as_ref())
+        }else {
+            None
+        }
     }
 }
 
@@ -247,27 +253,6 @@ fn parse_line_header(raw_header: &[u8]) -> Result<(HttpReqLine, HttpHeader), Str
     Ok((req_line, http_header))
 }
 
-/// Checks if a byte slice contains the HTTP header terminator "\r\n\r\n".
-///
-/// This function scans the byte slice looking for the sequence "\r\n\r\n"
-/// which marks the end of HTTP headers. It returns both whether the
-/// terminator was found and its position (end index).
-///
-/// # Arguments
-///
-/// * `c` - Byte slice to search for the header terminator
-///
-/// # Returns
-///
-/// A tuple where:
-/// - First element: `true` if "\r\n\r\n" was found, `false` otherwise
-/// - Second element: If found, the index just past the terminator;
-///   if not found, returns 0
-///
-/// # Note
-///
-/// The position returned is the index of the first byte *after* the
-/// "\r\n\r\n" sequence, which is convenient for slicing.
 fn check_header(c: &[u8]) -> (bool, usize) {
     for i in 0..=c.len() - 4 {
         if &c[i..i + 4] == b"\r\n\r\n" {
