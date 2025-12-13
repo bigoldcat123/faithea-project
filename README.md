@@ -5,9 +5,10 @@
 -  shared values
 -  using builder to create server
 -  File Transfor
--  static mapping~
+-  static mapping~ 👷
 -  guard ✅
 -  basic httpserver ✅
 -  dynamic route matching ✅
 -  suppor for json inbound and outbound ✅
 -  pathparam ✅
+-  add `_req:HttpRequest` param for handler! ✅

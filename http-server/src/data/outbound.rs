@@ -19,6 +19,15 @@ impl<T: Serialize> HttpResponseModifier for Json<T> {
         Ok(())
     }
 }
+impl HttpResponseModifier for &str {
+    fn modify(&self, res: &mut crate::response::HttpResponse) -> Result<(), String> {
+        res.add_header(("content-type", "application/text"));
+        res.add_header(("content-length", self.as_bytes().len().to_string().as_str()));
+        let b:Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
+        res.set_body(ResponseBody::Simple(b));
+        Ok(())
+    }
+}
 
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = String;

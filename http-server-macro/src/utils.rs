@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{FnArg, Ident, ItemFn, LitStr, Pat, PatIdent, Type, TypePath, punctuated::Punctuated, token::Comma};
+use syn::{FnArg, Ident, ItemFn, LitStr, Pat, PatIdent,  Type, TypePath, parse_quote, punctuated::Punctuated, token::Comma};
 
 pub fn add_return_type(f: &mut ItemFn) {
     f.sig.output = syn::parse_quote! {
@@ -122,6 +122,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
 
             let res_modifier = #inner_handler_name(
                 #(#ipt_args)*
+                _req
             )
             .await;
 
@@ -130,9 +131,12 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
         }
     }
 }
-
-pub fn handler_fn(f: &ItemFn, name: &str) -> TokenStream {
+fn add_req_param(f:&mut ItemFn) {
+    f.sig.inputs.push(parse_quote!(_req:http_server::request::HttpRequest));
+}
+pub fn handler_fn(f: &mut ItemFn, name: &str) -> TokenStream {
     let ipt_args = generate_from_httprequest_list(&f.sig.inputs);
+    add_req_param(f);
     conbine_outter_fn(f, ipt_args, name)
 }
 
@@ -164,9 +168,10 @@ pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
     let name = f.sig.ident.to_string();
     add_return_type(&mut f);
     modify_fn_name(&mut f, name.as_str());
-    let handler_fn = handler_fn(&f, name.as_str());
+
+    let handler_fn = handler_fn(&mut f, name.as_str());
     let handler_modifier_fn = handler_modifier_fn(handler_fn, route, method, name.as_str());
-    // println!("{}",handler_modifier_fn);
+    println!("{}",handler_modifier_fn);
     quote! {
         #handler_modifier_fn
     }

@@ -93,10 +93,10 @@ impl PathParam {
 /// ```
 #[derive(Debug)]
 pub struct HttpRequest {
-    pub req_line: HttpReqLine,
-    pub headers: HttpHeader,
-    pub body: Option<Bytes>,
-    pub path_param: Option<PathParam>,
+    pub(crate) req_line: HttpReqLine,
+    pub(crate) headers: HttpHeader,
+    pub(crate) body: Option<Bytes>,
+    pub(crate) path_param: Option<PathParam>,
 }
 
 impl HttpRequest {
@@ -141,7 +141,7 @@ impl HttpRequest {
         let body = Some(Bytes::from("request payload"));
         HttpRequest::new(req_line, headers, body)
     }
-    pub fn assamble_pathparam(&mut self, handler_route: &Route, incoming_route: &Route) {
+    pub(crate) fn assamble_pathparam(&mut self, handler_route: &Route, incoming_route: &Route) {
         if let Ok(p) = PathParam::try_from_route(handler_route, incoming_route) {
             self.path_param = Some(p)
         }
