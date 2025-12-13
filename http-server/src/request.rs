@@ -29,12 +29,12 @@
 //! # }
 //! ```
 
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap};
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
-use crate::{HttpHeader, data::outbound::StaticFile, impl_convert_from_ref_string, map_str, response::HttpResponseModifier, route::{Route, RouteComponent}};
+use crate::{HttpHeader, data::outbound::StaticFile, impl_convert_from_ref_string, map_str, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}};
 
 #[derive(Debug)]
 pub struct PathParam {
@@ -100,10 +100,13 @@ pub struct HttpRequest {
     pub(crate) multi_seg_param:Option<String>
 }
 
-pub async fn static_map<P:AsRef<Path>>(_req:&HttpRequest,path:P) -> Result<impl HttpResponseModifier,String> {
-    let p = path.as_ref();
-    let _p = StaticFile(p);
-    Err::<&str,String>("()".to_string())
+pub async fn static_map<P:AsRef<str>>(_req:&HttpRequest,path:P) -> Vec<Box<dyn HttpResponseModifier + Send + Sync>> {
+    if let Some(multi_seg_param) = _req.multi_seg_param.as_ref() {
+        let a :StaticFile<String>= StaticFile(format!("{}/{}",path.as_ref(),multi_seg_param));
+        res_modifiers!(a)
+    }else {
+        res_modifiers!("no multi_seg_param found try to use /abc/** route!")
+    }
 }
 
 impl HttpRequest {
@@ -158,7 +161,7 @@ impl HttpRequest {
         if handler_route.r.ends_with(&[RouteComponent::MultiSegWildCard]) {
             let mut s = vec![];
             for i in 0..incoming_route.r.len() {
-                if i >= handler_route.r.len() {
+                if i >= handler_route.r.len() - 1 {
                     if let RouteComponent::Exact(ref p) = incoming_route.r[i] {
                         s.push(p.as_str());
                     }

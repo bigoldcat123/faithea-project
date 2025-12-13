@@ -52,8 +52,8 @@ mod tests {
         hello(Json::try_from(&req).unwrap());
     }
 
-    #[test]
-    fn constuct_response() {
+    #[tokio::test]
+    async fn constuct_response() {
         let mut res = HttpResponse::new();
 
         let mut header = HttpHeader::new();
@@ -62,10 +62,10 @@ mod tests {
         let j = Json(Stu {
             name: "hello".to_string(),
         });
-        let a: Vec<Box<dyn HttpResponseModifier>> = res_modifiers!(header, j);
-        a.modify(&mut res).unwrap();
+        let a: Vec<Box<dyn HttpResponseModifier + Send + Sync>> = res_modifiers!(header, j);
+        a.modify(&mut res).await.unwrap();
         let a = Box::new(res_line);
-        a.modify(&mut res).unwrap();
+        a.modify(&mut res).await.unwrap();
 
         // header.modify(&mut res);
         // res_line.modify(&mut res);

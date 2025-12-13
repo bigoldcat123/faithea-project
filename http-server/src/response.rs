@@ -374,30 +374,66 @@ impl From<&ResponseStatusLine> for Bytes {
 }
 
 pub trait HttpResponseModifier {
-    fn modify(&self, res: &mut HttpResponse) -> Result<(), String>;
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>>;
 }
 
 impl HttpResponseModifier for HttpHeader {
-    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
-        for kv in self.headers.iter() {
-            res.add_header(kv);
-        }
-        Ok(())
+    // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
+    //     for kv in self.headers.iter() {
+    //         res.add_header(kv);
+    //     }
+    //     Ok(())
+    // }
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+        Box::pin(async move {
+            for kv in self.headers.iter() {
+                res.add_header(kv);
+            }
+            Ok(())
+        })
     }
 }
 impl HttpResponseModifier for ResponseStatusLine {
-    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
-        res.status_line.info = self.status.to_string();
-        res.status_line.info = self.info.to_string();
-        Ok(())
+    // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
+    //     res.status_line.info = self.status.to_string();
+    //     res.status_line.info = self.info.to_string();
+    //     Ok(())
+    // }
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+        Box::pin(async move {
+            res.status_line.info = self.status.to_string();
+            res.status_line.info = self.info.to_string();
+            Ok(())
+        })
     }
 }
-impl<T: HttpResponseModifier + ?Sized> HttpResponseModifier for Vec<Box<T>> {
-    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
-        for m in self {
-            m.modify(res)?;
-        }
-        Ok(())
+impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Vec<Box<T>> {
+    // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
+    //     for m in self {
+    //         m.modify(res)?;
+    //     }
+    //     Ok(())
+    // }
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+        Box::pin(async move {
+            for m in self {
+                let m:std::pin::Pin<Box<dyn Future<Output = Result<(), std::string::String>> + Send + Sync>> = m.modify(res);
+                m.await?;
+            }
+            Ok(())
+        })
     }
 }
 

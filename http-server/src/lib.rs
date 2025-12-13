@@ -292,7 +292,7 @@ mod test {
 macro_rules! res_modifiers {
     ($($e:expr),*) => {
         {
-            let a:Vec<Box<dyn $crate::response::HttpResponseModifier>> = vec![
+            let a:Vec<Box<dyn $crate::response::HttpResponseModifier + Send + Sync>> = vec![
                $( Box::new($e),)*
             ];
             a

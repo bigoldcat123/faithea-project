@@ -126,7 +126,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
             )
             .await;
 
-            res_modifier.modify(&mut res)?;
+            res_modifier.modify(&mut res).await?;
             Ok(res)
         }
     }
