@@ -1,42 +1,36 @@
-//! HTTP request parsing and data structures.
-//!
-//! This module provides functionality for parsing HTTP requests from raw bytes
-//! and representing them in structured form. It handles the complete HTTP
-//! request format including the request line, headers, and optional body.
-//!
-//! # Features
-//!
-//! - **Complete HTTP parsing**: Parses request line, headers, and body
-//! - **Async I/O**: Uses Tokio for non-blocking network reads
-//! - **Buffer management**: Efficient byte buffer reuse for performance
-//! - **Error handling**: Detailed error messages for malformed requests
-//!
-//! # Usage
-//!
-//! ```rust
-//! use http_server::request::{parse_http_frame, HttpRequest};
-//! use bytes::BytesMut;
-//! use tokio::net::TcpStream;
-//!
-//! # async fn example() -> Result<(), String> {
-//! let socket = TcpStream::connect("127.0.0.1:8080").await.unwrap();
-//! let (mut reader, _) = socket.into_split();
-//! let mut buf = BytesMut::with_capacity(4096);
-//!
-//! let request = parse_http_frame(&mut reader, &mut buf).await?;
-//! println!("Method: {}, URL: {}", request.req_line.method, request.req_line.url);
-//! # Ok(())
-//! # }
-//! ```
 
-use std::{collections::HashMap};
+
+use std::collections::HashMap;
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
-use crate::{HttpHeader, data::outbound::StaticFile, impl_convert_from_ref_string, map_str, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}};
+use crate::{
+    HttpHeader,
+    data::outbound::StaticFile,
+    impl_convert_from_ref_string, map_str, res_modifiers,
+    response::HttpResponseModifier,
+    route::{Route, RouteComponent},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+pub struct SearchParam {
+    _inner: HashMap<String, String>,
+}
+
+impl SearchParam {
+    fn from_url(url: &str) -> Self {
+        let mut map = HashMap::new();
+        if let Some((_, search_params)) = url.split_once("?") {
+            for (k, v) in search_params.split("&").filter_map(|x| x.split_once("=")) {
+                map.insert(k.into(), v.into());
+            }
+        }
+        Self { _inner: map }
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct PathParam {
     _inner: HashMap<String, String>,
 }
@@ -66,84 +60,38 @@ impl PathParam {
     }
 }
 
-/// Represents a complete HTTP request.
-///
-/// This structure contains all components of an HTTP request:
-/// the request line (method, URL, version), headers, and optional body.
-/// It is produced by parsing raw HTTP bytes from a network stream.
-///
-/// # Fields
-///
-/// - `req_line`: The HTTP request line (method, URL, protocol version)
-/// - `headers`: HTTP headers as key-value pairs
-/// - `body`: Optional request body (present for POST, PUT, etc.)
-///
-/// # Examples
-///
-/// ```rust
-/// use http_server::request::{HttpRequest, HttpReqLine, HttpHeader};
-/// use bytes::Bytes;
-///
-/// let req_line = HttpReqLine::parse("GET /index.html HTTP/1.1").unwrap();
-/// let headers = HttpHeader::new();
-/// let request = HttpRequest::new(req_line, headers, None);
-///
-/// assert_eq!(request.req_line.method, "GET");
-/// assert_eq!(request.req_line.url, "/index.html");
-/// ```
 #[derive(Debug)]
 pub struct HttpRequest {
     pub(crate) req_line: HttpReqLine,
     pub(crate) headers: HttpHeader,
     pub(crate) body: Option<Bytes>,
     pub(crate) path_param: Option<PathParam>,
-    pub(crate) multi_seg_param:Option<String>
+    pub(crate) search_param: Option<PathParam>,
+    pub(crate) multi_seg_param: Option<String>,
 }
 
-pub async fn static_map<P:AsRef<str>>(_req:&HttpRequest,path:P) -> Vec<Box<dyn HttpResponseModifier + Send + Sync>> {
+pub async fn static_map<P: AsRef<str>>(
+    _req: &HttpRequest,
+    path: P,
+) -> Vec<Box<dyn HttpResponseModifier + Send + Sync>> {
     if let Some(multi_seg_param) = _req.multi_seg_param.as_ref() {
-        let a :StaticFile<String>= StaticFile(format!("{}/{}",path.as_ref(),multi_seg_param));
+        let a: StaticFile<String> = StaticFile(format!("{}/{}", path.as_ref(), multi_seg_param));
         res_modifiers!(a)
-    }else {
+    } else {
         res_modifiers!("no multi_seg_param found try to use /abc/** route!")
     }
 }
 
 impl HttpRequest {
-    /// Creates a new `HttpRequest` from its components.
-    ///
-    /// This constructor is typically used internally by the parser.
-    /// External code should obtain `HttpRequest` instances by parsing
-    /// network data with [`parse_http_frame`].
-    ///
-    /// # Arguments
-    ///
-    /// * `req_line` - The parsed HTTP request line
-    /// * `headers` - The parsed HTTP headers
-    /// * `body` - Optional request body bytes
-    ///
-    /// # Returns
-    ///
-    /// A new `HttpRequest` instance.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use http_server::request::{HttpRequest, HttpReqLine, HttpHeader};
-    /// use bytes::Bytes;
-    ///
-    /// let req_line = HttpReqLine::parse("POST /api/data HTTP/1.1").unwrap();
-    /// let headers = HttpHeader::new();
-    /// let body = Some(Bytes::from("request payload"));
-    /// let request = HttpRequest::new(req_line, headers, body);
-    /// ```
+
     pub fn new(req_line: HttpReqLine, headers: HttpHeader, body: Option<Bytes>) -> Self {
         Self {
             req_line,
             headers,
             body,
             path_param: None,
-            multi_seg_param:None
+            multi_seg_param: None,
+            search_param: None,
         }
     }
     pub fn fake() -> Self {
@@ -158,7 +106,10 @@ impl HttpRequest {
         }
     }
     fn assamble_multi_seg_param(&mut self, handler_route: &Route, incoming_route: &Route) {
-        if handler_route.r.ends_with(&[RouteComponent::MultiSegWildCard]) {
+        if handler_route
+            .r
+            .ends_with(&[RouteComponent::MultiSegWildCard])
+        {
             let mut s = vec![];
             for i in 0..incoming_route.r.len() {
                 if i >= handler_route.r.len() - 1 {
@@ -175,7 +126,7 @@ impl HttpRequest {
         self.assamble_multi_seg_param(handler_route, incoming_route);
     }
 
-    pub(crate) fn process_search_param(&mut self,url:&str) {
+    pub(crate) fn process_search_param(&mut self, url: &str) {
         unimplemented!()
     }
 
@@ -192,29 +143,6 @@ impl HttpRequest {
     }
 }
 
-/// Represents the HTTP request line (first line of an HTTP request).
-///
-/// The request line contains three components separated by spaces:
-/// 1. HTTP method (GET, POST, PUT, DELETE, etc.)
-/// 2. Request URL/path
-/// 3. HTTP protocol version
-///
-/// # Fields
-///
-/// - `method`: HTTP method (e.g., "GET", "POST")
-/// - `url`: Request URL/path (e.g., "/index.html")
-/// - `version`: HTTP version (e.g., "HTTP/1.1")
-///
-/// # Examples
-///
-/// ```rust
-/// use http_server::request::HttpReqLine;
-///
-/// let req_line = HttpReqLine::parse("GET /api/users HTTP/1.1").unwrap();
-/// assert_eq!(req_line.method, "GET");
-/// assert_eq!(req_line.url, "/api/users");
-/// assert_eq!(req_line.version, "HTTP/1.1");
-/// ```
 #[derive(Debug)]
 pub struct HttpReqLine {
     pub method: String,
@@ -223,40 +151,7 @@ pub struct HttpReqLine {
 }
 
 impl HttpReqLine {
-    /// Parses an HTTP request line string into a structured `HttpReqLine`.
-    ///
-    /// The input should be a complete HTTP request line as received from
-    /// the network, e.g., "GET /index.html HTTP/1.1".
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - The HTTP request line string to parse
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(HttpReqLine)` - Successfully parsed request line
-    /// * `Err(String)` - Malformed request line with error description
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The string doesn't contain exactly three whitespace-separated tokens
-    /// - Any required component (method, URL, version) is missing
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use http_server::request::HttpReqLine;
-    ///
-    /// let req_line = HttpReqLine::parse("POST /submit HTTP/1.1").unwrap();
-    /// assert_eq!(req_line.method, "POST");
-    /// assert_eq!(req_line.url, "/submit");
-    /// assert_eq!(req_line.version, "HTTP/1.1");
-    ///
-    /// // Invalid request line
-    /// let result = HttpReqLine::parse("GET /index.html");
-    /// assert!(result.is_err());
-    /// ```
+
     pub fn parse(s: &str) -> Result<Self, String> {
         let mut head_line = s.split_whitespace();
         let method = head_line
@@ -279,54 +174,6 @@ impl HttpReqLine {
     }
 }
 
-/// Parses a complete HTTP request frame from a network stream.
-///
-/// This is the main entry point for HTTP request parsing. It reads from
-/// the provided stream until a complete HTTP request (including optional body)
-/// has been parsed, reusing the provided buffer for efficiency.
-///
-/// The parsing process:
-/// 1. Reads until the complete request line and headers are received
-/// 2. Parses the request line and headers into structured data
-/// 3. If a "Content-Length" header is present, reads the specified number of body bytes
-/// 4. Returns a complete `HttpRequest` structure
-///
-/// # Arguments
-///
-/// * `r` - The read half of a TCP stream to read HTTP data from
-/// * `buf` - A reusable buffer for reading data (must be empty or contain
-///   partial data from a previous read)
-///
-/// # Returns
-///
-/// * `Ok(HttpRequest)` - Successfully parsed HTTP request
-/// * `Err(String)` - Error during parsing (malformed request, connection closed, etc.)
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The connection is closed before a complete request is received
-/// - The HTTP request is malformed (invalid format, missing components, etc.)
-/// - The "Content-Length" value cannot be parsed as a number
-/// - An I/O error occurs while reading from the stream
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use http_server::request::parse_http_frame;
-/// use bytes::BytesMut;
-/// use tokio::net::TcpStream;
-///
-/// # async fn example() -> Result<(), String> {
-/// let socket = TcpStream::connect("127.0.0.1:8080").await.unwrap();
-/// let (mut reader, _) = socket.into_split();
-/// let mut buf = BytesMut::with_capacity(4096);
-///
-/// let request = parse_http_frame(&mut reader, &mut buf).await?;
-/// println!("Received {} request for {}", request.req_line.method, request.req_line.url);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn parse_http_frame(
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
@@ -342,28 +189,6 @@ pub async fn parse_http_frame(
     Ok(req)
 }
 
-/// Reads the request body from the stream until the specified length is reached.
-///
-/// This function continues reading from the stream until the buffer contains
-/// at least `len` bytes, which represents the complete request body.
-/// It's used when a "Content-Length" header indicates a request body is present.
-///
-/// # Arguments
-///
-/// * `len` - The expected length of the request body in bytes
-/// * `r` - The read half of a TCP stream to read from
-/// * `buf` - Buffer to accumulate the body bytes into
-///
-/// # Returns
-///
-/// * `Ok(())` - Successfully read the complete body
-/// * `Err(String)` - Connection closed before full body was read, or I/O error
-///
-/// # Note
-///
-/// This function assumes the buffer may already contain some data from
-/// previous reads (e.g., the headers). It only reads additional bytes
-/// as needed to reach the required length.
 async fn parse_body_frame(
     len: usize,
     r: &mut OwnedReadHalf,
@@ -383,26 +208,6 @@ async fn parse_body_frame(
     }
     Ok(())
 }
-/// Reads and parses the request line and headers from the stream.
-///
-/// This function reads from the stream until it detects the "\r\n\r\n"
-/// sequence that marks the end of HTTP headers. It then parses the
-/// accumulated data into a request line and header collection.
-///
-/// # Arguments
-///
-/// * `r` - The read half of a TCP stream to read from
-/// * `buf` - Buffer to accumulate the header bytes
-///
-/// # Returns
-///
-/// * `Ok((HttpReqLine, HttpHeader))` - Successfully parsed request line and headers
-/// * `Err(String)` - Connection closed before headers complete, or parse error
-///
-/// # Note
-///
-/// The buffer is advanced (consumed) after successful parsing to prepare
-/// for reading the request body (if any).
 async fn parse_line_header_frame(
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
@@ -425,29 +230,6 @@ async fn parse_line_header_frame(
     }
 }
 
-/// Parses raw HTTP header bytes into a request line and header collection.
-///
-/// This function expects the complete HTTP headers (including the request line)
-/// as a byte slice ending with "\r\n\r\n". It splits the data by lines,
-/// parses the first line as the request line, and subsequent non-empty
-/// lines as headers.
-///
-/// # Arguments
-///
-/// * `raw_header` - Byte slice containing the complete HTTP headers
-///   (must end with "\r\n\r\n")
-///
-/// # Returns
-///
-/// * `Ok((HttpReqLine, HttpHeader))` - Successfully parsed components
-/// * `Err(String)` - Invalid UTF-8, malformed request line, or malformed headers
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The byte slice is not valid UTF-8
-/// - The request line is missing or malformed
-/// - Any header line doesn't contain the ":" separator
 fn parse_line_header(raw_header: &[u8]) -> Result<(HttpReqLine, HttpHeader), String> {
     let raw_header = str::from_utf8(raw_header).map_err(map_str!())?;
     let mut raw_header = raw_header.split("\r\n");
@@ -495,25 +277,25 @@ fn check_header(c: &[u8]) -> (bool, usize) {
     (false, 0)
 }
 
-pub trait ConvertFromRefString<'a,O> {
+pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
 impl_convert_from_ref_string!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
 
-impl<'a,T> ConvertFromRefString<'a,T> for T {
+impl<'a, T> ConvertFromRefString<'a, T> for T {
     fn convert(self) -> Result<T, String> {
         Ok(self)
     }
 }
 
-impl <'a> ConvertFromRefString<'a,&'a str> for &'a String {
+impl<'a> ConvertFromRefString<'a, &'a str> for &'a String {
     fn convert(self) -> Result<&'a str, String> {
         Ok(self.as_str())
     }
 }
-impl <'a> ConvertFromRefString<'a,String> for &'a String {
+impl<'a> ConvertFromRefString<'a, String> for &'a String {
     fn convert(self) -> Result<String, String> {
         Ok(self.to_string())
     }
@@ -541,4 +323,135 @@ mod tests {
         assert_eq!(a, "chenzhonghai");
         assert_eq!(age, "22");
     }
+
+    #[test]
+    fn search_param_test() {
+        let url = "";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner.is_empty(), true)
+    }
+    #[test]
+    fn search_param_test2() {
+        let url = "https://www.bilibili.com/?a=a=10&c=200";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, HashMap::from([
+            ("a".into(), "a=10".into()),
+            ("c".into(), "200".into())
+        ]))
+    }
+    /// 快速构造 HashMap 的宏，减少视觉噪音
+    macro_rules! map {
+        ($( $k:expr => $v:expr ),* $(,)?) => {
+            HashMap::from([
+                $( ($k.into(), $v.into()) ),*
+            ])
+        };
+    }
+
+    #[test]
+    fn basic_kv() {
+        let url = "https://example.com/?name=kimi&age=18";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! { "name" => "kimi", "age" => "18" });
+    }
+
+    #[test]
+    fn empty_value() {
+        let url = "https://example.com/?key=";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! { "key" => "" });
+    }
+
+    #[test]
+    fn empty_key() {
+        let url = "https://example.com/?=value";
+        let s = SearchParam::from_url(url);
+        // 空字符串当 key 也是合法实现，这里按「空 key」处理
+        assert_eq!(s._inner, map! { "" => "value" });
+    }
+
+    #[test]
+    fn duplicate_keys_keep_last() {
+        let url = "https://example.com/?a=1&b=2&a=3";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! { "a" => "3", "b" => "2" });
+    }
+
+    #[test]
+    fn no_query_string() {
+        let url = "https://example.com/path";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! {});
+    }
+
+    #[test]
+    fn question_mark_only() {
+        let url = "https://example.com/?";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! {});
+    }
+
+    // #[test]
+    // fn url_encoded_special_chars() {
+    //     // key 里带 = & 空格，value 里带 & =
+    //     let url = "https://example.com/?key%3D%26=v%26a%3Dl%20ue";
+    //     let s = SearchParam::from_url(url);
+    //     assert_eq!(s._inner, map! { "key=&" => "v&al ue" });
+    // }
+
+    // #[test]
+    // fn fragment_should_be_ignored() {
+    //     let url = "https://example.com/?a=1&b=2#fragment";
+    //     let s = SearchParam::from_url(url);
+    //     assert_eq!(s._inner, map! { "a" => "1", "b" => "2" });
+    // }
+
+    #[test]
+    fn spaces_around_query() {
+        let url = " https://example.com/?  x=1  & y = 2  ";
+        let s = SearchParam::from_url(url);
+        // 空格保留在 value 里，取决于你的 trim 策略，这里假设不自动 trim
+        assert_eq!(s._inner, map! { "  x" => "1  ", " y " => " 2  " });
+    }
+
+    #[test]
+    fn given_weird_case() {
+        // 题目自带的用例
+        let url = "https://www.bilibili.com/?a=a=10&c=200 ";
+        let s = SearchParam::from_url(url);
+        assert_eq!(s._inner, map! { "a" => "a=10", "c" => "200 " });
+    }
+
+    // #[test]
+    // fn plus_sign() {
+    //     // 加号在 query-string 中被解释为空格（application/x-www-form-urlencoded）
+    //     let url = "https://example.com/?msg=hello+world";
+    //     let s = SearchParam::from_url(url);
+    //     assert_eq!(s._inner, map! { "msg" => "hello world" });
+    // }
+
+    // #[test]
+    // fn non_utf8_percent() {
+    //     // 非法 UTF-8 百分号序列，应不 panic，能跳过或给出空值
+    //     let url = "https://example.com/?key=%FF%FE";
+    //     let s = SearchParam::from_url(url);
+    //     // 这里只是断言不 panic，具体行为取决于你用的 urldecode 库
+    //     // 如果解码失败返回 ""，则：
+    //     assert_eq!(s._inner.get("key").map(|v| v.as_str()), Some(""));
+    // }
+
+    // #[test]
+    // fn key_without_equal() {
+    //     // 没有等号时，value 视为空字符串
+    //     let url = "https://example.com/?flag";
+    //     let s = SearchParam::from_url(url);
+    //     assert_eq!(s._inner, map! { "flag" => "" });
+    // }
+
+    // #[test]
+    // fn multibyte_unicode() {
+    //     let url = "https://example.com/?name=测试&emoji=%F0%9F%98%82";
+    //     let s = SearchParam::from_url(url);
+    //     assert_eq!(s._inner, map! { "name" => "测试", "emoji" => "😂" });
+    // }
 }

@@ -1,28 +1,3 @@
-//! HTTP server implementation using Tokio.
-//!
-//! This module provides the main HTTP server struct [`HttpServer`] that
-//! binds to a TCP socket and processes incoming HTTP connections asynchronously.
-//!
-//! # Features
-//!
-//! - **Async I/O**: Built on Tokio for non-blocking network operations
-//! - **Concurrent Processing**: Spawns a new task for each connection
-//! - **Pipeline Architecture**: Separates request reading from response writing
-//! - **Integration**: Works with [`HandlerTire`] for routing and [`GuardTire`] for middleware
-//!
-//! # Usage
-//!
-//! ```rust
-//! use http_server::{HttpServer, HandlerTire, GuardTire};
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let handlers = HandlerTire::default();
-//!     let guards = GuardTire::default();
-//!     let server = HttpServer::new("127.0.0.1:8080", handlers, guards);
-//!     server.start().await;
-//! }
-//! ```
 
 use std::{
     net::{SocketAddr, ToSocketAddrs},
@@ -43,25 +18,7 @@ use crate::{
     route::Route,
 };
 
-/// Main HTTP server that listens for incoming connections and processes requests.
-///
-/// The server binds to a TCP address and spawns a new asynchronous task for
-/// each incoming connection. Each connection is processed through a pipeline:
-///
-/// 1. **Accept connection** from `TcpListener`
-/// 2. **Parse HTTP request** from the socket
-/// 3. **Execute guard middleware** for request validation
-/// 4. **Route to handler** based on URL pattern matching
-/// 5. **Send response** back to client
-///
-/// The server uses a channel-based architecture where request parsing and
-/// response writing happen in separate tasks, allowing for pipelining.
-///
-/// # Fields
-///
-/// - `addr`: The socket address the server is bound to
-/// - `handlers`: Shared reference to the routing trie for request handling
-/// - `guards`: Shared reference to the guard trie for request validation
+
 pub struct HttpServer {
     /// Socket address the server is bound to
     addr: SocketAddr,
@@ -72,37 +29,7 @@ pub struct HttpServer {
 }
 
 impl HttpServer {
-    /// Creates a new `HttpServer` instance.
-    ///
-    /// This method resolves the provided address to a [`SocketAddr`] and
-    /// prepares the server with the given handler and guard collections.
-    /// The server is not started until [`start`](HttpServer::start) is called.
-    ///
-    /// # Arguments
-    ///
-    /// * `a` - Address to bind to (any type implementing [`ToSocketAddrs`])
-    /// * `handler` - Handler trie for routing requests to handlers
-    /// * `guards` - Guard trie for request validation middleware
-    ///
-    /// # Returns
-    ///
-    /// A new `HttpServer` instance ready to be started.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the address cannot be resolved to a valid socket address.
-    /// This is appropriate for server startup where a binding failure should
-    /// be fatal.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use http_server::{HttpServer, HandlerTire, GuardTire};
-    ///
-    /// let handlers = HandlerTire::default();
-    /// let guards = GuardTire::default();
-    /// let server = HttpServer::new("127.0.0.1:8080", handlers, guards);
-    /// ```
+
     pub fn new<A: ToSocketAddrs>(a: A, handler: HandlerTire, guards: GuardTire) -> Self {
         Self {
             addr: a.to_socket_addrs().unwrap().next().unwrap(),
@@ -111,38 +38,6 @@ impl HttpServer {
         }
     }
 
-    /// Starts the HTTP server and begins accepting connections.
-    ///
-    /// This method binds to the configured address and enters an infinite loop
-    /// accepting incoming TCP connections. For each connection, it spawns a
-    /// new asynchronous task that processes the request through the full
-    /// HTTP pipeline.
-    ///
-    /// The server runs indefinitely until the process is terminated.
-    ///
-    /// # Returns
-    ///
-    /// This method does not return unless a fatal error occurs during binding.
-    /// In normal operation, it runs forever processing connections.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the server cannot bind to the configured address. This is
-    /// appropriate for server startup where a binding failure should be fatal.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use http_server::{HttpServer, HandlerTire, GuardTire};
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let handlers = HandlerTire::default();
-    ///     let guards = GuardTire::default();
-    ///     let server = HttpServer::new("127.0.0.1:8080", handlers, guards);
-    ///     server.start().await;
-    /// }
-    /// ```
     pub async fn start(self) {
         let server = TcpListener::bind(self.addr).await.unwrap();
         loop {
