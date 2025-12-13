@@ -114,11 +114,11 @@ impl HttpResponse {
         r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
-    pub fn error(err_message:String) -> Self {
+    pub fn error(err_message: String) -> Self {
         let mut r = Self::new();
         r.status_line.status = "500".to_string();
         r.status_line.info = "error!".to_string();
-        let body:Bytes = err_message.into();
+        let body: Bytes = err_message.into();
         r.headers.add("Content-length", body.len().to_string());
         r.set_body(ResponseBody::Simple(body));
         r
@@ -393,7 +393,7 @@ impl HttpResponseModifier for ResponseStatusLine {
     }
 }
 impl<T: HttpResponseModifier + ?Sized> HttpResponseModifier for Vec<Box<T>> {
-    fn modify(&self, res: &mut HttpResponse) -> Result<(),String> {
+    fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
         for m in self {
             m.modify(res)?;
         }
@@ -403,6 +403,7 @@ impl<T: HttpResponseModifier + ?Sized> HttpResponseModifier for Vec<Box<T>> {
 
 #[cfg(test)]
 mod test {
+
     use bytes::{Buf, Bytes};
 
     use crate::response::{HttpResponse, ResponseStatusLine};
@@ -423,4 +424,30 @@ mod test {
         let b = r.line_header_bytes();
         println!("{:?}", b);
     }
+
+    // #[test]
+    // fn fuck() {
+    //     trait FutureT {
+    //         fn future_fn<'a>(&'a self) -> std::pin::Pin<Box<dyn Future<Output = String> + 'a>>;
+    //     }
+    //     let a: Vec<Box<dyn FutureT>> = vec![];
+    //     for a in a{
+    //         a.future_fn();
+    //     }
+    //     struct A {
+    //         name: String,
+    //     }
+    //     impl FutureT for A {
+    //         fn future_fn<'a>(&'a self) -> std::pin::Pin<Box<dyn Future<Output = String> + 'a>> {
+
+    //             Box::pin(async move {
+    //                 let a = &self.name;
+    //                 "a".to_string()
+    //             })
+    //         }
+    //     }
+    //     fn hello() -> impl FutureT {
+    //         A {name:"".to_string()}
+    //     }
+    // }
 }

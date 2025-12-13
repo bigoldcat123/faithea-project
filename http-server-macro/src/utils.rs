@@ -171,7 +171,7 @@ pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
 
     let handler_fn = handler_fn(&mut f, name.as_str());
     let handler_modifier_fn = handler_modifier_fn(handler_fn, route, method, name.as_str());
-    println!("{}",handler_modifier_fn);
+    // println!("{}",handler_modifier_fn);
     quote! {
         #handler_modifier_fn
     }

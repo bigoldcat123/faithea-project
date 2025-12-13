@@ -198,7 +198,7 @@ async fn handle_request(
     if let Some((_matched_url, handler)) =
         handlers.get_handler(&req.req_line.url, &req.req_line.method)
     {
-        req.assamble_pathparam(
+        req.process_routes(
             &_matched_url,
             &Route::from(req.req_line.url.as_str()),
         );

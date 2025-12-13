@@ -1,4 +1,6 @@
 
+use std::path::PathBuf;
+
 use http_server::request::ConvertFromRefString;
 use serde::{Deserialize, Serialize};
 
@@ -33,4 +35,19 @@ fn t3() {
     }
     let p = &"2".to_string();
     a(p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap());
+}
+
+
+
+#[test]
+fn path() {
+    let mut a  = PathBuf::from("/Users/dadigua/Desktop/graduation/http-server/src/data/inbound.rs");
+    a.push("/hello");
+    println!("{:?}",a);
+    let a = vec!["a","b","c"];
+    let a =a.join("/");
+    println!("{}",a);
+
+
+
 }

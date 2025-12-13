@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use bytes::Bytes;
 use serde::Serialize;
 
@@ -28,6 +30,15 @@ impl HttpResponseModifier for &str {
         Ok(())
     }
 }
+
+pub struct  StaticFile<'a>(pub  &'a Path);
+
+// impl <'a> HttpResponseModifier for StaticFile<'a> {
+//     fn modify(&self, res: &mut crate::response::HttpResponse) -> Result<(), String> {
+//         File::open(self.0).await.map_err(map_str!())?;
+//     }
+// }
+
 
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = String;

@@ -257,7 +257,7 @@ impl From<&str> for RouteComponent {
 /// assert_eq!(route.r.len(), 3);
 /// assert!(matches!(&route.r[0], RouteComponent::Exact(ref s) if s == "api"));
 /// ```
-#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq,Default)]
 pub struct Route {
     /// The sequence of route components that make up this route pattern.
     pub r: Vec<RouteComponent>,
@@ -280,36 +280,10 @@ impl From<&str> for Route {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Tests the parsing of complex route patterns with mixed component types.
-    ///
-    /// This test verifies that the [`TryFrom<&str>`] implementation for [`Route`]
-    /// correctly parses strings containing a mixture of exact segments, wildcards,
-    /// and path parameters. It ensures that the normalization and component
-    /// conversion logic works properly for realistic route patterns.
-    ///
-    /// # Test Case
-    ///
-    /// The test uses the pattern `/hello/abc/*/{efg}/**` which contains:
-    /// - Exact segments: `"hello"`, `"abc"`
-    /// - Single-segment wildcard: `*`
-    /// - Path parameter: `{efg}`
-    /// - Multi-segment wildcard: `**`
-    ///
-    /// # Assertions
-    ///
-    /// The test implicitly asserts that:
-    /// 1. Parsing succeeds (no panic or error)
-    /// 2. The resulting [`Route`] contains the expected number of components
-    /// 3. Each segment is converted to the correct [`RouteComponent`] variant
-    ///
-    /// While this test doesn't include explicit assertions, it would fail if:
-    /// - The string cannot be parsed as a route
-    /// - The normalization logic panics
-    /// - Any component conversion fails
     #[test]
     fn create() {
         use super::RouteComponent::*;

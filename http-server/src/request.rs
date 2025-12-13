@@ -29,12 +29,12 @@
 //! # }
 //! ```
 
-use std::{collections::HashMap};
+use std::{collections::HashMap, path::Path};
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
-use crate::{HttpHeader, impl_convert_from_ref_string, map_str, route::Route};
+use crate::{HttpHeader, data::outbound::StaticFile, impl_convert_from_ref_string, map_str, response::HttpResponseModifier, route::{Route, RouteComponent}};
 
 #[derive(Debug)]
 pub struct PathParam {
@@ -97,6 +97,13 @@ pub struct HttpRequest {
     pub(crate) headers: HttpHeader,
     pub(crate) body: Option<Bytes>,
     pub(crate) path_param: Option<PathParam>,
+    pub(crate) multi_seg_param:Option<String>
+}
+
+pub async fn static_map<P:AsRef<Path>>(_req:&HttpRequest,path:P) -> Result<impl HttpResponseModifier,String> {
+    let p = path.as_ref();
+    let _p = StaticFile(p);
+    Err::<&str,String>("()".to_string())
 }
 
 impl HttpRequest {
@@ -133,6 +140,7 @@ impl HttpRequest {
             headers,
             body,
             path_param: None,
+            multi_seg_param:None
         }
     }
     pub fn fake() -> Self {
@@ -141,11 +149,29 @@ impl HttpRequest {
         let body = Some(Bytes::from("request payload"));
         HttpRequest::new(req_line, headers, body)
     }
-    pub(crate) fn assamble_pathparam(&mut self, handler_route: &Route, incoming_route: &Route) {
+    fn assamble_path_param(&mut self, handler_route: &Route, incoming_route: &Route) {
         if let Ok(p) = PathParam::try_from_route(handler_route, incoming_route) {
             self.path_param = Some(p)
         }
     }
+    fn assamble_multi_seg_param(&mut self, handler_route: &Route, incoming_route: &Route) {
+        if handler_route.r.ends_with(&[RouteComponent::MultiSegWildCard]) {
+            let mut s = vec![];
+            for i in 0..incoming_route.r.len() {
+                if i >= handler_route.r.len() {
+                    if let RouteComponent::Exact(ref p) = incoming_route.r[i] {
+                        s.push(p.as_str());
+                    }
+                }
+            }
+            self.multi_seg_param = Some(s.join("/"))
+        }
+    }
+    pub(crate) fn process_routes(&mut self, handler_route: &Route, incoming_route: &Route) {
+        self.assamble_path_param(handler_route, incoming_route);
+        self.assamble_multi_seg_param(handler_route, incoming_route);
+    }
+
     pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
         if let Some(ref p) = self.path_param {
             p.get(key)
