@@ -21,7 +21,9 @@
 -  multipart!!!✅
 -  multipart Option support ✅
 -  merge macro and lib together ✅
-
+-  optimize `ConvertFromRefString`
+-  add cookieModifier
+-  add cookie access to request
 
 # Example
 1. Hello World
@@ -46,6 +48,13 @@ async fn static_file_map() {
     static_map(&_req, "/path/to/directory").await
 }
 ```
+2. return a file 
+```rust
+#[get("/file")]
+async fn file() {
+    StaticFile("/path/to/file")
+}
+```
 3. search_param eg. `/searchParam?name=hello&age=100`
 ```rust
 #[get("/searchParam")]
@@ -68,14 +77,101 @@ async fn path_params(
     res_modifiers!("")
 }
 ```
+5. Json body of request and response
+```rust
+// Serialize for request body
+// Deserialize for response body
+#[derive(Serialize, Deserialize)]
+struct Stu {
+    name: String,
+    age: i32,
+}
+#[post("/json")]
+async fn search_params_and_path_params_and_json(
+    stu: Json<Stu>,
+) {
+    stu
+}
+```
+5. multipart form data
+
+ derive from `MultipartData`
+ 
+> the type of field shoule impl `TryFrom<Part>`
+
+```rust
+#[derive(MultipartData, Debug)]
+struct StuInfo {
+    pub name: String,
+    pub age: i32,
+    pub merried: Option<bool>,
+    pub profile: MultiPartFile,
+}
+
+#[post("/multipart")]
+async fn multipart(data: Multipart<StuInfo>) {
+    let data = data.into_inner();
+    println!(
+        "{:?} {:?} {:?} {:?}",
+        data.age, data.name, data.profile, data.merried
+    );
+    "ok"
+}
+```
+6. add guard 
+guard will execute before the handlers
+
+```rust 
+async fn guard_ok(req:HttpRequest) -> Result<HttpRequest,HttpResponse> {
+  Ok(req)
+}
+async fn guard_err(req:HttpRequest) -> Result<HttpRequest,HttpResponse> {
+  Err(HttpResponse::not_found())
+}
+
+HttpServer::builder()
+    .mount("/", handlers!(hello_world))
+    .guard("/**", async |e:HttpRequest| {
+        println!("new req -> ");
+        Ok(e)
+    })
+    .guard("/a",guard_ok)
+    .guard("/b",guard_err)
+    .build()
+    .start()
+    .await;
+```
 
 
 
 
 # Tips
-make your type **compatible** with searchParam and **pathParam**
+1. make your type **compatible** with searchParam and **pathParam**
 ```rust
 pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
 ```
+2. make your struct **compatible** with returning from handler.
+implememt `HttpResponseModifier` for your struct
+```rust
+pub trait HttpResponseModifier {
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>>;
+}
+impl HttpResponseModifier for MyStruct {
+    fn modify<'a>(
+        &'a self,
+        res: &'a mut HttpResponse,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+        Box::pin(async move {
+            /// your code to modify response
+            Ok(())
+        })
+    }
+}
+```
+
+3. using `modifiers!()` to return multiple modifier

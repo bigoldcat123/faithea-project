@@ -119,12 +119,6 @@ pub trait HttpResponseModifier {
 }
 
 impl HttpResponseModifier for HttpHeader {
-    // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
-    //     for kv in self.headers.iter() {
-    //         res.add_header(kv);
-    //     }
-    //     Ok(())
-    // }
     fn modify<'a>(
         &'a self,
         res: &'a mut HttpResponse,
