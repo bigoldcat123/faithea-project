@@ -1,31 +1,21 @@
 use http_server::{
-    data::{
+    MultipartData, data::{
         Json,
-        inbound::multipart::{MultiPartFile, Multipart},
-    },
-    request::static_map,
-    res_modifiers,
-    server::HttpServer,
-    MultipartData, get, handlers, post
+        inbound::multipart::{MultiPartFile, Multipart}, outbound::StaticFile,
+    }, get, handlers, post, request::static_map, res_modifiers, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
 
 #[post("/modifier/{name}/{age}")]
-async fn m(
+async fn search_params_and_path_params_and_json(
     name: String,
-    stu: Json<Stu>,
     age: usize,
-    #[search_param] _a: usize,
+    stu: Json<Stu>,
+    #[search_param] account: usize,
     #[search_param] new_name: String,
 ) {
-    let r: Json<Stu> = Json(Stu {
-        name: format!(
-            "hello da大地瓜 -> {} my ange is {} --- {} search param is {} and {}",
-            name, age, stu.0.name, _a, new_name
-        ),
-        age: 11,
-    });
-    res_modifiers!(r)
+    println!("name: {}, age:{}, account:{}, new_name:{}",name,age,account,new_name);
+    res_modifiers!(stu)
 }
 #[get("/**")]
 async fn static_file_map() {
@@ -34,8 +24,9 @@ async fn static_file_map() {
 
 #[get("/")]
 async fn get_user() {
-    "new user"
+    StaticFile("/Users/dadigua/Desktop/graduation/app/src/main.rs")
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
     name: String,
@@ -59,12 +50,18 @@ async fn multipart(data: Multipart<StuInfo>) {
     "ok"
 }
 
+#[get("/")]
+async fn hello_world() {
+    "Hello,World"
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount("/user", handlers!(get_user, multipart))
+        // .mount("/user", handlers!(get_user, multipart))
+        .mount("/", handlers!(hello_world))
         .guard("/**", async |e| {
             println!("new req -> ");
             Ok(e)

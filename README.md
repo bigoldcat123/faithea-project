@@ -21,3 +21,61 @@
 -  multipart!!!✅
 -  multipart Option support ✅
 -  merge macro and lib together ✅
+
+
+# Example
+1. Hello World
+```rust
+#[get("/")]
+async fn hello_world() {
+    "Hello,World"
+}
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    HttpServer::builder()
+        .mount("/", handlers!(hello_world))
+        .build()
+        .start()
+        .await;
+}
+```
+2. static file mapping
+```rust
+#[get("/**")]
+async fn static_file_map() {
+    static_map(&_req, "/path/to/directory").await
+}
+```
+3. search_param eg. `/searchParam?name=hello&age=100`
+```rust
+#[get("/searchParam")]
+async fn search_param(
+    #[search_param] name: usize,
+    #[search_param] age: String,
+) {
+    println!("name: {}, age:{}, }",name,age,);
+    "good"
+}
+```
+4. path_param
+```rust
+#[get("/pathParam/{name}/{age}")]
+async fn path_params(
+    name: String,
+    age: usize,
+) {
+    println!("name: {}, age:{}",name,age);
+    res_modifiers!("")
+}
+```
+
+
+
+
+# Tips
+make your type **compatible** with searchParam and **pathParam**
+```rust
+pub trait ConvertFromRefString<'a, O> {
+    fn convert(self) -> Result<O, String>;
+}
+```

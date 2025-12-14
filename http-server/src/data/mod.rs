@@ -1,12 +1,26 @@
 
 
-use serde::Serialize;
+use bytes::Buf;
+use serde::{Deserialize, Serialize};
+
+use crate::{map_str, request::HttpRequest};
 
 pub mod inbound;
 pub mod outbound;
 
 #[derive(Serialize, Debug)]
 pub struct Json<T>(pub T);
+
+impl <'a,T:Deserialize<'a>> TryFrom<&'a  HttpRequest> for Json<T> {
+    type Error = String;
+    fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
+        if let Some(body) = value.body.as_ref() {
+            Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(map_str!())?))
+        }else {
+            Err("Json parsing error!".to_string())
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

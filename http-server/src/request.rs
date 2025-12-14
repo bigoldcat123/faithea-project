@@ -265,6 +265,8 @@ fn check_header(c: &[u8]) -> (bool, usize) {
 pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
+
+
 impl_convert_from_ref_string!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
