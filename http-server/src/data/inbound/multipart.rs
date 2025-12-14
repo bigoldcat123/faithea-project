@@ -50,38 +50,38 @@ macro_rules! impl_try_from_part_for_parse_from_str {
 impl_try_from_part_for_parse_from_str!(i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool,String);
 
 
-pub trait MultipartData:Sized {
+pub trait TryFromMultipartDataMap:Sized {
     fn try_from(data:&mut HashMap<String,Part>) -> Result<Self,String>;
 }
 
 #[derive(Debug)]
-pub struct Multipart<T:MultipartData>(T);
+pub struct Multipart<T:TryFromMultipartDataMap>(T);
 
-impl<T: MultipartData> Multipart<T> {
+impl<T: TryFromMultipartDataMap> Multipart<T> {
     pub fn into_inner(self) -> T {
         self.0
     }
 }
 
-impl <T:MultipartData> Deref for Multipart<T> {
+impl <T:TryFromMultipartDataMap> Deref for Multipart<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl <T:MultipartData> DerefMut for Multipart<T> {
+impl <T:TryFromMultipartDataMap> DerefMut for Multipart<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T:MultipartData> TryFrom<&HttpRequest> for Multipart<T> {
+impl<T:TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     type Error = String;
     fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
         match (&req.body, get_multipart_boundary(req)) {
             (Some(body), Some(boundary)) => {
                 let mut data = HashMap::new();
-                handler(&body[boundary.len() + 2..], boundary.as_bytes(),&mut data);
+                parse_multipart_to_map(&body[boundary.len() + 2..], boundary.as_bytes(),&mut data);
                 return Ok(Multipart(T::try_from(&mut data)?));
             }
             _ => return Err("no boundary".into()),
@@ -89,7 +89,7 @@ impl<T:MultipartData> TryFrom<&HttpRequest> for Multipart<T> {
     }
 }
 
-fn handler(b: &[u8], boundary: &[u8],data:&mut HashMap<String,Part>) {
+fn parse_multipart_to_map(b: &[u8], boundary: &[u8],data:&mut HashMap<String,Part>) {
     let mut r = 0;
     let mut l = 0;
     while r < b.len() {

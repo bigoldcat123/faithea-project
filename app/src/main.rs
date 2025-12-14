@@ -1,13 +1,13 @@
 use http_server::{
     data::{
         Json,
-        inbound::multipart::{MultiPartFile, Multipart, MultipartData},
+        inbound::multipart::{MultiPartFile, Multipart},
     },
     request::static_map,
     res_modifiers,
     server::HttpServer,
+    MultipartData, get, handlers, post
 };
-use http_server_macro::{MultipartData, get, handlers, post};
 use serde::{Deserialize, Serialize};
 
 #[post("/modifier/{name}/{age}")]

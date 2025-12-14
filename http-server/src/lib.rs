@@ -34,6 +34,9 @@ pub mod response;
 pub mod route;
 pub mod server;
 
+pub use http_server_macro::*;
+
+
 #[macro_export]
 macro_rules! map_str {
     () => {

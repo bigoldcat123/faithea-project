@@ -62,7 +62,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
     });
 
     Ok(quote! {
-        impl MultipartData for #struct_name {
+        impl http_server::data::inbound::multipart::TryFromMultipartDataMap for #struct_name {
             fn try_from(
                 data: &mut std::collections::HashMap<
                     String,
