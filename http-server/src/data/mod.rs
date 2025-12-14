@@ -1,4 +1,4 @@
-use std::sync::Arc;
+
 
 use serde::Serialize;
 
@@ -7,12 +7,6 @@ pub mod outbound;
 
 #[derive(Serialize, Debug)]
 pub struct Json<T>(pub T);
-
-
-
-
-pub type Shared<T> = Arc<T>;
-
 
 #[cfg(test)]
 mod tests {

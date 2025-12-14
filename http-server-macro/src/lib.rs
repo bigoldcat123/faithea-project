@@ -1,9 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ Ident,  ItemFn, LitStr, parse_macro_input, punctuated::Punctuated,Token};
-use crate::utils::expand_macro ;
+use syn::{ DeriveInput, Ident, ItemFn, LitStr, Token, parse_macro_input, punctuated::Punctuated};
+use crate::{derive_macro::expand_multipart, utils::expand_macro} ;
 mod utils;
-
+mod derive_macro;
 macro_rules! macro_define {
     ( $($method:ident),* ) => {
         $(
@@ -44,8 +44,15 @@ pub fn handlers(input: TokenStream) -> TokenStream {
 
     output.into()
 }
+#[proc_macro_derive(MultipartData)]
+pub fn derive_multipart_data(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
 
-
+    match expand_multipart(&input) {
+        Ok(ts) => ts,
+        Err(e) => e.to_compile_error().into(),
+    }
+}
 // #[proc_macro_attribute]
 // pub fn get(_attr: TokenStream,input:TokenStream) -> TokenStream {
 //     let f = parse_macro_input!(input as ItemFn);

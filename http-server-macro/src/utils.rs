@@ -12,7 +12,7 @@ pub fn add_return_type(f: &mut ItemFn) {
 }
 pub enum FromHttpRequest {
     PathParam(LitStr),
-    _SearchParam(LitStr),
+    SearchParam(LitStr),
     _Shared(LitStr),
     Body,
 }
@@ -35,7 +35,7 @@ impl FromHttpRequest {
                     _req.get_shared(#name).ok_or("err".to_string())?.clone(),
                 }
             }
-            _SearchParam(name) => {
+            SearchParam(name) => {
                 quote! {
                     _req.get_search_param(#name).ok_or(format!("no such searchParam named <{}>",#name))?.convert()?,
                 }
@@ -54,11 +54,12 @@ fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
         let outer = outer_type_name(ty);
         Some(
             match outer.as_deref() {
-                Some("Json") => FromHttpRequest::Body,
-                Some("Shared") => FromHttpRequest::_Shared(name),
+                Some("Json")        => FromHttpRequest::Body,
+                Some("Multipart")   => FromHttpRequest::Body,
+                Some("Shared")      => FromHttpRequest::_Shared(name),
                 _ => {
                     if is_search_param {
-                        FromHttpRequest::_SearchParam(name)
+                        FromHttpRequest::SearchParam(name)
                     }else {
                         FromHttpRequest::PathParam(name)
                     }
@@ -159,7 +160,6 @@ pub fn handler_modifier_fn(
             if r.ends_with("/") {
                 r.pop();
             }
-            println!("-> {:?}",r);
             h.#method_name(r, #handler_fn_name);
         }
     }

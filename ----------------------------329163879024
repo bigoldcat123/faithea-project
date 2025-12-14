@@ -1,0 +1,27 @@
+----------------------------329163879024766329810604\r\n
+Content-Disposition: form-data; name=\"the_file\"; filename=\"a.txt\"\r\n
+Content-Type: text/plain\r\n
+\r\n
+hello\n
+\r\n
+----------------------------329163879024766329810604\r\n
+Content-Disposition: form-data; name=\"the_number\"\r\n
+\r\n
+12
+\r\n
+----------------------------329163879024766329810604\r\n
+Content-Disposition: form-data; name=\"the_bool\"\r\n
+\r\n
+true
+\r\n
+----------------------------329163879024766329810604\r\n
+Content-Disposition: form-data; name=\"the_string\"\r\n
+\r\n
+asdsa
+\r\n
+----------------------------329163879024766329810604\r\n
+Content-Disposition: form-data; name=\"the_arr\"\r\n
+\r\n
+12m,231,12,3
+\r\n
+----------------------------329163879024766329810604--\r\n

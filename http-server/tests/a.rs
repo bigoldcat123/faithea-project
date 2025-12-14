@@ -25,6 +25,7 @@ fn t2() {
     println!("{}",s);
     let a = serde_json::from_str::<Person>(s.as_str());
     println!("{:?}",a);
+
 }
 
 

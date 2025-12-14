@@ -1,9 +1,14 @@
-use app::{Stu, hello_world_v2, m2, test_pathparam};
 use http_server::{
-    data::Json, request::static_map, res_modifiers,
+    data::{
+        Json,
+        inbound::multipart::{MultiPartFile, Multipart, MultipartData},
+    },
+    request::static_map,
+    res_modifiers,
     server::HttpServer,
 };
-use http_server_macro::{get, handlers, post};
+use http_server_macro::{MultipartData, get, handlers, post};
+use serde::{Deserialize, Serialize};
 
 #[post("/modifier/{name}/{age}")]
 async fn m(
@@ -18,6 +23,7 @@ async fn m(
             "hello da大地瓜 -> {} my ange is {} --- {} search param is {} and {}",
             name, age, stu.0.name, _a, new_name
         ),
+        age: 11,
     });
     res_modifiers!(r)
 }
@@ -30,17 +36,35 @@ async fn static_file_map() {
 async fn get_user() {
     "new user"
 }
+#[derive(Debug, Serialize, Deserialize)]
+struct Stu {
+    name: String,
+    age: i32,
+}
+#[derive(MultipartData, Debug)]
+struct StuInfo {
+    pub name: String,
+    pub age: i32,
+    pub merried: Option<bool>,
+    pub profile: MultiPartFile,
+}
+
+#[post("/multipart")]
+async fn multipart(data: Multipart<StuInfo>) {
+    let data = data.into_inner();
+    println!(
+        "{:?} {:?} {:?} {:?}",
+        data.age, data.name, data.profile, data.merried
+    );
+    "ok"
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount(
-            "/",
-            handlers!(m, m2, hello_world_v2, test_pathparam, static_file_map),
-        )
-        .mount("/user", handlers!(get_user))
+        .mount("/user", handlers!(get_user, multipart))
         .guard("/**", async |e| {
             println!("new req -> ");
             Ok(e)
