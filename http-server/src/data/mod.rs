@@ -65,7 +65,7 @@ mod tests {
         let mut res = HttpResponse::new();
 
         let mut header = HttpHeader::new();
-        header.add("wo", "cao");
+        header.add("wo".into(), "cao".into());
         let res_line = ResponseStatusLine::new("a", "b", "c");
         let j = Json(Stu {
             name: "hello".to_string(),

@@ -8,7 +8,8 @@ use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 use crate::{
     HttpHeader,
     data::outbound::StaticFile,
-    impl_convert_from_ref_string, map_str,
+    // impl_convert_from_ref_string,
+    map_str,
     request::{cookie::Cookie, path_param::PathParam, search_param::SearchParam},
     res_modifiers,
     response::HttpResponseModifier,
@@ -286,9 +287,9 @@ pub trait TryConvertFrom<T>: Sized {
 impl_convert_from_ref_string2!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
-impl_convert_from_ref_string!(
-    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
-);
+// impl_convert_from_ref_string!(
+//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+// );
 impl_convert_from_option_ref_string!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );

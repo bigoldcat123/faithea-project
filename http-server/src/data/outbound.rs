@@ -16,10 +16,10 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
             use ResponseBody::*;
-            res.add_header(("content-type", "application/json"));
+            res.add_header(("content-type".to_string(), "application/json".to_string()));
             let body = self.try_into()?;
             if let Simple(ref b) = body {
-                res.add_header(("content-length", b.len().to_string().as_str()));
+                res.add_header(("content-length".to_string(), b.len().to_string()));
             }
             res.body = body;
             Ok(())
@@ -32,8 +32,8 @@ impl HttpResponseModifier for &str {
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            res.add_header(("content-type", "text/plain"));
-            res.add_header(("content-length", self.as_bytes().len().to_string().as_str()));
+            res.add_header(("content-type".to_string(), "text/plain".to_string()));
+            res.add_header(("content-length".to_string(), self.as_bytes().len().to_string()));
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
             res.set_body(ResponseBody::Simple(b));
             Ok(())
@@ -46,8 +46,8 @@ impl HttpResponseModifier for String {
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            res.add_header(("content-type", "text/plain"));
-            res.add_header(("content-length", self.as_bytes().len().to_string().as_str()));
+            res.add_header(("content-type".to_string(), "text/plain".to_string()));
+            res.add_header(("content-length".to_string(), self.as_bytes().len().to_string()));
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
             res.set_body(ResponseBody::Simple(b));
             Ok(())
@@ -71,8 +71,8 @@ impl <T:AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
             }
 
             let len = meta.len();
-            res.add_header(("content-length", len.to_string().as_str()));
-            res.add_header(("content-type", mime_type(self.0.as_ref())));
+            res.add_header(("content-length".to_string(), len.to_string()));
+            res.add_header(("content-type".to_string(), mime_type(self.0.as_ref()).to_string()));
             res.set_body(ResponseBody::File(f));
             Ok(())
         })

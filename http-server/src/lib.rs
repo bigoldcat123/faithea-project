@@ -49,19 +49,19 @@ macro_rules! map_str {
 //     }
 // }
 
-#[deprecated]
-#[macro_export]
-macro_rules! impl_convert_from_ref_string {
-    ($($t:ty),*) => {
-        $(
-            impl <'a> $crate::request::ConvertFromRefString<'a,$t> for  &String {
-                fn convert(self) -> Result<$t,String> {
-                    self.parse::<$t>().map_err(|_|format!("can not convert {} to {}",self,stringify!($t)))
-                }
-            }
-        )*
-    };
-}
+// #[deprecated]
+// #[macro_export]
+// macro_rules! impl_convert_from_ref_string {
+//     ($($t:ty),*) => {
+//         $(
+//             impl <'a> $crate::request::ConvertFromRefString<'a,$t> for  &String {
+//                 fn convert(self) -> Result<$t,String> {
+//                     self.parse::<$t>().map_err(|_|format!("can not convert {} to {}",self,stringify!($t)))
+//                 }
+//             }
+//         )*
+//     };
+// }
 
 
 
@@ -96,9 +96,9 @@ impl HttpHeader {
     }
 
 
-    pub fn add<K: AsRef<str>,V:AsRef<str>>(&mut self, key: K, value: V) {
+    pub fn add(&mut self, key: String, value: String) {
         self.headers
-            .insert(key.as_ref().to_string(), value.as_ref().to_string());
+            .insert(key, value);
     }
 }
 
@@ -137,10 +137,10 @@ mod test {
     fn into_bytes_test() {
         let mut header = HttpHeader::new();
         // some real HTTP headers
-        header.add("Host", "example.com");
-        header.add("User-Agent", "rust-test/0.1");
-        header.add("Accept", "*/*");
-        header.add("Connection", "close");
+        header.add("Host".to_string(), "example.com".to_string());
+        header.add("User-Agent".to_string(), "rust-test/0.1".to_string());
+        header.add("Accept".to_string(), "*/*".to_string());
+        header.add("Connection".to_string(), "close".to_string());
 
         let bytes: Bytes = (&header).into();
         let s = std::str::from_utf8(bytes.chunk()).unwrap();

@@ -1,3 +1,4 @@
+pub mod cookie;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::{fs::File, io::AsyncWriteExt, net::tcp::OwnedWriteHalf};
@@ -24,7 +25,7 @@ impl HttpResponse {
         let mut r = Self::new();
         r.status_line.status = "404".to_string();
         r.status_line.info = "Not Found".to_string();
-        r.headers.add("Content-length", "9");
+        r.headers.add("Content-length".to_string(), "9".to_string());
         r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
@@ -33,7 +34,7 @@ impl HttpResponse {
         r.status_line.status = "500".to_string();
         r.status_line.info = "error!".to_string();
         let body: Bytes = err_message.into();
-        r.headers.add("Content-length", body.len().to_string());
+        r.headers.add("Content-length".to_string(), body.len().to_string());
         r.set_body(ResponseBody::Simple(body));
         r
     }
@@ -41,7 +42,7 @@ impl HttpResponse {
         self.body = body
     }
 
-    pub fn add_header<S: AsRef<str>>(&mut self, header_k_v: (S, S)) {
+    pub fn add_header(&mut self, header_k_v: (String, String)) {
         self.headers.add(header_k_v.0, header_k_v.1);
     }
 
@@ -126,6 +127,7 @@ impl HttpResponseModifier for HttpHeader {
         Box::pin(async move {
             for kv in self.headers.iter() {
                 res.add_header(kv);
+
             }
             Ok(())
         })
@@ -188,7 +190,7 @@ mod test {
     #[test]
     fn line_header_test() {
         let mut r = HttpResponse::new();
-        r.add_header(("Hello", "World"));
+        r.add_header(("Hello".to_string(), "World".to_string()));
         let b = r.line_header_bytes();
         println!("{:?}", b);
     }
