@@ -76,7 +76,7 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
     }
 }
 
-impl<T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
+impl<'a,T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     type Error = String;
     fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
         match (&req.body, get_multipart_boundary(req)) {

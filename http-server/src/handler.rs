@@ -23,13 +23,13 @@ impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
     /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
     ///
-    pub fn mount(&mut self,pre_fix:&'static str,modifiers:Vec<Box<dyn Fn(&mut Self,&str)>>) {
+    pub fn mount(&mut self,pre_fix:&'static str,handlers:Vec<Box<dyn Fn(&mut Self,&str)>>) {
         let pre_fix = if pre_fix.ends_with("/") {
             &pre_fix[..pre_fix.len() - 1]
         }else {
             pre_fix
         };
-        for m in modifiers {
+        for m in handlers {
             m(self,pre_fix);
         }
     }

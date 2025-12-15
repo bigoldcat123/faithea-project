@@ -1,6 +1,6 @@
-
-
-use std::{collections::HashMap};
+pub mod cookie;
+pub mod path_param;
+pub mod search_param;
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
@@ -8,68 +8,22 @@ use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 use crate::{
     HttpHeader,
     data::outbound::StaticFile,
-    impl_convert_from_ref_string, map_str, res_modifiers,
+    impl_convert_from_ref_string, map_str,
+    request::{cookie::Cookie, path_param::PathParam, search_param::SearchParam},
+    res_modifiers,
     response::HttpResponseModifier,
     route::{Route, RouteComponent},
 };
-
-#[derive(Debug, Default)]
-pub(crate) struct SearchParam {
-    _inner: HashMap<String, String>,
-}
-
-impl SearchParam {
-    fn from_url(url: &str) -> Self {
-        let mut map = HashMap::new();
-        if let Some((_, search_params)) = url.split_once("?") {
-            for (k, v) in search_params.split("&").filter_map(|x| x.split_once("=")) {
-                if let Ok(ok) = urlencoding::decode(v) {
-                    map.insert(k.into(), ok.to_string());
-                }
-            }
-        }
-        Self { _inner: map }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct PathParam {
-    _inner: HashMap<String, String>,
-}
-impl PathParam {
-    pub fn get<S: AsRef<str>>(&self, key: S) -> Option<&String> {
-        self._inner.get(key.as_ref())
-    }
-    pub fn try_from_route(handler_route: &Route, incoming_route: &Route) -> Result<Self, String> {
-        use crate::route::RouteComponent::*;
-        let mut _inner = HashMap::new();
-        if handler_route.r.len() != incoming_route.r.len() {
-            return Err("route len not match!".to_string());
-        }
-        for cmp in handler_route.r.iter().zip(incoming_route.r.iter()) {
-            match cmp {
-                (PathParam(p), Exact(v)) => {
-                    _inner.insert(p.to_string(), v.to_string());
-                }
-                _ => {}
-            }
-        }
-        if _inner.is_empty() {
-            Err("no path params".to_string())
-        } else {
-            Ok(Self { _inner })
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct HttpRequest {
     pub(crate) req_line: HttpReqLine,
     pub(crate) headers: HttpHeader,
-    pub(crate) body: Option<Bytes>,
+    pub(crate) body: Option<Bytes>, // way too big!!!!!!!!!!!!
     pub(crate) path_param: Option<PathParam>,
     pub(crate) search_param: Option<SearchParam>,
     pub(crate) multi_seg_param: Option<String>,
+    // pub(crate) cookie:Option<Cookie<'a>>
 }
 
 pub async fn static_map<P: AsRef<str>>(
@@ -85,7 +39,6 @@ pub async fn static_map<P: AsRef<str>>(
 }
 
 impl HttpRequest {
-
     pub fn new(req_line: HttpReqLine, headers: HttpHeader, body: Option<Bytes>) -> Self {
         Self {
             req_line,
@@ -94,6 +47,15 @@ impl HttpRequest {
             path_param: None,
             multi_seg_param: None,
             search_param: None,
+            // cookie:None
+        }
+    }
+    //#[allow(unused)]
+    pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
+        if let Some(cookie) = self.headers.get("cookie") {
+            Some(Cookie::from_cookie_header(cookie))
+        }else {
+            None
         }
     }
     pub fn fake() -> Self {
@@ -143,7 +105,7 @@ impl HttpRequest {
     pub fn get_search_param<S: AsRef<str>>(&self, _key: S) -> Option<&String> {
         if let Some(s) = self.search_param.as_ref() {
             s._inner.get(_key.as_ref())
-        }else {
+        } else {
             None
         }
     }
@@ -157,7 +119,6 @@ pub struct HttpReqLine {
 }
 
 impl HttpReqLine {
-
     pub fn parse(s: &str) -> Result<Self, String> {
         let mut head_line = s.split_whitespace();
         let method = head_line
@@ -266,14 +227,21 @@ pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
 
-
 impl_convert_from_ref_string!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
 
+
 impl<'a, T> ConvertFromRefString<'a, T> for T {
     fn convert(self) -> Result<T, String> {
         Ok(self)
+    }
+}
+
+
+impl <'a> ConvertFromRefString<'a,Option<&'a str>> for &'a String{
+    fn convert(self) -> Result<Option<&'a str>, String> {
+        Ok(Some(self.as_str()))
     }
 }
 
@@ -290,94 +258,6 @@ impl<'a> ConvertFromRefString<'a, String> for &'a String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn path_single_param_parsing_test() {
-        let handler_route = Route::from("/hello/{name}");
-        let incoming_route = Route::from("/hello/chenzhonghai");
-        let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
-        let a = p.get("name").unwrap();
-        assert_eq!(a, "chenzhonghai")
-    }
-    #[test]
-    fn path_multi_param_parsing_test() {
-        let handler_route = Route::from("/hello/{name}/{age}/dadigua");
-        let incoming_route = Route::from("/hello/chenzhonghai/22/dadigua");
-        let p = PathParam::try_from_route(&handler_route, &incoming_route).unwrap();
-        let a = p.get("name").unwrap();
-        let age = p.get("age").unwrap();
-        assert_eq!(a, "chenzhonghai");
-        assert_eq!(age, "22");
-    }
-
-    #[test]
-    fn search_param_test() {
-        let url = "";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner.is_empty(), true)
-    }
-    #[test]
-    fn search_param_test2() {
-        let url = "https://www.bilibili.com/?a=a=10&c=200";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, HashMap::from([
-            ("a".into(), "a=10".into()),
-            ("c".into(), "200".into())
-        ]))
-    }
-    /// 快速构造 HashMap 的宏，减少视觉噪音
-    macro_rules! map {
-        ($( $k:expr => $v:expr ),* $(,)?) => {
-            HashMap::from([
-                $( ($k.into(), $v.into()) ),*
-            ])
-        };
-    }
-
-    #[test]
-    fn basic_kv() {
-        let url = "https://example.com/?name=kimi&age=18";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! { "name" => "kimi", "age" => "18" });
-    }
-
-    #[test]
-    fn empty_value() {
-        let url = "https://example.com/?key=";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! { "key" => "" });
-    }
-
-    #[test]
-    fn empty_key() {
-        let url = "https://example.com/?=value";
-        let s = SearchParam::from_url(url);
-        // 空字符串当 key 也是合法实现，这里按「空 key」处理
-        assert_eq!(s._inner, map! { "" => "value" });
-    }
-
-    #[test]
-    fn duplicate_keys_keep_last() {
-        let url = "https://example.com/?a=1&b=2&a=3";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! { "a" => "3", "b" => "2" });
-    }
-
-    #[test]
-    fn no_query_string() {
-        let url = "https://example.com/path";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! {});
-    }
-
-    #[test]
-    fn question_mark_only() {
-        let url = "https://example.com/?";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! {});
-    }
-
     // #[test]
     // fn url_encoded_special_chars() {
     //     // key 里带 = & 空格，value 里带 & =
@@ -392,22 +272,6 @@ mod tests {
     //     let s = SearchParam::from_url(url);
     //     assert_eq!(s._inner, map! { "a" => "1", "b" => "2" });
     // }
-
-    #[test]
-    fn spaces_around_query() {
-        let url = " https://example.com/?  x=1  & y = 2  ";
-        let s = SearchParam::from_url(url);
-        // 空格保留在 value 里，取决于你的 trim 策略，这里假设不自动 trim
-        assert_eq!(s._inner, map! { "  x" => "1  ", " y " => " 2  " });
-    }
-
-    #[test]
-    fn given_weird_case() {
-        // 题目自带的用例
-        let url = "https://www.bilibili.com/?a=a=10&c=200 ";
-        let s = SearchParam::from_url(url);
-        assert_eq!(s._inner, map! { "a" => "a=10", "c" => "200 " });
-    }
 
     // #[test]
     // fn plus_sign() {

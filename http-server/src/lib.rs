@@ -84,8 +84,7 @@ impl HttpHeader {
         let v = k_v
             .next()
             .ok_or("no value".to_string())?
-            .trim()
-            .to_lowercase();
+            .trim().to_string();
         self.headers.insert(k, v);
         Ok(())
     }

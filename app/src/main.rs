@@ -1,36 +1,29 @@
+#![allow(dead_code,unused)]
 use http_server::{
-    MultipartData, data::{
+    MultipartData,
+    data::{
         Json,
-        inbound::multipart::{MultiPartFile, Multipart}, outbound::StaticFile,
-    }, get, handlers, post, request::static_map, res_modifiers, server::HttpServer
+        inbound::{FromRequest, multipart::{MultiPartFile, Multipart}},
+        outbound::StaticFile,
+    },
+    get, handlers, post,
+    request::{ConvertFromRefString, HttpRequest, static_map},
+    res_modifiers,
+    server::HttpServer,
 };
 use serde::{Deserialize, Serialize};
-
-#[post("/modifier/{name}/{age}")]
-async fn search_params_and_path_params_and_json(
-    name: String,
-    age: usize,
-    stu: Json<Stu>,
-    #[search_param] account: usize,
-    #[search_param] new_name: String,
-) {
-    println!("name: {}, age:{}, account:{}, new_name:{}",name,age,account,new_name);
-    res_modifiers!(stu)
-}
-#[get("/**")]
-async fn static_file_map() {
-    static_map(&_req, "/Users/dadigua/Desktop/graduation/front-end-app").await
-}
-
-#[get("/")]
-async fn get_user() {
-    StaticFile("/Users/dadigua/Desktop/graduation/app/src/main.rs")
-}
+use tokio::{fs, io::AsyncWriteExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
     name: String,
     age: i32,
+}
+impl TryFrom<&HttpRequest> for Stu {
+    type Error = String;
+    fn try_from(value: &HttpRequest) -> Result<Self, Self::Error> {
+        Ok(Stu { name: "from req".into(), age: 111 })
+    }
 }
 #[derive(MultipartData, Debug)]
 struct StuInfo {
@@ -42,11 +35,8 @@ struct StuInfo {
 
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
-    let data = data.into_inner();
-    println!(
-        "{:?} {:?} {:?} {:?}",
-        data.age, data.name, data.profile, data.merried
-    );
+    let mut data = data.into_inner();
+    let a:Result<i32, std::io::Error> = Ok(100);
     "ok"
 }
 
@@ -54,14 +44,17 @@ async fn multipart(data: Multipart<StuInfo>) {
 async fn hello_world() {
     "Hello,World"
 }
-
-#[tokio::main(flavor = "current_thread")]
+#[get("cookie")]
+async fn cookie() {
+    println!("{:?}",_req.cookies());
+    ""
+}
+#[tokio::main]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        // .mount("/user", handlers!(get_user, multipart))
-        .mount("/", handlers!(hello_world))
+        .mount("/", handlers!(cookie, multipart))
         .guard("/**", async |e| {
             println!("new req -> ");
             Ok(e)

@@ -1,3 +1,32 @@
 pub mod multipart;
-use std::{sync::Arc};
+use std::{ops::{Deref, DerefMut}, sync::Arc};
+
+use crate::{request::HttpRequest};
 pub type Shared<T> = Arc<T>;
+
+
+pub struct FromRequest<T>(T);
+
+impl <T> FromRequest<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+impl <T> Deref for FromRequest<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl <T> DerefMut for FromRequest<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl <'a,T:TryFrom::<&'a HttpRequest> + 'a> TryFrom<&'a HttpRequest> for FromRequest<T> {
+    type Error = String;
+    fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
+        let a:T = value.try_into().map_err(|_| "can not covert httpReques  to T".to_string())?;
+        Ok(Self(a))
+    }
+}

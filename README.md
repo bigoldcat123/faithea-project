@@ -21,10 +21,15 @@
 -  multipart!!!✅
 -  multipart Option support ✅
 -  merge macro and lib together ✅
--  optimize `ConvertFromRefString`
 -  add cookieModifier
--  add cookie access to request
-
+-  add cookie access to request ✅
+-  add new struct `FromRequest`, anything but searchParam,pathParams,json, and multiPart showing in the args of a handler, can be parsed from request ✅
+-  refactor multipart file.. save every part as file, and only keep the path to that file, when access the field, just read the file again and process parsing.
+    1. using fixed buff to parse the html body.
+    2. save every part to file,and keep the file name.
+    3. when access using path to access it! 
+    > things to change `TryFromMultipartDataMap` `Part`
+-  support `Result` and `Option` in handler args
 # Example
 1. Hello World
 ```rust
@@ -151,6 +156,11 @@ HttpServer::builder()
 pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
+impl <'a> ConvertFromRefString<'a,Stu> for &'a String {
+    fn convert(self) -> Result<Stu, String> {
+        Ok(Stu { name: "()".into(), age: 12 })
+    }
+}
 ```
 2. make your struct **compatible** with returning from handler.
 implememt `HttpResponseModifier` for your struct
@@ -175,3 +185,5 @@ impl HttpResponseModifier for MyStruct {
 ```
 
 3. using `modifiers!()` to return multiple modifier
+
+4. you can have an access to HttpRequest in any handler through `_req`

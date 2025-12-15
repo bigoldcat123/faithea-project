@@ -49,32 +49,31 @@ pub fn generate_from_httprequest_list(args: &mut Punctuated<FnArg, Comma>) -> Ve
 }
 
 fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
-    if let Some((name, ty,is_search_param)) = extract_ident_and_type(arg) {
+    if let Some((name, ty, is_search_param)) = extract_ident_and_type(arg) {
         // println!("{} {} {}",quote! {#name}.to_string(),quote!{#ty}.to_string(),is_search_param);
         let outer = outer_type_name(ty);
-        Some(
-            match outer.as_deref() {
-                Some("Json")        => FromHttpRequest::Body,
-                Some("Multipart")   => FromHttpRequest::Body,
-                Some("Shared")      => FromHttpRequest::_Shared(name),
-                _ => {
-                    if is_search_param {
-                        FromHttpRequest::SearchParam(name)
-                    }else {
-                        FromHttpRequest::PathParam(name)
-                    }
-                },
+        Some(match outer.as_deref() {
+            Some("FromRequest") => FromHttpRequest::Body,
+            Some("Json") => FromHttpRequest::Body,
+            Some("Multipart") => FromHttpRequest::Body,
+            Some("Shared") => FromHttpRequest::_Shared(name),
+            _ => {
+                if is_search_param {
+                    FromHttpRequest::SearchParam(name)
+                } else {
+                    FromHttpRequest::PathParam(name)
+                }
             }
-        )
-    }else {
+        })
+    } else {
         None
     }
 }
 
 /// 提取参数名 (LitStr) 和 类型 (Type)
-fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type,bool)> {
+fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
     if let FnArg::Typed(t) = arg {
-        let mut is_search_param = false ;
+        let mut is_search_param = false;
         for i in 0..t.attrs.len() {
             let x = &t.attrs[i];
             let a = &x.meta;
@@ -87,9 +86,8 @@ fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type,bool)> {
         }
 
         if let Pat::Ident(PatIdent { ident, .. }) = t.pat.as_ref() {
-
             let name = LitStr::new(&ident.to_string(), ident.span());
-            return Some((name, t.ty.as_ref(),is_search_param));
+            return Some((name, t.ty.as_ref(), is_search_param));
         }
     }
     None
@@ -102,7 +100,6 @@ fn outer_type_name(ty: &Type) -> Option<String> {
         _ => None,
     }
 }
-
 
 fn create_handler_fn_name(sig: &str) -> Ident {
     let new_fn_name = format!("{}_handler", sig);
@@ -137,8 +134,7 @@ fn add_req_param(f: &mut ItemFn) {
         .inputs
         .push(parse_quote!(_req:http_server::request::HttpRequest));
 }
-pub fn handler_fn(f: &mut ItemFn, name: &str,ipt_args:Vec<FromHttpRequest>) -> TokenStream {
-
+pub fn handler_fn(f: &mut ItemFn, name: &str, ipt_args: Vec<FromHttpRequest>) -> TokenStream {
     add_req_param(f);
     conbine_outter_fn(f, ipt_args, name)
 }
@@ -169,7 +165,7 @@ fn modify_fn_name(f: &mut ItemFn, name: &str) {
     let name = format!("{}_origin", name);
     f.sig.ident = Ident::new(&name, Span::call_site());
 }
-fn check(route: &LitStr,args:&Vec<FromHttpRequest>) -> Option<TokenStream> {
+fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
     let mut args: Vec<String> = args
         .into_iter()
         .filter_map(|x| {
@@ -223,7 +219,7 @@ fn check(route: &LitStr,args:&Vec<FromHttpRequest>) -> Option<TokenStream> {
 }
 pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
     let args = generate_from_httprequest_list(&mut f.sig.inputs);
-    if let Some(err) = check(&route,&args) {
+    if let Some(err) = check(&route, &args) {
         return err.into();
     }
 
@@ -231,7 +227,7 @@ pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
     add_return_type(&mut f);
     modify_fn_name(&mut f, name.as_str());
 
-    let handler_fn = handler_fn(&mut f, name.as_str(),args);
+    let handler_fn = handler_fn(&mut f, name.as_str(), args);
     let handler_modifier_fn = handler_modifier_fn(handler_fn, route, method, name.as_str());
     // println!("{}",handler_modifier_fn);
     quote! {
