@@ -2,6 +2,8 @@ pub mod cookie;
 pub mod path_param;
 pub mod search_param;
 
+use std::process::Output;
+
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
@@ -54,7 +56,7 @@ impl HttpRequest {
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
         if let Some(cookie) = self.headers.get("cookie") {
             Some(Cookie::from_cookie_header(cookie))
-        }else {
+        } else {
             None
         }
     }
@@ -227,19 +229,13 @@ pub trait ConvertFromRefString<'a, O> {
     fn convert(self) -> Result<O, String>;
 }
 
-impl_convert_from_ref_string!(
-    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
-);
-
-
 impl<'a, T> ConvertFromRefString<'a, T> for T {
     fn convert(self) -> Result<T, String> {
         Ok(self)
     }
 }
 
-
-impl <'a> ConvertFromRefString<'a,Option<&'a str>> for &'a String{
+impl<'a> ConvertFromRefString<'a, Option<&'a str>> for &'a String {
     fn convert(self) -> Result<Option<&'a str>, String> {
         Ok(Some(self.as_str()))
     }
@@ -256,8 +252,110 @@ impl<'a> ConvertFromRefString<'a, String> for &'a String {
     }
 }
 
+macro_rules! impl_convert_from_ref_string2 {
+    ($($t:ty),*) => {
+        $(
+            impl $crate::request::TryConvertFrom<&String> for  $t {
+                fn try_convert_from(value:&String) -> Result<Self,String> {
+                    value.parse::<$t>().map_err(|_|format!("can not convert String \"{}\" to type {}",value,stringify!($t)))
+                }
+            }
+
+        )*
+    };
+}
+
+pub trait TryConvertFrom<T>: Sized {
+    fn try_convert_from(value: T) -> Result<Self, String>;
+}
+
+impl_convert_from_ref_string2!(
+    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+);
+impl_convert_from_ref_string!(
+    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+);
+impl <T:Sized> TryConvertFrom<T> for T {
+    fn try_convert_from(value: T) -> Result<Self, String> {
+        Ok(value)
+    }
+}
+impl<'a> TryConvertFrom<&'a String> for &'a str {
+    fn try_convert_from(value: &'a String) -> Result<Self, String> {
+        Ok(value.as_str())
+    }
+}
+// impl<'a> TryConvertFrom<&'a String> for &'a String {
+//     fn try_convert_from(value: &'a String) -> Result<Self, String> {
+//         Ok(value)
+//     }
+// }
+impl TryConvertFrom<&String> for String {
+    fn try_convert_from(value: &String) -> Result<Self, String> {
+        Ok(value.to_string())
+    }
+}
+
+impl<'a,O:TryConvertFrom<&'a String>> TryConvertFrom<&'a String> for Option<O> {
+    fn try_convert_from(value: &'a String) -> Result<Self, String> {
+        match O::try_convert_from(value) {
+            Ok(r) => Ok(Some(r)),
+            Err(_) => Ok(None)
+        }
+    }
+}
+
+/// please impl `TryConvertFrom`
+pub trait TryConvertInto<O> {
+    fn try_convert_into(self) -> Result<O, String>;
+}
+
+impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
+    fn try_convert_into(self) -> Result<T, String> {
+        T::try_convert_from(self)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
+    use crate::request::{ConvertFromRefString, TryConvertInto};
+
+
+    #[test]
+    fn number_test() {
+        let s = &"11".to_string();
+        let a:Result<i32, String> = s.try_convert_into();
+        let b :Result<i32, String>= s.convert();
+        assert_eq!(a,b)
+    }
+
+    #[test]
+    fn bool_test() {
+        let s = &"true".to_string();
+        let a:Result<bool, String> = s.try_convert_into();
+        let b :Result<bool, String>= s.convert();
+        assert_eq!(a,b)
+    }
+
+    #[test]
+    fn str_test() {
+        let s = &"true".to_string();
+        let a:Result<String, String> = s.try_convert_into();
+        let b :Result<String, String>= s.convert();
+        assert_eq!(a,b)
+    }
+    #[test]
+    fn option_test() {
+        let s = &"true".to_string();
+        let a:Option<i32> = s.try_convert_into().unwrap();
+        assert_eq!(a,None);
+        fn a2(_:Option<bool>) {
+
+        }
+        a2(s.try_convert_into().unwrap());
+    }
+
     // #[test]
     // fn url_encoded_special_chars() {
     //     // key 里带 = & 空格，value 里带 & =

@@ -7,7 +7,7 @@ use http_server::{
         outbound::StaticFile,
     },
     get, handlers, post,
-    request::{ConvertFromRefString, HttpRequest, static_map},
+    request::{ConvertFromRefString, HttpRequest, TryConvertInto, static_map},
     res_modifiers,
     server::HttpServer,
 };
@@ -51,6 +51,9 @@ async fn cookie() {
 }
 #[tokio::main]
 async fn main() {
+    let a = &"".to_string();
+
+    let b:Option<i32> = a.try_convert_into().unwrap();
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
