@@ -43,24 +43,7 @@ macro_rules! impl_try_from_part_for_parse_from_str {
 impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
-macro_rules! impl_try_from_vec_part_for_parse_from_str {
-    ($($t:ty),*) => {
-        $(
-            impl $crate::TryConvertFrom<Vec<Part>> for $t {
-                fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
-                    if let Some(value) = value.pop() {
-                        value.try_into()
-                    }else {
-                        Err("there is no data in multipart map".to_string())
-                    }
-                }
-            }
-        )*
-    };
-}
-// impl_try_from_vec_part_for_parse_from_str!(
-//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
-// );
+
 impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for T {
     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
         if let Some(value) = value.pop() {

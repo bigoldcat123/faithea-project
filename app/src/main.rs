@@ -1,19 +1,15 @@
-#![allow(dead_code, unused)]
-use std::collections::HashMap;
-
+#![allow(unused)]
 use chenzhonghai_app::json;
 use http_server::{
     MultipartData, data::{
         Json,
         inbound::{
             FromRequest,
-            multipart::{MultiPartFile, Multipart},
+            multipart::{MultiPartFile, Multipart, Part},
         },
-        outbound::StaticFile,
-    }, get, handlers, post, request::{ConvertFromRefString, HttpRequest, search_param, static_map}, res_modifiers, response::HttpResponse, server::HttpServer
+    }, get, handlers, post, request::HttpRequest, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
-use tokio::{fs, io::AsyncWriteExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
@@ -29,9 +25,20 @@ impl TryFrom<&HttpRequest> for Stu {
         })
     }
 }
+#[derive(Debug)]
+struct A{
+
+}
+impl TryFrom<Part> for A {
+    type Error = String;
+    fn try_from(value: Part) -> Result<Self, Self::Error> {
+        Ok(Self{})
+    }
+}
+
 #[derive(MultipartData, Debug)]
 struct StuInfo {
-    pub name: Vec<String>,
+    pub name: Vec<A>,
     pub age: i32,
     pub merried: Option<bool>,
     pub profile: Vec<MultiPartFile>,

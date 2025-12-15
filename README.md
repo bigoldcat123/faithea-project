@@ -217,3 +217,27 @@ impl HttpResponseModifier for MyStruct {
 3. using `modifiers!()` to return multiple modifier
 
 4. you can have an access to HttpRequest in any handler through `_req`
+
+
+5. make your struct be the field in a multipartData
+just impl the std TryFrom<Part> with error = String
+```rust
+#[derive(Debug)]
+struct A{
+
+}
+impl TryFrom<Part> for A {
+    type Error = String;
+    fn try_from(value: Part) -> Result<Self, Self::Error> {
+        Ok(Self{})
+    }
+}
+
+#[derive(MultipartData, Debug)]
+struct StuInfo {
+    pub name: Vec<A>,
+    pub age: i32,
+    pub merried: Option<bool>,
+    pub profile: Vec<MultiPartFile>,
+}
+```
