@@ -44,7 +44,4 @@ fn t3() {
 fn path() {
     let a  = PathBuf::from("/Users/dadigua/Desktop/graduation/http-server/src/data/inbound");
     println!("{:?}",a.extension());
-
-
-
 }

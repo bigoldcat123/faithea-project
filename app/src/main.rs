@@ -1,18 +1,13 @@
 #![allow(dead_code, unused)]
 use http_server::{
-    MultipartData,
-    data::{
+    MultipartData, data::{
         Json,
         inbound::{
             FromRequest,
             multipart::{MultiPartFile, Multipart},
         },
         outbound::StaticFile,
-    },
-    get, handlers, post,
-    request::{ConvertFromRefString, HttpRequest, search_param, static_map},
-    res_modifiers,
-    server::HttpServer,
+    }, get, handlers, post, request::{ConvertFromRefString, HttpRequest, search_param, static_map}, res_modifiers, response::HttpResponse, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
 use tokio::{fs, io::AsyncWriteExt};
@@ -56,26 +51,28 @@ async fn cookie() {
     "good got your cookie"
 }
 #[get("/optional/{age}")]
-async fn optional(#[search_param]name:String,age:String) {
-    println!("{:?}",name);
+async fn optional(#[search_param]name:Option<&String>,age:u16) {
+    println!("{:?} {:?}",name,age);
     "good got your optional"
 }
 
+#[post("/fromRequest")]
+async fn fromRequest(stu:FromRequest<Stu>) {
+    Json(stu.into_inner())
+}
+
+
 #[tokio::main]
 async fn main() {
-    let a = &"".to_string();
-
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount("/", handlers!(cookie, multipart, optional))
-        .guard("/**", async |e| {
-            println!("new req -> ");
-            Ok(e)
+        .mount("/", handlers!(cookie, multipart, optional,fromRequest))
+        .guard("/protected/**", async |req| {
+            Ok(req)
         })
         .guard("/**", async |e| {
-            println!("new req2 -> ");
-            Ok(e)
+            Err(HttpResponse::not_found())
         })
         .build()
         .start()

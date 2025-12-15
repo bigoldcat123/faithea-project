@@ -30,7 +30,12 @@
     2. save every part to file,and keep the file name.
     3. when access using path to access it! 
     > things to change `TryFromMultipartDataMap` `Part`
--  support `Result` and `Option` of searchParam in handler args
+
+-  support `Option` for **searchParam** in handler args✅
+-  Error!!!
+
+
+
 # Example
 1. Hello World
 ```rust
@@ -148,18 +153,42 @@ HttpServer::builder()
     .await;
 ```
 
+2. make anything converted from request
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+struct Stu {
+    name: String,
+    age: i32,
+}
+impl TryFrom<&HttpRequest> for Stu {
+    type Error = String;
+    fn try_from(value: &HttpRequest) -> Result<Self, Self::Error> {
+        Ok(Stu {
+            name: "from req".into(),
+            age: 111,
+        })
+    }
+}
+#[post("/fromRequest")]
+async fn fromRequest(stu:FromRequest<Stu>) {
+
+    serde_json::to_string(&stu.into_inner()).unwrap()
+}
+```
+
 
 
 
 # Tips
 1. make your type **compatible** with searchParam and **pathParam**
 ```rust
-pub trait ConvertFromRefString<'a, O> {
-    fn convert(self) -> Result<O, String>;
-}
-impl <'a> ConvertFromRefString<'a,Stu> for &'a String {
-    fn convert(self) -> Result<Stu, String> {
-        Ok(Stu { name: "()".into(), age: 12 })
+impl TryConvertFrom<Option<&String>> for String {
+    fn try_convert_from(value: Option<&String>) -> Result<Self, String> {
+        if let Some(value) = value {
+            Ok(value.to_string())
+        } else {
+            Err("missing value".into())
+        }
     }
 }
 ```

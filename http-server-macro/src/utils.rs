@@ -120,7 +120,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
 
             let res_modifier = #inner_handler_name(
                 #(#ipt_args)*
-                _req
+                &_req
             )
             .await;
 
@@ -132,7 +132,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
 fn add_req_param(f: &mut ItemFn) {
     f.sig
         .inputs
-        .push(parse_quote!(_req:http_server::request::HttpRequest));
+        .push(parse_quote!(_req:&http_server::request::HttpRequest));
 }
 pub fn handler_fn(f: &mut ItemFn, name: &str, ipt_args: Vec<FromHttpRequest>) -> TokenStream {
     add_req_param(f);
