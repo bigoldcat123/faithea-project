@@ -1,13 +1,16 @@
-#![allow(dead_code,unused)]
+#![allow(dead_code, unused)]
 use http_server::{
     MultipartData,
     data::{
         Json,
-        inbound::{FromRequest, multipart::{MultiPartFile, Multipart}},
+        inbound::{
+            FromRequest,
+            multipart::{MultiPartFile, Multipart},
+        },
         outbound::StaticFile,
     },
     get, handlers, post,
-    request::{ConvertFromRefString, HttpRequest, TryConvertInto, static_map},
+    request::{ConvertFromRefString, HttpRequest, search_param, static_map},
     res_modifiers,
     server::HttpServer,
 };
@@ -22,7 +25,10 @@ struct Stu {
 impl TryFrom<&HttpRequest> for Stu {
     type Error = String;
     fn try_from(value: &HttpRequest) -> Result<Self, Self::Error> {
-        Ok(Stu { name: "from req".into(), age: 111 })
+        Ok(Stu {
+            name: "from req".into(),
+            age: 111,
+        })
     }
 }
 #[derive(MultipartData, Debug)]
@@ -36,7 +42,7 @@ struct StuInfo {
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
     let mut data = data.into_inner();
-    let a:Result<i32, std::io::Error> = Ok(100);
+    let a: Result<i32, std::io::Error> = Ok(100);
     "ok"
 }
 
@@ -44,20 +50,25 @@ async fn multipart(data: Multipart<StuInfo>) {
 async fn hello_world() {
     "Hello,World"
 }
-#[get("cookie")]
+#[get("/cookie")]
 async fn cookie() {
-    println!("{:?}",_req.cookies());
-    ""
+    println!("{:?}", _req.cookies());
+    "good got your cookie"
 }
+#[get("/optional/{age}")]
+async fn optional(#[search_param]name:String,age:String) {
+    println!("{:?}",name);
+    "good got your optional"
+}
+
 #[tokio::main]
 async fn main() {
     let a = &"".to_string();
 
-    let b:Option<i32> = a.try_convert_into().unwrap();
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount("/", handlers!(cookie, multipart))
+        .mount("/", handlers!(cookie, multipart, optional))
         .guard("/**", async |e| {
             println!("new req -> ");
             Ok(e)

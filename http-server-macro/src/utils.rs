@@ -22,7 +22,7 @@ impl FromHttpRequest {
         match self {
             PathParam(name) => {
                 quote! {
-                    _req.get_pathparam(#name).ok_or(format!("no such pathParam named <{}>",#name))?.convert()?,
+                    http_server::request::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
                 }
             }
             Body => {
@@ -37,7 +37,7 @@ impl FromHttpRequest {
             }
             SearchParam(name) => {
                 quote! {
-                    _req.get_search_param(#name).ok_or(format!("no such searchParam named <{}>",#name))?.convert()?,
+                    http_server::request::TryConvertInto::try_convert_into(_req.get_search_param(#name))?,
                 }
             }
         }

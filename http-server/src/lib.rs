@@ -49,6 +49,7 @@ macro_rules! map_str {
 //     }
 // }
 
+#[deprecated]
 #[macro_export]
 macro_rules! impl_convert_from_ref_string {
     ($($t:ty),*) => {

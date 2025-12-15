@@ -2,8 +2,6 @@ pub mod cookie;
 pub mod path_param;
 pub mod search_param;
 
-use std::process::Output;
-
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
@@ -265,6 +263,22 @@ macro_rules! impl_convert_from_ref_string2 {
     };
 }
 
+macro_rules! impl_convert_from_option_ref_string {
+    ($($t:ty),*) => {
+        $(
+            impl $crate::request::TryConvertFrom<Option<&String>> for  $t {
+                fn try_convert_from(value:Option<&String>) -> Result<Self,String> {
+                    if let Some(value) = value {
+                        value.parse::<Self>().map_err(|_|format!("can not convert String \"{}\" to type {}",value,stringify!($t)))
+                    }else {
+                        Err("value is missing".to_string())
+                    }
+                }
+            }
+        )*
+    };
+}
+
 pub trait TryConvertFrom<T>: Sized {
     fn try_convert_from(value: T) -> Result<Self, String>;
 }
@@ -275,32 +289,67 @@ impl_convert_from_ref_string2!(
 impl_convert_from_ref_string!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
-impl <T:Sized> TryConvertFrom<T> for T {
-    fn try_convert_from(value: T) -> Result<Self, String> {
+impl_convert_from_option_ref_string!(
+    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+);
+impl<'a> TryConvertFrom<&'a String> for &'a String {
+    fn try_convert_from(value: &'a String) -> Result<Self, String> {
         Ok(value)
     }
 }
+impl<'a> TryConvertFrom<Option<&'a String>> for &'a String {
+    fn try_convert_from(value: Option<&'a String>) -> Result<Self, String> {
+        if let Some(value) = value {
+            Ok(value)
+        } else {
+            Err("missing value".into())
+        }
+    }
+}
+
 impl<'a> TryConvertFrom<&'a String> for &'a str {
     fn try_convert_from(value: &'a String) -> Result<Self, String> {
         Ok(value.as_str())
     }
 }
-// impl<'a> TryConvertFrom<&'a String> for &'a String {
-//     fn try_convert_from(value: &'a String) -> Result<Self, String> {
-//         Ok(value)
-//     }
-// }
+impl<'a> TryConvertFrom<Option<&'a String>> for &'a str {
+    fn try_convert_from(value: Option<&'a String>) -> Result<Self, String> {
+        if let Some(value) = value {
+            Ok(value)
+        } else {
+            Err("missing value".into())
+        }
+    }
+}
+
 impl TryConvertFrom<&String> for String {
     fn try_convert_from(value: &String) -> Result<Self, String> {
         Ok(value.to_string())
     }
 }
+impl TryConvertFrom<Option<&String>> for String {
+    fn try_convert_from(value: Option<&String>) -> Result<Self, String> {
+        if let Some(value) = value {
+            Ok(value.to_string())
+        } else {
+            Err("missing value".into())
+        }
+    }
+}
 
-impl<'a,O:TryConvertFrom<&'a String>> TryConvertFrom<&'a String> for Option<O> {
+impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<&'a String> for Option<O> {
     fn try_convert_from(value: &'a String) -> Result<Self, String> {
         match O::try_convert_from(value) {
             Ok(r) => Ok(Some(r)),
-            Err(_) => Ok(None)
+            Err(_) => Ok(None),
+        }
+    }
+}
+impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String>> for Option<O> {
+    fn try_convert_from(value: Option<&'a String>) -> Result<Self, String> {
+        match O::try_convert_from(value) {
+            Ok(r) => Ok(Some(r)),
+            Err(_) => Ok(None),
         }
     }
 }
@@ -316,43 +365,39 @@ impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::request::{ConvertFromRefString, TryConvertInto};
 
-
     #[test]
     fn number_test() {
         let s = &"11".to_string();
-        let a:Result<i32, String> = s.try_convert_into();
-        let b :Result<i32, String>= s.convert();
-        assert_eq!(a,b)
+        let a: Result<i32, String> = s.try_convert_into();
+        let b: Result<i32, String> = s.try_convert_into();
+        assert_eq!(a, b)
     }
 
     #[test]
     fn bool_test() {
         let s = &"true".to_string();
-        let a:Result<bool, String> = s.try_convert_into();
-        let b :Result<bool, String>= s.convert();
-        assert_eq!(a,b)
+        let a: Result<bool, String> = s.try_convert_into();
+        let b: Result<bool, String> = s.try_convert_into();
+        assert_eq!(a, b)
     }
 
     #[test]
     fn str_test() {
         let s = &"true".to_string();
-        let a:Result<String, String> = s.try_convert_into();
-        let b :Result<String, String>= s.convert();
-        assert_eq!(a,b)
+        let a: Result<String, String> = s.try_convert_into();
+        let b: Result<String, String> = s.convert();
+        assert_eq!(a, b)
     }
     #[test]
     fn option_test() {
         let s = &"true".to_string();
-        let a:Option<i32> = s.try_convert_into().unwrap();
-        assert_eq!(a,None);
-        fn a2(_:Option<bool>) {
-
-        }
+        let a: Option<i32> = s.try_convert_into().unwrap();
+        assert_eq!(a, None);
+        fn a2(_: Option<bool>) {}
         a2(s.try_convert_into().unwrap());
     }
 

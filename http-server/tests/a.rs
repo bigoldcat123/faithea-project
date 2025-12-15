@@ -1,7 +1,7 @@
 
 use std::path::PathBuf;
 
-use http_server::request::ConvertFromRefString;
+use http_server::request::{ TryConvertInto};
 use serde::{Deserialize, Serialize};
 
 #[test]
@@ -35,7 +35,7 @@ fn t3() {
 
     }
     let p = &"2".to_string();
-    a(p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap(),p.convert().unwrap());
+    a(p.try_convert_into().unwrap(),p.try_convert_into().unwrap(),p.try_convert_into().unwrap(),p.try_convert_into().unwrap(),p.try_convert_into().unwrap());
 }
 
 
@@ -44,7 +44,6 @@ fn t3() {
 fn path() {
     let a  = PathBuf::from("/Users/dadigua/Desktop/graduation/http-server/src/data/inbound");
     println!("{:?}",a.extension());
-
 
 
 

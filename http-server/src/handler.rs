@@ -1,12 +1,17 @@
-
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use crate::{
-    regulate_url_path, request::HttpRequest, response::HttpResponse, route::{Route, RouteComponent}
+    regulate_url_path,
+    request::HttpRequest,
+    response::HttpResponse,
+    route::{Route, RouteComponent},
 };
 
 pub type Fu = Box<
-    dyn Fn(HttpRequest) -> Pin<Box<dyn Future<Output = Result<HttpResponse,String>> + Send + Sync + 'static>>
+    dyn Fn(
+            HttpRequest,
+        )
+            -> Pin<Box<dyn Future<Output = Result<HttpResponse, String>> + Send + Sync + 'static>>
         + Send
         + Sync
         + 'static,
@@ -17,66 +22,87 @@ pub struct HandlerTire {
     /// Child nodes in the routing trie, keyed by route components
     path: HashMap<RouteComponent, Box<Self>>,
     /// Handler function stored at this node (if this is a terminal node)
-    f: HashMap<String,Fu>,
+    f: HashMap<String, Fu>,
 }
 impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
     /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
     ///
-    pub fn mount(&mut self,pre_fix:&'static str,handlers:Vec<Box<dyn Fn(&mut Self,&str)>>) {
+    pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<Box<dyn Fn(&mut Self, &str)>>) {
         let pre_fix = if pre_fix.ends_with("/") {
             &pre_fix[..pre_fix.len() - 1]
-        }else {
+        } else {
             pre_fix
         };
         for m in handlers {
-            m(self,pre_fix);
+            m(self, pre_fix);
         }
     }
 
     pub fn get<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse,String>> + 'static + Send + Sync,
-        P: AsRef<str>
+        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        P: AsRef<str>,
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
         route.r.reverse();
-        self.add_route(route.r,Box::new(move |r: HttpRequest| Box::pin(f(r))),"get");
+        self.add_route(
+            route.r,
+            Box::new(move |r: HttpRequest| Box::pin(f(r))),
+            "get",
+        );
     }
     pub fn post<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse,String>> + 'static + Send + Sync,
-        P: AsRef<str>
+        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        P: AsRef<str>,
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
         route.r.reverse();
-        self.add_route(route.r,Box::new(move |r: HttpRequest| Box::pin(f(r))),"post");
+        self.add_route(
+            route.r,
+            Box::new(move |r: HttpRequest| Box::pin(f(r))),
+            "post",
+        );
     }
 
-    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu,method:&str)
-    where
-    {
+    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu, method: &str) {
         if let Some(next) = url.pop() {
             if !self.path.contains_key(&next) {
                 self.path.insert(next.clone(), Default::default());
             }
             if url.is_empty() {
-                self.path.get_mut(&next).unwrap().f.insert(method.to_string(), f);
+                self.path
+                    .get_mut(&next)
+                    .unwrap()
+                    .f
+                    .insert(method.to_string(), f);
             } else {
-                self.path.get_mut(&next).unwrap().add_route(url, f,method);
+                self.path.get_mut(&next).unwrap().add_route(url, f, method);
             }
         }
     }
 
-    pub fn get_handler(&self, url: &str,method:&str) -> Option<(Route, &Fu)> {
+    pub fn get_handler(&self, url: &str, method: &str) -> Option<(Route, &Fu)> {
+        let url = if let Some((url, _search)) = url.split_once("?") {
+            url
+        } else {
+            url
+        };
         let url = regulate_url_path(url);
         let url_parts: Vec<&str> = url.split("/").collect();
         let mut candidates: Vec<(Route, &Fu)> = vec![];
-        self.get_candidates(&url_parts, &mut candidates, 0, Route { r: vec![] },method.to_lowercase().as_str());
+        self.get_candidates(
+            &url_parts,
+            &mut candidates,
+            0,
+            Route { r: vec![] },
+            method.to_lowercase().as_str(),
+        );
 
         candidates.sort_by(|a, b| a.0.cmp(&b.0));
         // Debug logging (commented out in production):
@@ -93,11 +119,15 @@ impl HandlerTire {
         candidates: &mut Vec<(Route, &'a Fu)>,
         idx: usize,
         current_path: Route,
-        method:&str
+        method: &str,
     ) {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
-            for (component, child) in self.path.iter().filter(|(comp, _)| comp.match_url(url_part)) {
+            for (component, child) in self
+                .path
+                .iter()
+                .filter(|(comp, _)| comp.match_url(url_part))
+            {
                 if idx + 1 < url_parts.len() {
                     if *component == RouteComponent::MultiSegWildCard {
                         // Multi-segment wildcard matches the rest of the path
@@ -110,7 +140,7 @@ impl HandlerTire {
                         // Continue matching deeper path segments
                         let mut path = current_path.clone();
                         path.r.push(component.clone());
-                        child.get_candidates(url_parts, candidates, idx + 1, path,method);
+                        child.get_candidates(url_parts, candidates, idx + 1, path, method);
                     }
                 } else if let Some(f) = child.f.get(method) {
                     // Reached the end of the URL, add handler if present
@@ -127,7 +157,7 @@ mod test {
     use crate::{handler::HandlerTire, request::HttpRequest, response::HttpResponse};
 
     /// Test handler that returns a default response.
-    async fn test_handler(_: HttpRequest) -> Result<HttpResponse,String> {
+    async fn test_handler(_: HttpRequest) -> Result<HttpResponse, String> {
         Ok(HttpResponse::new())
     }
 
@@ -148,7 +178,7 @@ mod test {
         handler.get("/url/**", test_handler);
 
         // Test URL that matches multiple patterns
-        let (matched_route, _) = handler.get_handler("/url/ab2c/efg","get").unwrap();
+        let (matched_route, _) = handler.get_handler("/url/ab2c/efg", "get").unwrap();
 
         // Should match the path parameter pattern, not the wildcards
         assert_eq!(

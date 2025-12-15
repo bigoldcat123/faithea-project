@@ -9,7 +9,7 @@ use bytes::Bytes;
 use crate::{map_str, request::HttpRequest};
 
 pub trait TryFromMultipartDataMap: Sized {
-    fn try_from(data: &mut HashMap<String, Part>) -> Result<Self, String>;
+    fn try_from_multipart_data_map(data: &mut HashMap<String, Part>) -> Result<Self, String>;
 }
 
 #[derive(Debug)]
@@ -21,6 +21,25 @@ pub enum Part {
         mime_type: Option<String>,
     },
 }
+macro_rules! impl_try_from_part_for_parse_from_str {
+    ($($t:ty),*) => {
+        $(
+            impl TryFrom<Part> for $t {
+                type Error = String;
+                fn try_from(value: Part) -> Result<Self, Self::Error> {
+                    if let Part::Lit(l) = value {
+                        Ok(l.parse::<Self>().map_err(map_str!())?)
+                    }else {
+                        Err("not compatiable to transform part to MultiPartFile".to_string())
+                    }
+                }
+            }
+        )*
+    };
+}
+impl_try_from_part_for_parse_from_str!(
+    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
+);
 #[derive(Debug)]
 pub struct MultiPartFile {
     pub file_name: Option<String>,
@@ -47,13 +66,6 @@ impl TryFrom<Part> for MultiPartFile {
         }
     }
 }
-
-
-
-
-
-
-
 
 #[derive(Debug)]
 pub struct Multipart<T: TryFromMultipartDataMap>(T);
@@ -83,7 +95,7 @@ impl<'a,T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
             (Some(body), Some(boundary)) => {
                 let mut data = HashMap::new();
                 parse_multipart_to_map(&body[boundary.len() + 2..], boundary.as_bytes(), &mut data);
-                return Ok(Multipart(T::try_from(&mut data)?));
+                return Ok(Multipart(T::try_from_multipart_data_map(&mut data)?));
             }
             _ => return Err("no boundary".into()),
         }
@@ -180,25 +192,8 @@ fn get_multipart_boundary(req: &HttpRequest) -> Option<String> {
     }
     None
 }
-macro_rules! impl_try_from_part_for_parse_from_str {
-    ($($t:ty),*) => {
-        $(
-            impl TryFrom<Part> for $t {
-                type Error = String;
-                fn try_from(value: Part) -> Result<Self, Self::Error> {
-                    if let Part::Lit(l) = value {
-                        Ok(l.parse::<Self>().map_err(map_str!())?)
-                    }else {
-                        Err("not compatiable to transform part to MultiPartFile".to_string())
-                    }
-                }
-            }
-        )*
-    };
-}
-impl_try_from_part_for_parse_from_str!(
-    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
-);
+
+
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
