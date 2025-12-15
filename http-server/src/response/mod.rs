@@ -114,18 +114,18 @@ impl From<&ResponseStatusLine> for Bytes {
 
 pub trait HttpResponseModifier {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>>;
 }
 
 impl HttpResponseModifier for HttpHeader {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            for kv in self.headers.iter() {
+            for kv in self.headers.drain() {
                 res.add_header(kv);
 
             }
@@ -140,7 +140,7 @@ impl HttpResponseModifier for ResponseStatusLine {
     //     Ok(())
     // }
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
@@ -158,7 +158,7 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
     //     Ok(())
     // }
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {

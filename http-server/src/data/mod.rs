@@ -70,9 +70,9 @@ mod tests {
         let j = Json(Stu {
             name: "hello".to_string(),
         });
-        let a: Vec<Box<dyn HttpResponseModifier + Send + Sync>> = res_modifiers!(header, j);
+        let mut a: Vec<Box<dyn HttpResponseModifier + Send + Sync>> = res_modifiers!(header, j);
         a.modify(&mut res).await.unwrap();
-        let a = Box::new(res_line);
+        let mut a = Box::new(res_line);
         a.modify(&mut res).await.unwrap();
 
         // header.modify(&mut res);

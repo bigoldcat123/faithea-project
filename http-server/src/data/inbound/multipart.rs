@@ -6,10 +6,12 @@ use std::{
 
 use bytes::Bytes;
 
-use crate::{map_str, request::HttpRequest};
+use crate::{TryConvertFrom, map_str, request::HttpRequest};
+
+pub type MultipartDataMap = HashMap<String, Vec<Part>>;
 
 pub trait TryFromMultipartDataMap: Sized {
-    fn try_from_multipart_data_map(data: &mut HashMap<String, Part>) -> Result<Self, String>;
+    fn try_from_multipart_data_map(data: &mut MultipartDataMap) -> Result<Self, String>;
 }
 
 #[derive(Debug)]
@@ -17,7 +19,7 @@ pub enum Part {
     Lit(String),
     File {
         file_name: Option<String>,
-        data: Bytes,
+        data: Bytes, // this should be the path to file
         mime_type: Option<String>,
     },
 }
@@ -37,9 +39,49 @@ macro_rules! impl_try_from_part_for_parse_from_str {
         )*
     };
 }
+
 impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
+macro_rules! impl_try_from_vec_part_for_parse_from_str {
+    ($($t:ty),*) => {
+        $(
+            impl $crate::TryConvertFrom<Vec<Part>> for $t {
+                fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
+                    if let Some(value) = value.pop() {
+                        value.try_into()
+                    }else {
+                        Err("there is no data in multipart map".to_string())
+                    }
+                }
+            }
+        )*
+    };
+}
+// impl_try_from_vec_part_for_parse_from_str!(
+//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
+// );
+impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for T {
+    fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
+        if let Some(value) = value.pop() {
+            value
+                .try_into()
+                .map_err(|_| "can not convert from Vec<Part>".to_string())
+        } else {
+            Err("there is no data in multipart map".to_string())
+        }
+    }
+}
+
+impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for Vec<T> {
+    fn try_convert_from(value: Vec<Part>) -> Result<Self, String> {
+        Ok(value
+            .into_iter()
+            .filter_map(|x| T::try_from(x).ok())
+            .collect())
+    }
+}
+
 #[derive(Debug)]
 pub struct MultiPartFile {
     pub file_name: Option<String>,
@@ -88,7 +130,7 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
     }
 }
 
-impl<'a,T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
+impl<'a, T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     type Error = String;
     fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
         match (&req.body, get_multipart_boundary(req)) {
@@ -102,7 +144,7 @@ impl<'a,T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     }
 }
 
-fn parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut HashMap<String, Part>) {
+fn parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut MultipartDataMap) {
     let mut r = 0;
     let mut l = 0;
     while r < b.len() {
@@ -132,20 +174,28 @@ fn parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut HashMap<String, 
         }
         //the file part
         if file_name.is_some() || mime_type.is_some() {
-            data.insert(
-                name.to_string(),
-                Part::File {
-                    file_name,
-                    data: Bytes::copy_from_slice(&b[l..r]),
-                    mime_type,
-                },
-            );
+            // data.insert(
+            //     name.to_string(),
+            //     Part::File {
+            //         file_name,
+            //         data: Bytes::copy_from_slice(&b[l..r]),
+            //         mime_type,
+            //     },
+            // );
+            data.entry(name.to_string()).or_default().push(Part::File {
+                file_name,
+                data: Bytes::copy_from_slice(&b[l..r]),
+                mime_type,
+            });
         } else {
             // the lit part
-            data.insert(
-                name.to_string(),
-                Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()),
-            );
+            // data.insert(
+            //     name.to_string(),
+            //     Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()),
+            // );
+            data.entry(name.to_string())
+                .or_default()
+                .push(Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()));
         }
         // bytes end with `--`
         if &b[r + boundary.len() + 2..r + 2 + boundary.len() + 2] == b"--" {
@@ -192,7 +242,6 @@ fn get_multipart_boundary(req: &HttpRequest) -> Option<String> {
     }
     None
 }
-
 
 // #[cfg(test)]
 // mod tests {

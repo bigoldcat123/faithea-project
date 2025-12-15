@@ -6,15 +6,13 @@ use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
-    HttpHeader,
-    data::outbound::StaticFile,
-    // impl_convert_from_ref_string,
-    map_str,
-    request::{cookie::Cookie, path_param::PathParam, search_param::SearchParam},
-    res_modifiers,
-    response::HttpResponseModifier,
-    route::{Route, RouteComponent},
+    HttpHeader, TryConvertFrom, data::{inbound::multipart::MultipartDataMap, outbound::StaticFile}, map_str, request::{cookie::Cookie, path_param::PathParam, search_param::SearchParam}, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}
 };
+
+pub enum RequestBody {
+    Simple(Bytes),
+    MultiPart(MultipartDataMap)
+}
 
 #[derive(Debug)]
 pub struct HttpRequest {
@@ -267,7 +265,7 @@ macro_rules! impl_convert_from_ref_string2 {
 macro_rules! impl_convert_from_option_ref_string {
     ($($t:ty),*) => {
         $(
-            impl $crate::request::TryConvertFrom<Option<&String>> for  $t {
+            impl $crate::TryConvertFrom<Option<&String>> for  $t {
                 fn try_convert_from(value:Option<&String>) -> Result<Self,String> {
                     if let Some(value) = value {
                         value.parse::<Self>().map_err(|_|format!("can not convert String \"{}\" to type {}",value,stringify!($t)))
@@ -280,9 +278,7 @@ macro_rules! impl_convert_from_option_ref_string {
     };
 }
 
-pub trait TryConvertFrom<T>: Sized {
-    fn try_convert_from(value: T) -> Result<Self, String>;
-}
+
 
 impl_convert_from_ref_string2!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
@@ -355,20 +351,11 @@ impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String
     }
 }
 
-/// please impl `TryConvertFrom`
-pub trait TryConvertInto<O> {
-    fn try_convert_into(self) -> Result<O, String>;
-}
 
-impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
-    fn try_convert_into(self) -> Result<T, String> {
-        T::try_convert_from(self)
-    }
-}
 
 #[cfg(test)]
 mod tests {
-    use crate::request::{ConvertFromRefString, TryConvertInto};
+    use crate::{TryConvertInto, request::ConvertFromRefString};
 
     #[test]
     fn number_test() {

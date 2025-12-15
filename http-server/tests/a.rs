@@ -1,7 +1,7 @@
 
 use std::path::PathBuf;
 
-use http_server::request::{ TryConvertInto};
+use http_server::{ TryConvertInto};
 use serde::{Deserialize, Serialize};
 
 #[test]

@@ -22,7 +22,7 @@ impl FromHttpRequest {
         match self {
             PathParam(name) => {
                 quote! {
-                    http_server::request::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
+                    http_server::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
                 }
             }
             Body => {
@@ -37,7 +37,7 @@ impl FromHttpRequest {
             }
             SearchParam(name) => {
                 quote! {
-                    http_server::request::TryConvertInto::try_convert_into(_req.get_search_param(#name))?,
+                    http_server::TryConvertInto::try_convert_into(_req.get_search_param(#name))?,
                 }
             }
         }
@@ -118,7 +118,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
 
             let mut res = http_server::response::HttpResponse::new();
 
-            let res_modifier = #inner_handler_name(
+            let mut res_modifier = #inner_handler_name(
                 #(#ipt_args)*
                 &_req
             )

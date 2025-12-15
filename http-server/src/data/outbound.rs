@@ -8,10 +8,24 @@ use crate::{
     map_str,
     response::{HttpResponseModifier, ResponseBody},
 };
+impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
+    type Error = String;
+    fn try_from(value: &Json<T>) -> Result<Self, Self::Error> {
+        let res = serde_json::to_vec(value).map_err(map_str!())?;
+        Ok(Self::Simple(Bytes::from(res)))
+    }
+}
+impl<T: Serialize> TryFrom<&mut Json<T>> for ResponseBody {
+    type Error = String;
+    fn try_from(value: &mut Json<T>) -> Result<Self, Self::Error> {
+        let res = serde_json::to_vec(value).map_err(map_str!())?;
+        Ok(Self::Simple(Bytes::from(res)))
+    }
+}
 
 impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
@@ -26,9 +40,10 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
         })
     }
 }
+
 impl HttpResponseModifier for &str {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
@@ -42,7 +57,7 @@ impl HttpResponseModifier for &str {
 }
 impl HttpResponseModifier for String {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
@@ -60,7 +75,7 @@ pub struct StaticFile<T:AsRef<Path>>(pub T);
 
 impl <T:AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut crate::response::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
@@ -127,13 +142,5 @@ fn get_mime_type_by_extention(e:&OsStr) -> &str {
         }
     }else {
         "application/octet-stream"
-    }
-}
-
-impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
-    type Error = String;
-    fn try_from(value: &Json<T>) -> Result<Self, Self::Error> {
-        let res = serde_json::to_vec(value).map_err(map_str!())?;
-        Ok(Self::Simple(Bytes::from(res)))
     }
 }

@@ -174,6 +174,20 @@ macro_rules! res_modifiers {
     };
 }
 
+pub trait TryConvertFrom<T>: Sized {
+    fn try_convert_from(value: T) -> Result<Self, String>;
+}
+/// please impl `TryConvertFrom`
+pub trait TryConvertInto<O> {
+    fn try_convert_into(self) -> Result<O, String>;
+}
+
+impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
+    fn try_convert_into(self) -> Result<T, String> {
+        T::try_convert_from(self)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

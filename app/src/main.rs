@@ -1,4 +1,7 @@
 #![allow(dead_code, unused)]
+use std::collections::HashMap;
+
+use chenzhonghai_app::json;
 use http_server::{
     MultipartData, data::{
         Json,
@@ -28,16 +31,16 @@ impl TryFrom<&HttpRequest> for Stu {
 }
 #[derive(MultipartData, Debug)]
 struct StuInfo {
-    pub name: String,
+    pub name: Vec<String>,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: MultiPartFile,
+    pub profile: Vec<MultiPartFile>,
 }
 
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
     let mut data = data.into_inner();
-    let a: Result<i32, std::io::Error> = Ok(100);
+    println!("{:?}",data);
     "ok"
 }
 
@@ -61,18 +64,17 @@ async fn fromRequest(stu:FromRequest<Stu>) {
     Json(stu.into_inner())
 }
 
-
-#[tokio::main]
+#[tokio::main(flavor="current_thread")]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount("/", handlers!(cookie, multipart, optional,fromRequest))
+        .mount("/", handlers!(cookie, multipart, optional,fromRequest,json))
         .guard("/protected/**", async |req| {
             Ok(req)
         })
         .guard("/**", async |e| {
-            Err(HttpResponse::not_found())
+            Ok(e)
         })
         .build()
         .start()

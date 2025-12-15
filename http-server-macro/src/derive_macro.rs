@@ -44,7 +44,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
         if is_option(ty) {
             quote! {
                 #field_ident: match data.remove(#field_name) {
-                    Some(s) => match s.try_into() {
+                    Some(s) => match s.try_convert_into() {
                         Ok(s) => Some(s),
                         Err(_) => None,
                     },
@@ -56,7 +56,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
                 #field_ident: data
                     .remove(#field_name)
                     .ok_or_else(|| format!("missing field `{}`", #field_name))?
-                    .try_into()?
+                    .try_convert_into()?
             }
         }
     });
@@ -66,9 +66,10 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             fn try_from_multipart_data_map(
                 data: &mut std::collections::HashMap<
                     String,
-                    http_server::data::inbound::multipart::Part,
+                    Vec<http_server::data::inbound::multipart::Part>,
                 >,
             ) -> Result<Self, String> {
+                use http_server::TryConvertInto;
                 Ok(Self {
                     #(#assigns,)*
                 })

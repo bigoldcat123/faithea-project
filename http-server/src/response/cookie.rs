@@ -9,7 +9,7 @@ pub struct Cookie {
 
 impl HttpResponseModifier for Cookie {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut super::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
