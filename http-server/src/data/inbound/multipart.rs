@@ -32,7 +32,7 @@ macro_rules! impl_try_from_part_for_parse_from_str {
                     if let Part::Lit(l) = value {
                         Ok(l.parse::<Self>().map_err(map_str!())?)
                     }else {
-                        Err("not compatiable to transform part to MultiPartFile".to_string())
+                        Err(format!("{} not compatiable to transform part to MultiPartFile",stringify!($t)))
                     }
                 }
             }
@@ -44,12 +44,11 @@ impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
 
-impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for T {
+impl<T: TryFrom<Part,Error = String>> TryConvertFrom<Vec<Part>> for T {
     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
         if let Some(value) = value.pop() {
             value
                 .try_into()
-                .map_err(|_| "can not convert from Vec<Part>".to_string())
         } else {
             Err("there is no data in multipart map".to_string())
         }

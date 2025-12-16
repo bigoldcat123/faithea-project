@@ -1,13 +1,17 @@
 #![allow(unused)]
 use chenzhonghai_app::json;
 use http_server::{
-    MultipartData, data::{
+    MultipartData,
+    data::{
         Json,
         inbound::{
             FromRequest,
             multipart::{MultiPartFile, Multipart, Part},
         },
-    }, get, handlers, post, request::HttpRequest, server::HttpServer
+    },
+    get, handlers, post,
+    request::{HttpRequest, search_param},
+    server::HttpServer,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,29 +30,32 @@ impl TryFrom<&HttpRequest> for Stu {
     }
 }
 #[derive(Debug)]
-struct A{
-
-}
+struct A {}
 impl TryFrom<Part> for A {
     type Error = String;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
-        Ok(Self{})
+        Ok(Self {})
     }
 }
 
 #[derive(MultipartData, Debug)]
 struct StuInfo {
-    pub name: Vec<A>,
+    pub name: Vec<String>,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: Vec<MultiPartFile>,
+    pub profile: MultiPartFile,
 }
 
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
-    let mut data = data.into_inner();
-    println!("{:?}",data);
-    "ok"
+    format!(
+        "name: {:?},age: {}, merried: {:?}, profile_len: {}, profile_name:{:?}",
+        data.name,
+        data.age,
+        data.merried,
+        data.profile.data.len(),
+        data.profile.file_name
+    )
 }
 
 #[get("/")]
@@ -57,46 +64,44 @@ async fn hello_world() {
 }
 #[get("/cookie")]
 async fn cookie() {
-    println!("{:?}", _req.cookies());
-    "good got your cookie"
+    format!("{:?}", _req.cookies())
 }
-#[get("/optional/{age}")]
-async fn optional(#[search_param]name:Option<&String>,age:u16) {
-    println!("{:?} {:?}",name,age);
-    "good got your optional"
+
+#[get("/pathParam/{name}/{age}")]
+async fn pathParam(name: String, age: i32) {
+    format!("name is {}, age is {}", name, age)
+}
+
+#[get("/searchParam")]
+async fn search_param(#[search_param] name: &String, #[search_param] age: Option<i32>) {
+    format!("name is {} and age is {:?}", name, age)
 }
 
 #[post("/fromRequest")]
-async fn fromRequest(stu:FromRequest<Stu>) {
+async fn fromRequest(stu: FromRequest<Stu>) {
     Json(stu.into_inner())
 }
 
-#[tokio::main(flavor="current_thread")]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");
     println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
-        .mount("/", handlers!(cookie, multipart, optional,fromRequest,json))
-        .guard("/protected/**", async |req| {
-            Ok(req)
-        })
-        .guard("/**", async |e| {
-            Ok(e)
-        })
+        .mount(
+            "/",
+            handlers!(
+                hello_world,
+                cookie,
+                multipart,
+                pathParam,
+                search_param,
+                fromRequest,
+                json
+            ),
+        )
+        .guard("/protected/**", async |req| Ok(req))
+        .guard("/**", async |e| Ok(e))
         .build()
         .start()
         .await;
 }
-
-// guards.add("/hello/*", async |req| {
-//     println!("[Guard 1] Processing request under /hello/* path");
-//     Ok(req)
-// });
-// guards.add("/hello/asdasd", async |req| {
-//     println!("[Guard 2] Processing request for exact path /hello/asdasd");
-//     Ok(req)
-// });
-// guards.add("/**", async |req| {
-//     println!("[Guard 3] Processing any request (catch-all)");
-//     Ok(req)
-// });
