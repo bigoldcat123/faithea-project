@@ -2,7 +2,7 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 
 use crate::{
     regulate_url_path,
-    request::HttpRequest,
+    request::{HttpRequest, method::Method},
     response::HttpResponse,
     route::{Route, RouteComponent},
 };
@@ -22,7 +22,7 @@ pub struct HandlerTire {
     /// Child nodes in the routing trie, keyed by route components
     path: HashMap<RouteComponent, Box<Self>>,
     /// Handler function stored at this node (if this is a terminal node)
-    f: HashMap<String, Fu>,
+    f: HashMap<Method, Fu>,
 }
 impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
@@ -51,7 +51,7 @@ impl HandlerTire {
         self.add_route(
             route.r,
             Box::new(move |r: HttpRequest| Box::pin(f(r))),
-            "get",
+            Method::GET,
         );
     }
     pub fn post<F, O, P>(&mut self, url: P, f: F)
@@ -66,11 +66,11 @@ impl HandlerTire {
         self.add_route(
             route.r,
             Box::new(move |r: HttpRequest| Box::pin(f(r))),
-            "post",
+            Method::POST,
         );
     }
 
-    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu, method: &str) {
+    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu, method: Method) {
         if let Some(next) = url.pop() {
             if !self.path.contains_key(&next) {
                 self.path.insert(next.clone(), Default::default());
@@ -80,14 +80,14 @@ impl HandlerTire {
                     .get_mut(&next)
                     .unwrap()
                     .f
-                    .insert(method.to_string(), f);
+                    .insert(method, f);
             } else {
                 self.path.get_mut(&next).unwrap().add_route(url, f, method);
             }
         }
     }
 
-    pub fn get_handler(&self, url: &str, method: &str) -> Option<(Route, &Fu)> {
+    pub fn get_handler(&self, url: &str, method: Method) -> Option<(Route, &Fu)> {
         let url = if let Some((url, _search)) = url.split_once("?") {
             url
         } else {
@@ -101,7 +101,7 @@ impl HandlerTire {
             &mut candidates,
             0,
             Route { r: vec![] },
-            method.to_lowercase().as_str(),
+            method,
         );
 
         candidates.sort_by(|a, b| a.0.cmp(&b.0));
@@ -119,7 +119,7 @@ impl HandlerTire {
         candidates: &mut Vec<(Route, &'a Fu)>,
         idx: usize,
         current_path: Route,
-        method: &str,
+        method: Method,
     ) {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
@@ -131,7 +131,7 @@ impl HandlerTire {
                 if idx + 1 < url_parts.len() {
                     if *component == RouteComponent::MultiSegWildCard {
                         // Multi-segment wildcard matches the rest of the path
-                        if let Some(f) = child.f.get(method) {
+                        if let Some(f) = child.f.get(&method) {
                             let mut path = current_path.clone();
                             path.r.push(component.clone());
                             candidates.push((path, f));
@@ -142,7 +142,7 @@ impl HandlerTire {
                         path.r.push(component.clone());
                         child.get_candidates(url_parts, candidates, idx + 1, path, method);
                     }
-                } else if let Some(f) = child.f.get(method) {
+                } else if let Some(f) = child.f.get(&method) {
                     // Reached the end of the URL, add handler if present
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
@@ -178,7 +178,7 @@ mod test {
         handler.get("/url/**", test_handler);
 
         // Test URL that matches multiple patterns
-        let (matched_route, _) = handler.get_handler("/url/ab2c/efg", "get").unwrap();
+        let (matched_route, _) = handler.get_handler("/url/ab2c/efg", crate::request::method::Method::GET).unwrap();
 
         // Should match the path parameter pattern, not the wildcards
         assert_eq!(

@@ -1,12 +1,12 @@
 pub mod cookie;
 pub mod path_param;
 pub mod search_param;
-
+pub mod method;
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
-    HttpHeader, TryConvertFrom, data::{inbound::multipart::MultipartDataMap, outbound::StaticFile}, map_str, request::{cookie::Cookie, path_param::PathParam, search_param::SearchParam}, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}
+    HttpHeader, TryConvertFrom, data::{inbound::multipart::MultipartDataMap, outbound::StaticFile}, map_str, request::{cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam}, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}
 };
 
 pub enum RequestBody {
@@ -112,7 +112,7 @@ impl HttpRequest {
 
 #[derive(Debug)]
 pub struct HttpReqLine {
-    pub method: String,
+    pub method: Method,
     pub url: String,
     pub version: String,
 }
@@ -133,7 +133,7 @@ impl HttpReqLine {
             .ok_or("version parsing error".to_string())?
             .to_string();
         Ok(Self {
-            method,
+            method:method.try_into()?,
             url,
             version,
         })

@@ -138,7 +138,7 @@ async fn handle_request(
 ) {
     let req_url = req.req_line.url.to_string();
     if let Some((_matched_url, handler)) =
-        handlers.get_handler(&req.req_line.url, &req.req_line.method)
+        handlers.get_handler(&req.req_line.url, req.req_line.method)
     {
         req.process_routes(&_matched_url, &Route::from(req.req_line.url.as_str()));
         req.process_search_param(&req_url);
