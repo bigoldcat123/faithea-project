@@ -1,17 +1,23 @@
 pub mod cookie;
+pub mod method;
 pub mod path_param;
 pub mod search_param;
-pub mod method;
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
-    HttpHeader, TryConvertFrom, data::{inbound::multipart::MultipartDataMap, outbound::StaticFile}, map_str, request::{cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam}, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}
+    HttpHeader, TryConvertFrom,
+    data::{inbound::multipart::MultipartDataMap, outbound::StaticFile},
+    map_str,
+    request::{cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam},
+    res_modifiers,
+    response::HttpResponseModifier,
+    route::{Route, RouteComponent},
 };
 
 pub enum RequestBody {
     Simple(Bytes),
-    MultiPart(MultipartDataMap)
+    MultiPart(MultipartDataMap),
 }
 
 #[derive(Debug)]
@@ -133,7 +139,7 @@ impl HttpReqLine {
             .ok_or("version parsing error".to_string())?
             .to_string();
         Ok(Self {
-            method:method.try_into()?,
+            method: method.try_into()?,
             url,
             version,
         })
@@ -148,18 +154,28 @@ pub async fn parse_http_frame(
     let mut req = HttpRequest::new(l, h, None);
     if let Some(len) = req.headers.get("content-length") {
         let len = len.parse::<usize>().map_err(map_str!())?;
-        parse_body_frame(len, r, buf).await?;
+
+        parse_body_frame(len, r, buf, &req.headers).await?;
         let body = buf.split_to(len).freeze();
         req.body = Some(body);
     }
     Ok(req)
 }
-
 async fn parse_body_frame(
     len: usize,
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
-) -> Result<(), String> {
+    headers: &HttpHeader,
+) -> Result<RequestBody, String> {
+    let content_type = headers
+        .get("content-type")
+        .map(|x| x.as_str())
+        .unwrap_or("application/octet-stream");
+    match content_type {
+        "application/json" => {}
+        "multipart/form-data" => {}
+        _ => {}
+    };
     loop {
         if buf.len() >= len {
             break;
@@ -172,7 +188,58 @@ async fn parse_body_frame(
             return Err("error!".to_string());
         }
     }
-    Ok(())
+    Ok(RequestBody::Simple(Bytes::new()))
+}
+
+async fn parse_body_frame2(
+    len: usize,
+    r: &mut OwnedReadHalf,
+    buf: &mut BytesMut,
+    headers: &HttpHeader,
+) -> Result<RequestBody, String> {
+    let content_type = headers
+        .get("content-type")
+        .map(|x| x.as_str())
+        .unwrap_or("application/octet-stream");
+    match content_type {
+        "application/json" => parse_simple_body(r, buf, len).await,
+        "multipart/form-data" => {
+            let boundary = headers.get("boundary").ok_or(format!("no boundary when parsing a mutipart data"))?;
+            parse_multipart_body(r, buf, len, boundary).await
+        },
+        _ => parse_simple_body(r, buf, len).await,
+    }
+}
+async fn parse_multipart_body(
+    r: &mut OwnedReadHalf,
+    buf: &mut BytesMut,
+    len: usize,
+    boundary: &str,
+) -> Result<RequestBody, String> {
+    let mut map = MultipartDataMap::new();
+    // remove pre_fix
+
+
+    Ok(RequestBody::MultiPart(map))
+}
+async fn parse_simple_body(
+    r: &mut OwnedReadHalf,
+    buf: &mut BytesMut,
+    len: usize,
+) -> Result<RequestBody, String> {
+    loop {
+        if buf.len() >= len {
+            let body = buf.split_to(len).freeze();
+            return Ok(RequestBody::Simple(body));
+        }
+        if let Ok(len) = r.read_buf(buf).await {
+            if len == 0 {
+                return Err("other side closed".to_string());
+            }
+        } else {
+            return Err("error!".to_string());
+        }
+    }
 }
 async fn parse_line_header_frame(
     r: &mut OwnedReadHalf,
@@ -183,15 +250,17 @@ async fn parse_line_header_frame(
             if read_len == 0 {
                 return Err("other side closed".to_string());
             }
+            println!("{:?}",buf);
             let (check_header_is_ok, position) = check_header(buf.chunk());
             if check_header_is_ok {
                 let (l, h) = parse_line_header(&buf[..position])?;
-
                 buf.advance(position);
                 return Ok((l, h));
             }
         } else {
-            return Err("error!".to_string());
+            return Err(
+                "reading bytes from socket error while parsing parse_line_header_frame".to_string(),
+            );
         }
     }
 }
@@ -278,8 +347,6 @@ macro_rules! impl_convert_from_option_ref_string {
     };
 }
 
-
-
 impl_convert_from_ref_string2!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
@@ -350,8 +417,6 @@ impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String
         }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

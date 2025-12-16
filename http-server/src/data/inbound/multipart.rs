@@ -156,25 +156,12 @@ fn parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut MultipartDataMap
         }
         //the file part
         if file_name.is_some() || mime_type.is_some() {
-            // data.insert(
-            //     name.to_string(),
-            //     Part::File {
-            //         file_name,
-            //         data: Bytes::copy_from_slice(&b[l..r]),
-            //         mime_type,
-            //     },
-            // );
             data.entry(name.to_string()).or_default().push(Part::File {
                 file_name,
                 data: Bytes::copy_from_slice(&b[l..r]),
                 mime_type,
             });
         } else {
-            // the lit part
-            // data.insert(
-            //     name.to_string(),
-            //     Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()),
-            // );
             data.entry(name.to_string())
                 .or_default()
                 .push(Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()));
