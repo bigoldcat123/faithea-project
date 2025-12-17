@@ -2,6 +2,7 @@ pub mod cookie;
 pub mod method;
 pub mod path_param;
 pub mod search_param;
+pub mod content_type;
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
@@ -9,12 +10,13 @@ use crate::{
     HttpHeader, TryConvertFrom,
     data::{inbound::multipart::MultipartDataMap, outbound::StaticFile},
     map_str,
-    request::{cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam},
+    request::{content_type::ContentType, cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam},
     res_modifiers,
     response::HttpResponseModifier,
     route::{Route, RouteComponent},
 };
 
+#[derive(Debug)]
 pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
@@ -24,7 +26,7 @@ pub enum RequestBody {
 pub struct HttpRequest {
     pub(crate) req_line: HttpReqLine,
     pub(crate) headers: HttpHeader,
-    pub(crate) body: Option<Bytes>, // way too big!!!!!!!!!!!!
+    pub(crate) body: Option<RequestBody>, // way too big!!!!!!!!!!!!
     pub(crate) path_param: Option<PathParam>,
     pub(crate) search_param: Option<SearchParam>,
     pub(crate) multi_seg_param: Option<String>,
@@ -44,7 +46,7 @@ pub async fn static_map<P: AsRef<str>>(
 }
 
 impl HttpRequest {
-    pub fn new(req_line: HttpReqLine, headers: HttpHeader, body: Option<Bytes>) -> Self {
+    pub fn new(req_line: HttpReqLine, headers: HttpHeader, body: Option<RequestBody>) -> Self {
         Self {
             req_line,
             headers,
@@ -57,16 +59,12 @@ impl HttpRequest {
     }
     //#[allow(unused)]
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
-        if let Some(cookie) = self.headers.get("cookie") {
-            Some(Cookie::from_cookie_header(cookie))
-        } else {
-            None
-        }
+        self.headers.get("cookie").map(|cookie| Cookie::from_cookie_header(cookie))
     }
     pub fn fake() -> Self {
         let req_line = HttpReqLine::parse("POST /api/data HTTP/1.1").unwrap();
         let headers = HttpHeader::new();
-        let body = Some(Bytes::from("request payload"));
+        let body = Some(RequestBody::Simple(Bytes::from("request payload")));
         HttpRequest::new(req_line, headers, body)
     }
     fn assamble_path_param(&mut self, handler_route: &Route, incoming_route: &Route) {
@@ -81,11 +79,9 @@ impl HttpRequest {
         {
             let mut s = vec![];
             for i in 0..incoming_route.r.len() {
-                if i >= handler_route.r.len() - 1 {
-                    if let RouteComponent::Exact(ref p) = incoming_route.r[i] {
+                if i >= handler_route.r.len() - 1 && let RouteComponent::Exact(ref p) = incoming_route.r[i] {
                         s.push(p.as_str());
                     }
-                }
             }
             self.multi_seg_param = Some(s.join("/"))
         }
@@ -155,68 +151,56 @@ pub async fn parse_http_frame(
     if let Some(len) = req.headers.get("content-length") {
         let len = len.parse::<usize>().map_err(map_str!())?;
 
-        parse_body_frame(len, r, buf, &req.headers).await?;
-        let body = buf.split_to(len).freeze();
+        let body = parse_body_frame2(len, r, buf, &req.headers).await?;
+        // let body = buf.split_to(len).freeze();
         req.body = Some(body);
     }
     Ok(req)
 }
-async fn parse_body_frame(
-    len: usize,
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    headers: &HttpHeader,
-) -> Result<RequestBody, String> {
-    let content_type = headers
-        .get("content-type")
-        .map(|x| x.as_str())
-        .unwrap_or("application/octet-stream");
-    match content_type {
-        "application/json" => {}
-        "multipart/form-data" => {}
-        _ => {}
-    };
-    loop {
-        if buf.len() >= len {
-            break;
-        }
-        if let Ok(len) = r.read_buf(buf).await {
-            if len == 0 {
-                return Err("other side closed".to_string());
-            }
-        } else {
-            return Err("error!".to_string());
-        }
-    }
-    Ok(RequestBody::Simple(Bytes::new()))
-}
+// async fn parse_body_frame(
+//     len: usize,
+//     r: &mut OwnedReadHalf,
+//     buf: &mut BytesMut,
+//     _headers: &HttpHeader,
+// ) -> Result<RequestBody, String> {
+//     loop {
+//         if buf.len() >= len {
+//             break;
+//         }
+//         if let Ok(len) = r.read_buf(buf).await {
+//             if len == 0 {
+//                 return Err("other side closed".to_string());
+//             }
+//         } else {
+//             return Err("error!".to_string());
+//         }
+//     }
+//     Ok(RequestBody::Simple(Bytes::new()))
+// }
 
-async fn parse_body_frame2(
+pub async fn parse_body_frame2(
     len: usize,
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
     headers: &HttpHeader,
 ) -> Result<RequestBody, String> {
-    let content_type = headers
-        .get("content-type")
-        .map(|x| x.as_str())
-        .unwrap_or("application/octet-stream");
+    use ContentType::*;
+    let content_type = ContentType::try_from(headers)?;
     match content_type {
-        "application/json" => parse_simple_body(r, buf, len).await,
-        "multipart/form-data" => {
-            let boundary = headers.get("boundary").ok_or(format!("no boundary when parsing a mutipart data"))?;
+        ApplicationJson => parse_simple_body(r, buf, len).await,
+        MultipartFormData(boundary) => {
             parse_multipart_body(r, buf, len, boundary).await
         },
         _ => parse_simple_body(r, buf, len).await,
     }
 }
 async fn parse_multipart_body(
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    len: usize,
-    boundary: &str,
+    _r: &mut OwnedReadHalf,
+    _buf: &mut BytesMut,
+    _len: usize,
+    _boundary: &str,
 ) -> Result<RequestBody, String> {
-    let mut map = MultipartDataMap::new();
+    let  map = MultipartDataMap::new();
     // remove pre_fix
 
 

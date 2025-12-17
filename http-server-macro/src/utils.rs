@@ -45,7 +45,7 @@ impl FromHttpRequest {
 }
 
 pub fn generate_from_httprequest_list(args: &mut Punctuated<FnArg, Comma>) -> Vec<FromHttpRequest> {
-    args.iter_mut().filter_map(|arg| parse_arg(arg)).collect()
+    args.iter_mut().filter_map(parse_arg).collect()
 }
 
 fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
@@ -167,7 +167,7 @@ fn modify_fn_name(f: &mut ItemFn, name: &str) {
 }
 fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
     let mut args: Vec<String> = args
-        .into_iter()
+        .iter()
         .filter_map(|x| {
             if let FromHttpRequest::PathParam(name) = x {
                 Some(name.value())
@@ -194,7 +194,7 @@ fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
             if i >= args.len() || path_component[i] != args[i] {
                 return Some(
                     syn::Error::new(
-                        route.span().clone(),
+                        route.span(),
                         format!(" missing <{}> in your args", path_component[i]),
                     )
                     .to_compile_error(),
@@ -206,7 +206,7 @@ fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
             if i >= path_component.len() || path_component[i] != args[i] {
                 return Some(
                     syn::Error::new(
-                        route.span().clone(),
+                        route.span(),
                         format!(" missing <{}> in your route", args[i]),
                     )
                     .to_compile_error(),
@@ -220,7 +220,7 @@ fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
 pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
     let args = generate_from_httprequest_list(&mut f.sig.inputs);
     if let Some(err) = check(&route, &args) {
-        return err.into();
+        return err;
     }
 
     let name = f.sig.ident.to_string();

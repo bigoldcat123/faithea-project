@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    usize,
 };
 
 use bytes::Bytes;
 
-use crate::{TryConvertFrom, map_str, request::HttpRequest};
+use crate::{TryConvertFrom, map_str, request::{HttpRequest, RequestBody}};
 
 pub type MultipartDataMap = HashMap<String, Vec<Part>>;
 
@@ -44,11 +43,10 @@ impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
 
-impl<T: TryFrom<Part,Error = String>> TryConvertFrom<Vec<Part>> for T {
+impl<T: TryFrom<Part, Error = String>> TryConvertFrom<Vec<Part>> for T {
     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, String> {
         if let Some(value) = value.pop() {
-            value
-                .try_into()
+            value.try_into()
         } else {
             Err("there is no data in multipart map".to_string())
         }
@@ -112,16 +110,16 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
     }
 }
 
-impl<'a, T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
+impl<T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     type Error = String;
     fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
         match (&req.body, get_multipart_boundary(req)) {
-            (Some(body), Some(boundary)) => {
+            (Some(RequestBody::Simple(body)), Some(boundary)) => {
                 let mut data = HashMap::new();
                 parse_multipart_to_map(&body[boundary.len() + 2..], boundary.as_bytes(), &mut data);
-                return Ok(Multipart(T::try_from_multipart_data_map(&mut data)?));
+                 Ok(Multipart(T::try_from_multipart_data_map(&mut data)?))
             }
-            _ => return Err("no boundary".into()),
+            _ =>  Err("no boundary".into()),
         }
     }
 }
@@ -181,33 +179,32 @@ fn process_multipart_header<'a>(
     file_name: &mut Option<String>,
     mime_type: &mut Option<String>,
 ) {
-    if let Ok(h) = str::from_utf8(header_line) {
-        if let Some((k, v)) = h.split_once(":") {
-            if k.eq_ignore_ascii_case("Content-Disposition") {
-                for kv in v.split(";") {
-                    if let Some((k, v)) = kv.split_once("=") {
-                        if k.trim() == "name" {
-                            *name = &v[1..v.len() - 1];
-                        }
-                        if k.trim() == "filename" {
-                            *file_name = Some(v[1..v.len() - 1].to_string())
-                        }
+    if let Ok(h) = str::from_utf8(header_line)
+        && let Some((k, v)) = h.split_once(":")
+    {
+        if k.eq_ignore_ascii_case("Content-Disposition") {
+            for kv in v.split(";") {
+                if let Some((k, v)) = kv.split_once("=") {
+                    if k.trim() == "name" {
+                        *name = &v[1..v.len() - 1];
+                    }
+                    if k.trim() == "filename" {
+                        *file_name = Some(v[1..v.len() - 1].to_string())
                     }
                 }
-            } else if k.eq_ignore_ascii_case("Content-Type") {
-                *mime_type = Some(v.trim().to_string())
             }
+        } else if k.eq_ignore_ascii_case("Content-Type") {
+            *mime_type = Some(v.trim().to_string())
         }
     }
 }
 
 fn get_multipart_boundary(req: &HttpRequest) -> Option<String> {
-    if let Some(b) = req.headers.get("content-type") {
-        if let Some((_, b)) = b.split_once(";") {
-            if let Some((_, b)) = b.split_once("=") {
-                return Some(format!("--{}", b));
-            }
-        }
+    if let Some(b) = req.headers.get("content-type")
+        && let Some((_, b)) = b.split_once(";")
+        && let Some((_, b)) = b.split_once("=")
+    {
+        return Some(format!("--{}", b));
     }
     None
 }

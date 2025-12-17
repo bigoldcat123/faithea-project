@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::route::Route;
 
-
 #[derive(Debug, Default)]
 pub struct PathParam {
     pub(crate) _inner: HashMap<String, String>,
@@ -11,18 +10,18 @@ impl PathParam {
     pub fn get<S: AsRef<str>>(&self, key: S) -> Option<&String> {
         self._inner.get(key.as_ref())
     }
-    pub(crate) fn try_from_route(handler_route: &Route, incoming_route: &Route) -> Result<Self, String> {
+    pub(crate) fn try_from_route(
+        handler_route: &Route,
+        incoming_route: &Route,
+    ) -> Result<Self, String> {
         use crate::route::RouteComponent::*;
         let mut _inner = HashMap::new();
         if handler_route.r.len() != incoming_route.r.len() {
             return Err("route len not match!".to_string());
         }
         for cmp in handler_route.r.iter().zip(incoming_route.r.iter()) {
-            match cmp {
-                (PathParam(p), Exact(v)) => {
-                    _inner.insert(p.to_string(), v.to_string());
-                }
-                _ => {}
+            if let (PathParam(p), Exact(v)) = cmp {
+                _inner.insert(p.to_string(), v.to_string());
             }
         }
         if _inner.is_empty() {
@@ -32,7 +31,6 @@ impl PathParam {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -56,5 +54,4 @@ mod tests {
         assert_eq!(a, "chenzhonghai");
         assert_eq!(age, "22");
     }
-
 }

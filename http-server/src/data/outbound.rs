@@ -48,7 +48,7 @@ impl HttpResponseModifier for &str {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res.add_header(("content-type".to_string(), "text/plain".to_string()));
-            res.add_header(("content-length".to_string(), self.as_bytes().len().to_string()));
+            res.add_header(("content-length".to_string(), self.len().to_string()));
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
             res.set_body(ResponseBody::Simple(b));
             Ok(())
@@ -62,7 +62,7 @@ impl HttpResponseModifier for String {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res.add_header(("content-type".to_string(), "text/plain".to_string()));
-            res.add_header(("content-length".to_string(), self.as_bytes().len().to_string()));
+            res.add_header(("content-length".to_string(), self.len().to_string()));
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
             res.set_body(ResponseBody::Simple(b));
             Ok(())

@@ -16,7 +16,7 @@ use crate::{
     response::HttpResponse,
     route::Route,
 };
-
+pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
 pub struct HttpServerBuilder {
     handlers: HandlerTire,
     guards: GuardTire,
@@ -36,7 +36,7 @@ impl HttpServerBuilder {
     pub fn mount(
         mut self,
         pre_fix: &'static str,
-        handlers: Vec<Box<dyn Fn(&mut HandlerTire, &str)>>,
+        handlers: Vec<HandlerModifier>,
     ) -> Self {
         self.handlers.mount(pre_fix, handlers);
         self

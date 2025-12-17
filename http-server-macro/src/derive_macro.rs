@@ -1,14 +1,12 @@
-
 use proc_macro::TokenStream;
-use syn::{Data, DeriveInput, Error, Fields, Type};
 use quote::quote;
-
+use syn::{Data, DeriveInput, Error, Fields, Type};
 
 fn is_option(ty: &Type) -> bool {
-    if let Type::Path(p) = ty {
-        if let Some(seg) = p.path.segments.last() {
-            return seg.ident == "Option";
-        }
+    if let Type::Path(p) = ty
+        && let Some(seg) = p.path.segments.last()
+    {
+        return seg.ident == "Option";
     }
     false
 }
@@ -22,7 +20,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             return Err(Error::new_spanned(
                 input,
                 "MultipartData can only be derived for structs",
-            ))
+            ));
         }
     };
 
@@ -32,7 +30,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             return Err(Error::new_spanned(
                 fields,
                 "MultipartData only supports named fields",
-            ))
+            ));
         }
     };
 

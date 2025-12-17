@@ -4,7 +4,7 @@ use crate::{
     regulate_url_path,
     request::{HttpRequest, method::Method},
     response::HttpResponse,
-    route::{Route, RouteComponent},
+    route::{Route, RouteComponent}, server::HandlerModifier,
 };
 
 pub type Fu = Box<
@@ -28,10 +28,10 @@ impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
     /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
     ///
-    pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<Box<dyn Fn(&mut Self, &str)>>) {
-        let pre_fix = if pre_fix.ends_with("/") {
-            &pre_fix[..pre_fix.len() - 1]
-        } else {
+    pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) {
+        let pre_fix = if let Some(pre_fix) = pre_fix.strip_suffix("/") {
+            pre_fix
+        }else {
             pre_fix
         };
         for m in handlers {
