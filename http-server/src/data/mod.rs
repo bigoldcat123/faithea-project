@@ -11,7 +11,7 @@ pub mod outbound;
 #[derive(Serialize, Debug)]
 pub struct Json<T>(pub T);
 
-impl <'a,T:Deserialize<'a>> TryFrom<&'a  HttpRequest> for Json<T> {
+impl <'a,T:Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
     type Error = String;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
         if let Some(RequestBody::Simple(body)) = value.body.as_ref() {
@@ -21,7 +21,16 @@ impl <'a,T:Deserialize<'a>> TryFrom<&'a  HttpRequest> for Json<T> {
         }
     }
 }
-
+impl <'a,T:Deserialize<'a>> TryFrom<&'a mut HttpRequest> for Json<T> {
+    type Error = String;
+    fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
+        if let Some(RequestBody::Simple(body)) = value.body.as_ref() {
+            Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(map_str!())?))
+        }else {
+            Err("Json parsing error!".to_string())
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;

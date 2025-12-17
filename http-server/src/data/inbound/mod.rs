@@ -23,9 +23,18 @@ impl <T> DerefMut for FromRequest<T> {
         &mut self.0
     }
 }
+// deprecate
 impl <'a,T:TryFrom::<&'a HttpRequest> + 'a> TryFrom<&'a HttpRequest> for FromRequest<T> {
     type Error = String;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
+        let a:T = value.try_into().map_err(|_| "can not covert httpReques  to T".to_string())?;
+        Ok(Self(a))
+    }
+}
+
+impl <'a,T:TryFrom::<&'a mut HttpRequest> + 'a> TryFrom<&'a mut HttpRequest> for FromRequest<T> {
+    type Error = String;
+    fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
         let a:T = value.try_into().map_err(|_| "can not covert httpReques  to T".to_string())?;
         Ok(Self(a))
     }

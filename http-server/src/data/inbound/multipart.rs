@@ -5,7 +5,10 @@ use std::{
 
 use bytes::Bytes;
 
-use crate::{TryConvertFrom, map_str, request::{HttpRequest, RequestBody}};
+use crate::{
+    TryConvertFrom, map_str,
+    request::{HttpRequest, RequestBody},
+};
 
 pub type MultipartDataMap = HashMap<String, Vec<Part>>;
 
@@ -13,7 +16,7 @@ pub trait TryFromMultipartDataMap: Sized {
     fn try_from_multipart_data_map(data: &mut MultipartDataMap) -> Result<Self, String>;
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Part {
     Lit(String),
     File {
@@ -113,18 +116,17 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
 impl<T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
     type Error = String;
     fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
-        match (&req.body, get_multipart_boundary(req)) {
-            (Some(RequestBody::Simple(body)), Some(boundary)) => {
-                let mut data = HashMap::new();
-                parse_multipart_to_map(&body[boundary.len() + 2..], boundary.as_bytes(), &mut data);
-                 Ok(Multipart(T::try_from_multipart_data_map(&mut data)?))
+        match req.body.as_ref() {
+            Some(RequestBody::MultiPart( body)) => {
+                let mut body:MultipartDataMap = body.clone();
+                Ok(Multipart(T::try_from_multipart_data_map(&mut body)?))
             }
-            _ =>  Err("no boundary".into()),
+            _ => Err("no boundary".into()),
         }
     }
 }
 
-fn parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut MultipartDataMap) {
+fn  parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut MultipartDataMap) {
     let mut r = 0;
     let mut l = 0;
     while r < b.len() {

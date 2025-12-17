@@ -20,9 +20,9 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<&HttpRequest> for Stu {
+impl TryFrom<& HttpRequest> for Stu {
     type Error = String;
-    fn try_from(value: &HttpRequest) -> Result<Self, Self::Error> {
+    fn try_from(value: & HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
@@ -81,7 +81,7 @@ async fn search_param(#[search_param] name: &String, #[search_param] age: Option
 async fn fromRequest(stu: FromRequest<Stu>) {
     Json(stu.into_inner())
 }
-
+//(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     println!("HTTP server starting on http://127.0.0.1:8899");

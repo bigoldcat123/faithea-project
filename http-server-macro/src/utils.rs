@@ -27,7 +27,7 @@ impl FromHttpRequest {
             }
             Body => {
                 quote! {
-                    (&_req).try_into()?,
+                    (& _req).try_into()?,
                 }
             }
             _Shared(name) => {

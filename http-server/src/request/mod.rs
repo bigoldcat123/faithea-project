@@ -1,16 +1,25 @@
+pub mod content_type;
 pub mod cookie;
 pub mod method;
 pub mod path_param;
 pub mod search_param;
-pub mod content_type;
-use bytes::{Buf, Bytes, BytesMut};
-use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
+use bytes::{Buf, Bytes, BytesMut, buf};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::tcp::OwnedReadHalf,
+};
 
 use crate::{
     HttpHeader, TryConvertFrom,
-    data::{inbound::multipart::MultipartDataMap, outbound::StaticFile},
+    data::{
+        inbound::multipart::{MultipartDataMap, Part},
+        outbound::StaticFile,
+    },
     map_str,
-    request::{content_type::ContentType, cookie::Cookie, method::Method, path_param::PathParam, search_param::SearchParam},
+    request::{
+        content_type::ContentType, cookie::Cookie, method::Method, path_param::PathParam,
+        search_param::SearchParam,
+    },
     res_modifiers,
     response::HttpResponseModifier,
     route::{Route, RouteComponent},
@@ -59,7 +68,9 @@ impl HttpRequest {
     }
     //#[allow(unused)]
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
-        self.headers.get("cookie").map(|cookie| Cookie::from_cookie_header(cookie))
+        self.headers
+            .get("cookie")
+            .map(|cookie| Cookie::from_cookie_header(cookie))
     }
     pub fn fake() -> Self {
         let req_line = HttpReqLine::parse("POST /api/data HTTP/1.1").unwrap();
@@ -79,9 +90,11 @@ impl HttpRequest {
         {
             let mut s = vec![];
             for i in 0..incoming_route.r.len() {
-                if i >= handler_route.r.len() - 1 && let RouteComponent::Exact(ref p) = incoming_route.r[i] {
-                        s.push(p.as_str());
-                    }
+                if i >= handler_route.r.len() - 1
+                    && let RouteComponent::Exact(ref p) = incoming_route.r[i]
+                {
+                    s.push(p.as_str());
+                }
             }
             self.multi_seg_param = Some(s.join("/"))
         }
@@ -188,24 +201,194 @@ pub async fn parse_body_frame2(
     let content_type = ContentType::try_from(headers)?;
     match content_type {
         ApplicationJson => parse_simple_body(r, buf, len).await,
-        MultipartFormData(boundary) => {
-            parse_multipart_body(r, buf, len, boundary).await
-        },
+        MultipartFormData(boundary) => parse_multipart_body(r, buf, len, boundary).await,
         _ => parse_simple_body(r, buf, len).await,
     }
 }
 async fn parse_multipart_body(
-    _r: &mut OwnedReadHalf,
-    _buf: &mut BytesMut,
-    _len: usize,
-    _boundary: &str,
+    r: &mut OwnedReadHalf,
+    buf: &mut BytesMut,
+    len: usize,
+    boundary: &str,
 ) -> Result<RequestBody, String> {
-    let  map = MultipartDataMap::new();
+    let mut map = MultipartDataMap::new();
+    let boundary_len = boundary.len();
+    let mut readed = 0;
     // remove pre_fix
+    while buf.len() < boundary.len() + 2 {
+        let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+        if read_len == 0 {
+            return Err("Unexpected EOF".to_string());
+        }
+    }
+    if &buf[..2] != b"--"
+        || &buf[2..2 + boundary.len()] != boundary.as_bytes()
+        || &buf[2 + boundary.len()..2 + boundary.len() + 2] != b"\r\n"
+    {
+        return Err("Invalid boundary".to_string());
+    }
+    buf.advance(2 + boundary_len + 2);
+    readed += 2 + boundary_len + 2;
+
+    while readed < len {
+        if buf.len() < (boundary.len() + 6)  {
+            // println!("哈哈哈 {:?}",buf);
+
+            let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+            if read_len == 0 {
+                return Err("Unexpected EOF".to_string());
+            }
+            continue;
+        }
+        let (is_ok, header_len) = check_mutipart_header(&buf);
+        let mut name = String::new();
+        let mut file_name = None;
+        let mut mime_type = None;
+        if is_ok {
+            readed += header_len;
+            let b = buf.split_to(header_len);
+            let b = str::from_utf8(&b).map_err(map_str!())?;
+            for l in b.split("\r\n") {
+                if !l.is_empty() {
+                    process_multipart_header(l, &mut name, &mut file_name, &mut mime_type);
+                }
+            }
+        } else {
+            let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+            if read_len == 0 {
+                return Err("Unexpected EOF".to_string());
+            }
+            continue;
+        }
+        if file_name.is_some() || mime_type.is_some() {
+            let path = format!("/Users/dadigua/Desktop/graduation/temp{}", rand::random::<u64>());
+            let mut f = tokio::fs::File::create(&path).await.map_err(|x| {
+                x.to_string()
+            })?;
+
+            loop {
+                while buf.len() < boundary.len() + 7 {
+                    let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+                    if read_len == 0 {
+                        return Err("Unexpected EOF".to_string());
+                    }
+                }
+                // println!("2-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
+                let (is_ended, len) = check_body_end(buf, boundary);
+                if is_ended {
+                    let mut b = buf.split_to(len);
+                    f.write_buf(&mut b).await.map_err(map_str!())?;
+                    // /r/n --boundary /r/n => 2 + 2 + 2 + len
+                    let _ = buf.split_to(boundary_len + 2 + 2 + 2);
+                    readed += boundary_len + 2 + 2 + 2;
+                    readed += len;
+                    break;
+                } else {
+                    let mut b = buf.split_to(buf.len() - boundary.len() - 6);
+                    readed += b.len();
+                    println!("{}",b.len());
 
 
+                    f.write_buf(&mut b).await.map_err(map_str!())?;
+                }
+            }
+            //delete file
+            std::fs::remove_file(&path).unwrap();
+            let a = Bytes::from_iter(path.as_bytes().iter().copied());
+            map.entry(name.to_string()).or_default().push(Part::File {
+                file_name,
+                data: a,
+                mime_type,
+            });
+        } else {
+            let mut simple_body = BytesMut::new();
+            loop {
+                while buf.len() <= boundary.len() + 6 {
+
+                    let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+                    if read_len == 0 {
+                        return Err("Unexpected EOF".to_string());
+                    }
+                }
+                // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
+                let (is_ended, len) = check_body_end(buf, boundary);
+                if is_ended {
+                    let b = buf.split_to(len);
+                    simple_body.extend_from_slice(&b[..]);
+                    // /r/n --boundary /r/n => 2 + 2 + 2 + len
+                    let _ = buf.split_to(boundary_len + 2 + 2 + 2);
+                    readed += boundary_len + 2 + 2 + 2;
+                    readed += len;
+                    break;
+                } else {
+                    let b = buf.split_to(buf.len() - boundary.len() - 6);
+                    readed += buf.len() - boundary.len() - 6;
+                    simple_body.extend_from_slice(&b[..]);
+                }
+            }
+            let a = simple_body.to_vec();
+            map.entry(name)
+                .or_default()
+                .push(Part::Lit(String::from_utf8(a).map_err(map_str!())?));
+        }
+        if &buf[..] == b"\r\n" && readed + 2 == len {
+            let _ = buf.split();
+            readed += 2;
+        }
+        // println!("{} {}",readed,len);
+
+    }
+    // println!("{:?}", map);
     Ok(RequestBody::MultiPart(map))
 }
+//
+fn check_body_end(buf: &mut BytesMut, boundary: &str) -> (bool, usize) {
+    for i in 0..=buf.len() - boundary.len() - 2 - 2 - 2 {
+        if &buf[i..i + 2] == b"\r\n"// 2
+            && &buf[i + 2..i + 4] == b"--"// 4
+            && &buf[i + 4..i + boundary.len() + 4] == boundary.as_bytes()// 4 +  len
+            &&( &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"\r\n"|| &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"--")
+        // 6 + len
+        {
+            return (true, i);
+        }
+    }
+    (false, 0)
+}
+
+fn process_multipart_header<'a>(
+    header_line: &'a str,
+    name: &mut String,
+    file_name: &mut Option<String>,
+    mime_type: &mut Option<String>,
+) {
+    if let Some((k, v)) = header_line.split_once(":") {
+        if k.eq_ignore_ascii_case("Content-Disposition") {
+            for kv in v.split(";") {
+                if let Some((k, v)) = kv.split_once("=") {
+                    if k.trim() == "name" {
+                        *name = v[1..v.len() - 1].to_string();
+                    }
+                    if k.trim() == "filename" {
+                        *file_name = Some(v[1..v.len() - 1].to_string())
+                    }
+                }
+            }
+        } else if k.eq_ignore_ascii_case("Content-Type") {
+            *mime_type = Some(v.trim().to_string())
+        }
+    }
+}
+
+fn check_mutipart_header(buf: &[u8]) -> (bool, usize) {
+    for i in 0..=buf.len() - 4 {
+        if &buf[i..i + 4] == b"\r\n\r\n" {
+            return (true, i + 4);
+        }
+    }
+    (false, 0)
+}
+
 async fn parse_simple_body(
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
@@ -234,7 +417,6 @@ async fn parse_line_header_frame(
             if read_len == 0 {
                 return Err("other side closed".to_string());
             }
-            println!("{:?}",buf);
             let (check_header_is_ok, position) = check_header(buf.chunk());
             if check_header_is_ok {
                 let (l, h) = parse_line_header(&buf[..position])?;

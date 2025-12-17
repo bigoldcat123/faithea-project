@@ -115,10 +115,10 @@ async fn process(
         }
     });
 
-    let mut buf = BytesMut::with_capacity(4096);
+    let mut buf = BytesMut::with_capacity(4096*100);
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
-        println!("{:?}", req);
+        // println!("{:?}", req);
 
         match guards.guard(&req.req_line.url.clone()[..], req).await {
             Ok(req) => {
