@@ -165,7 +165,7 @@ fn modify_fn_name(f: &mut ItemFn, name: &str) {
     let name = format!("{}_origin", name);
     f.sig.ident = Ident::new(&name, Span::call_site());
 }
-fn check(route: &LitStr, args: &Vec<FromHttpRequest>) -> Option<TokenStream> {
+fn check(route: &LitStr, args: &[FromHttpRequest]) -> Option<TokenStream> {
     let mut args: Vec<String> = args
         .iter()
         .filter_map(|x| {
