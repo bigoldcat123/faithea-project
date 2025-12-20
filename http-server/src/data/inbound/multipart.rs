@@ -15,19 +15,15 @@ use crate::{
 };
 
 pub type MultipartDataMap = HashMap<String, Vec<Part>>;
-
+/// macro generate!
 pub trait TryFromMultipartDataMap: Sized {
     fn try_from_multipart_data_map(data: &mut MultipartDataMap) -> Result<Self, String>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Part {
     Lit(String),
-    File {
-        file_name: Option<String>,
-        data: Bytes, // this should be the path to file
-        mime_type: Option<String>,
-    },
+    File (MultiPartFile),
 }
 macro_rules! impl_try_from_part_for_parse_from_str {
     ($($t:ty),*) => {
@@ -72,26 +68,23 @@ impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for Vec<T> {
 #[derive(Debug)]
 pub struct MultiPartFile {
     pub file_name: Option<String>,
-    pub temp_path: Bytes,
+    pub temp_path: String,
     pub mime_type: Option<String>,
 }
 
+impl Drop for MultiPartFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.temp_path.as_str());
+    }
+}
 
 
 impl TryFrom<Part> for MultiPartFile {
     type Error = String;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
-        if let Part::File {
-            file_name,
-            data,
-            mime_type,
-        } = value
+        if let Part::File(f) = value
         {
-            Ok(Self {
-                file_name,
-                temp_path: data,
-                mime_type,
-            })
+            Ok(f)
         } else {
             Err("not compatiable to transform part to MultiPartFile".to_string())
         }
@@ -119,13 +112,12 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
     }
 }
 
-impl<T: TryFromMultipartDataMap> TryFrom<&HttpRequest> for Multipart<T> {
+impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
     type Error = String;
-    fn try_from(req: &HttpRequest) -> Result<Self, Self::Error> {
-        match req.body.as_ref() {
+    fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
+        match req.body.as_mut() {
             Some(RequestBody::MultiPart(body)) => {
-                let mut body: MultipartDataMap = body.clone();
-                Ok(Multipart(T::try_from_multipart_data_map(&mut body)?))
+                Ok(Multipart(T::try_from_multipart_data_map(body)?))
             }
             _ => Err("no boundary".into()),
         }
@@ -216,7 +208,7 @@ impl<'a> MultiPartBodyParser<'a> {
     fn is_file_body(&self) -> bool {
         self.header_info.file_name.is_some() || self.header_info.mime_type.is_some()
     }
-    async fn parse_file_body(&mut self) -> Result<Bytes, String> {
+    async fn parse_file_body(&mut self) -> Result<String, String> {
         let path = format!(
             "/Users/dadigua/Desktop/graduation/temp{}",
             rand::random::<u64>()
@@ -248,9 +240,7 @@ impl<'a> MultiPartBodyParser<'a> {
             }
         }
         //delete file
-        std::fs::remove_file(&path).unwrap();
-        let a = Bytes::from_iter(path.as_bytes().iter().copied());
-        Ok(a)
+        Ok(path)
     }
 
     fn check_body_end(&self) -> (bool, usize) {
@@ -315,15 +305,15 @@ impl<'a> MultiPartBodyParser<'a> {
             .take()
             .unwrap_or("default".to_string());
         if self.is_file_body() {
-            let data = self.parse_file_body().await?;
+            let path = self.parse_file_body().await?;
             let file_name = self.header_info.file_name.take();
             let mime_type = self.header_info.mime_type.take();
             if let Some(map) = self.map.as_mut() {
-                map.entry(key_name).or_default().push(Part::File {
+                map.entry(key_name).or_default().push(Part::File (MultiPartFile {
                     file_name,
-                    data,
+                    temp_path: path,
                     mime_type,
-                });
+                    }));
             }
         } else {
             let a = self.parse_lit_body().await?;
