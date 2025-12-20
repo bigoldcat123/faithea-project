@@ -13,7 +13,7 @@ use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     request::{HttpRequest, parse_http_frame},
-    response::HttpResponse,
+    response::{HttpResponse, HttpResponseModifier},
     route::Route,
 };
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -51,7 +51,22 @@ impl HttpServerBuilder {
             .set_ip(host.parse().expect("in correct ip host eg. 0.0.0.0"));
         self
     }
-    pub fn build(self) -> HttpServer {
+    pub fn cors(mut self) -> Self {
+        self.handlers.options("/**",  |_:HttpRequest| {
+            async move {
+                let mut res = HttpResponse::new();
+                let mut c = crate::response::cookie::Cookie::default();
+                c.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
+                c.insert("Access-Control-Allow-Methods".to_string(), "GET, POST, PUT, DELETE".to_string());
+                c.insert("Access-Control-Allow-Headers".to_string(), "*".to_string());
+                c.insert("Access-Control-Allow-Credentials".to_string(), "true".to_string());
+                c.modify(&mut res).await?;
+                Ok(res)
+            }
+        });
+        self
+    }
+    pub fn build( self) -> HttpServer {
         HttpServer {
             addr: self.addr,
             handlers: Arc::new(self.handlers),
@@ -85,6 +100,7 @@ impl HttpServer {
     }
 
     pub async fn start(self) {
+
         let server = TcpListener::bind(self.addr).await.unwrap();
         loop {
             let (socket, addr) = server.accept().await.unwrap();
@@ -118,7 +134,7 @@ async fn process(
     let mut buf = BytesMut::with_capacity(4096*100);
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
-        // println!("{:?}", req);
+        println!("{:?}", req);
 
         match guards.guard(&req.req_line.url.clone()[..], req).await {
             Ok(req) => {

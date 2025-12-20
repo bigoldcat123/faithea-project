@@ -4,6 +4,7 @@ pub enum Method {
     POST,
     PUT,
     DELETE,
+    OPTIONS
 }
 impl TryFrom<&str> for Method {
     type Error = String;
@@ -13,6 +14,7 @@ impl TryFrom<&str> for Method {
             "post"      => Ok(Self::POST),
             "delete"    => Ok(Self::DELETE),
             "put"       => Ok(Self::PUT),
+            "options"    => Ok(Self::OPTIONS),
             _           => Err(format!("{} is not a method", value)),
         }
     }

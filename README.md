@@ -25,11 +25,11 @@
 -  add cookie access to request ✅
 -  add new struct `FromRequest`, anything but searchParam,pathParams,json, and multiPart showing in the args of a handler, can be parsed from request ✅
 -  optimise `ConvertFromRefString` to `TryConvertFrom` and `TryConvertInto` ✅
--  refactor multipart file.. save every part as file, and only keep the path to that file, when access the field, just read the file again and process parsing.
-    1. using fixed buff to parse the html body.
-    2. save every part to file,and keep the file name.
-    3. when access using path to access it! 
-    > things to change `TryFromMultipartDataMap` `Part`
+-  refactor multipart file.. save every part as file, and only keep the path to that file, when access the field, just read the file again and process parsing.✅
+    1. using fixed buff to parse the html body. ✅
+    2. save every part to file,and keep the file name. ✅
+    3. when access using path to access it!  ✅
+    > things to change `TryFromMultipartDataMap` `Part` ✅
 
 -  support `Option` for **searchParam** in handler args✅
 -  Error!!! No need ???❓

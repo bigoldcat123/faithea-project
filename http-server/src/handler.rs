@@ -70,6 +70,22 @@ impl HandlerTire {
         );
     }
 
+    pub fn options<F, O, P>(&mut self, url: P, f: F)
+    where
+        F: Fn(HttpRequest) -> O + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        P: AsRef<str>,
+    {
+        let url = regulate_url_path(url);
+        let mut route = Route::from(url.as_str());
+        route.r.reverse();
+        self.add_route(
+            route.r,
+            Box::new(move |r: HttpRequest| Box::pin(f(r))),
+            Method::OPTIONS,
+        );
+    }
+
     fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu, method: Method) {
         if let Some(next) = url.pop() {
             if !self.path.contains_key(&next) {

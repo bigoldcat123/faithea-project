@@ -1,3 +1,4 @@
+pub mod static_file_map;
 use std::collections::HashMap;
 
 use http_server::{data::Json, post};
