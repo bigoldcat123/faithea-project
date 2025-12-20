@@ -2,7 +2,7 @@
 use chenzhonghai_app::json;
 use chenzhonghai_app::static_file_map::file_map;
 use http_server::{
-    MultipartData, data::{
+    MultipartData, TryConvertFrom, data::{
         Json,
         inbound::{
             FromRequest,
@@ -88,14 +88,27 @@ async fn hello_world() {
 async fn cookie() {
     format!("{:?}", _req.cookies())
 }
-
+#[derive(Debug)]
+struct MyAge {
+    age:i32
+}
+impl TryConvertFrom<Option<&String>> for MyAge {
+    fn try_convert_from(value: Option<&String>) -> Result<Self, FuError> {
+        if let Some(value) = value {
+            let a = value.parse::<i32>().map_err(|e| Box::new(e.to_string()) as FuError)?;
+            Ok(Self { age: a })
+        }else {
+            Err(Box::new("e") as FuError)
+        }
+    }
+}
 #[get("/pathParam/{name}/{age}")]
-async fn pathParam(name: String, age: i32) {
-    format!("name is {}, age is {}", name, age)
+async fn pathParam(name: String, age: MyAge) {
+    format!("name is {}, age is {:?}", name, age)
 }
 
 #[get("/searchParam")]
-async fn search_param(#[search_param] name: &String, #[search_param] age: Option<i32>) {
+async fn search_param(#[search_param] name: &String, #[search_param] age: Option<MyAge>) {
     format!("name is {} and age is {:?}", name, age)
 }
 

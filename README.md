@@ -32,7 +32,7 @@
     > things to change `TryFromMultipartDataMap` `Part` ✅
 
 -  support `Option` for **searchParam** in handler args✅
--  Error!!! No need ???❓
+-  Error!!! ✅
 -  add vec support for multipart ✅
 
 
@@ -183,7 +183,7 @@ async fn fromRequest(stu:FromRequest<Stu>) {
 1. make your type **compatible** with searchParam and **pathParam**
 ```rust
 impl TryConvertFrom<Option<&String>> for String {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, String> {
+    fn try_convert_from(value: Option<&String>) -> Result<Self, FuError> {
         if let Some(value) = value {
             Ok(value.to_string())
         } else {
@@ -199,13 +199,13 @@ pub trait HttpResponseModifier {
     fn modify<'a>(
         &'a self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>>;
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>>;
 }
 impl HttpResponseModifier for MyStruct {
     fn modify<'a>(
         &'a self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             /// your code to modify response
             Ok(())
@@ -227,7 +227,7 @@ struct A{
 
 }
 impl TryFrom<Part> for A {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
         Ok(Self{})
     }
