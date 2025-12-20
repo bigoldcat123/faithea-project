@@ -72,9 +72,11 @@ impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for Vec<T> {
 #[derive(Debug)]
 pub struct MultiPartFile {
     pub file_name: Option<String>,
-    pub data: Bytes,
+    pub temp_path: Bytes,
     pub mime_type: Option<String>,
 }
+
+
 
 impl TryFrom<Part> for MultiPartFile {
     type Error = String;
@@ -87,7 +89,7 @@ impl TryFrom<Part> for MultiPartFile {
         {
             Ok(Self {
                 file_name,
-                data,
+                temp_path: data,
                 mime_type,
             })
         } else {
@@ -229,7 +231,9 @@ impl<'a> MultiPartBodyParser<'a> {
                     return Err("Unexpected EOF".to_string());
                 }
             }
+            // let (is_ended, len) = check_body_end(self.buf,&self.boundary_with_prefix,&self.boundary_with_prefix_next);
             let (is_ended, len) = self.check_body_end();
+
             if is_ended {
                 let mut b = self.buf.split_to(len);
                 f.write_buf(&mut b).await.map_err(map_str!())?;
@@ -282,6 +286,7 @@ impl<'a> MultiPartBodyParser<'a> {
                 }
             }
             // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
+            // let (is_ended, len) = check_body_end(self.buf,&self.boundary_with_prefix,&self.boundary_with_prefix_next);
             let (is_ended, len) = self.check_body_end();
             if is_ended {
                 let b = self.buf.split_to(len);
@@ -419,249 +424,6 @@ impl<'a> MultiPartBodyParser<'a> {
         Ok(())
     }
 }
-
-// async fn remove_mutipart_body_prefix(
-//     r: &mut OwnedReadHalf,
-//     buf: &mut BytesMut,
-//     boundary: &str,
-//     readed: &mut usize,
-// ) -> Result<(), String> {
-//     let boundary_len = boundary.len();
-//     // remove pre_fix
-//     while buf.len() < boundary.len() + 2 {
-//         let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-//         if read_len == 0 {
-//             return Err("Unexpected EOF".to_string());
-//         }
-//     }
-//     if &buf[..2] != b"--"
-//         || &buf[2..2 + boundary.len()] != boundary.as_bytes()
-//         || &buf[2 + boundary.len()..2 + boundary.len() + 2] != b"\r\n"
-//     {
-//         return Err("Invalid boundary".to_string());
-//     }
-//     buf.advance(2 + boundary_len + 2);
-//     *readed += 2 + boundary_len + 2;
-//     Ok(())
-// }
-// async fn get_name_filename_mimetype(
-//     r: &mut OwnedReadHalf,
-//     buf: &mut BytesMut,
-//     readed: &mut usize,
-// ) -> Result<(String, Option<String>, Option<String>), String> {
-//     let header_len;
-//     loop {
-//         let (inner_is_ok, inner_header_len) = check_mutipart_header(buf);
-//         if inner_is_ok {
-//             header_len = inner_header_len;
-//             break;
-//         }
-//         let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-//         if read_len == 0 {
-//             return Err("Unexpected EOF".to_string());
-//         }
-//     }
-//     let mut name = String::new();
-//     let mut file_name = None;
-//     let mut mime_type = None;
-//     *readed += header_len;
-//     let b = buf.split_to(header_len);
-//     let b = str::from_utf8(&b).map_err(map_str!())?;
-//     for l in b.split("\r\n") {
-//         if !l.is_empty() {
-//             process_multipart_header(l, &mut name, &mut file_name, &mut mime_type);
-//         }
-//     }
-//     Ok((name, file_name, mime_type))
-// }
-// async fn read_file_body(
-//     r: &mut OwnedReadHalf,
-//     buf: &mut BytesMut,
-//     readed: &mut usize,
-//     boundary: &str,
-//     boundary_with_prefix: &str,
-//     boundary_with_prefix_next: &[usize],
-// ) -> Result<Bytes, String> {
-//     let path = format!(
-//         "/Users/dadigua/Desktop/graduation/temp{}",
-//         rand::random::<u64>()
-//     );
-//     let mut f = tokio::fs::File::create(&path)
-//         .await
-//         .map_err(|x| x.to_string())?;
-//     loop {
-//         while buf.len() < boundary.len() + 7 {
-//             let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-//             if read_len == 0 {
-//                 return Err("Unexpected EOF".to_string());
-//             }
-//         }
-//         let (is_ended, len) = check_body_end(buf, boundary_with_prefix, &boundary_with_prefix_next);
-//         if is_ended {
-//             let mut b = buf.split_to(len);
-//             f.write_buf(&mut b).await.map_err(map_str!())?;
-//             let _ = buf.split_to(boundary.len() + 2 + 2 + 2);
-//             *readed += boundary.len() + 2 + 2 + 2;
-//             *readed += len;
-//             break;
-//         } else {
-//             let mut b = buf.split_to(buf.len() - boundary.len() - 6);
-//             *readed += b.len();
-//             f.write_buf(&mut b).await.map_err(map_str!())?;
-//         }
-//     }
-//     //delete file
-//     std::fs::remove_file(&path).unwrap();
-//     let a = Bytes::from_iter(path.as_bytes().iter().copied());
-//     Ok(a)
-// }
-// pub async fn parse_multipart_body(
-//     r: &mut OwnedReadHalf,
-//     buf: &mut BytesMut,
-//     len: usize,
-//     boundary: &str,
-// ) -> Result<RequestBody, String> {
-//     let mut map = MultipartDataMap::new();
-//     let boundary_len = boundary.len();
-//     let mut readed = 0;
-//     // remove pre_fix
-//     remove_mutipart_body_prefix(r, buf, boundary, &mut readed).await?;
-
-//     let boundary_with_prefix = format!("\r\n--{boundary}");
-//     let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
-
-//     while readed < len {
-//         let (name, file_name, mime_type) = get_name_filename_mimetype(r, buf, &mut readed).await?;
-
-//         if file_name.is_some() || mime_type.is_some() {
-//             let data = read_file_body(
-//                 r,
-//                 buf,
-//                 &mut readed,
-//                 boundary,
-//                 &boundary_with_prefix,
-//                 &boundary_with_prefix_next,
-//             )
-//             .await?;
-//             map.entry(name.to_string()).or_default().push(Part::File {
-//                 file_name,
-//                 data,
-//                 mime_type,
-//             });
-//         } else {
-//             let mut simple_body = BytesMut::new();
-//             loop {
-//                 while buf.len() <= boundary.len() + 6 {
-//                     let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-//                     if read_len == 0 {
-//                         return Err("Unexpected EOF".to_string());
-//                     }
-//                 }
-//                 // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
-//                 let (is_ended, len) = check_body_end(
-//                     buf,
-//                     boundary_with_prefix.as_str(),
-//                     &boundary_with_prefix_next,
-//                 );
-//                 if is_ended {
-//                     let b = buf.split_to(len);
-//                     simple_body.extend_from_slice(&b[..]);
-//                     // /r/n --boundary /r/n => 2 + 2 + 2 + len
-//                     let _ = buf.split_to(boundary_len + 2 + 2 + 2);
-//                     readed += boundary_len + 2 + 2 + 2;
-//                     readed += len;
-//                     break;
-//                 } else {
-//                     let b = buf.split_to(buf.len() - boundary.len() - 6);
-//                     readed += buf.len() - boundary.len() - 6;
-//                     simple_body.extend_from_slice(&b[..]);
-//                 }
-//             }
-//             let a = simple_body.to_vec();
-//             map.entry(name)
-//                 .or_default()
-//                 .push(Part::Lit(String::from_utf8(a).map_err(map_str!())?));
-//         }
-//         if &buf[..] == b"\r\n" && readed + 2 == len {
-//             let _ = buf.split();
-//             readed += 2;
-//         }
-//     }
-//     Ok(RequestBody::MultiPart(map))
-// }
-
-// fn check_body_end(
-//     buf: &mut BytesMut,
-//     boundary_with_prefix: &str,
-//     boundary_with_prefix_next: &[usize],
-// ) -> (bool, usize) {
-//     let boundary_with_prefix = boundary_with_prefix.as_bytes();
-
-//     let mut i = 0;
-//     let mut j = 0;
-//     while i < buf.len() {
-//         if boundary_with_prefix[j] == buf[i] {
-//             i += 1;
-//             j += 1;
-//         } else if j > 0 {
-//             j = boundary_with_prefix_next[j - 1];
-//         } else {
-//             i += 1;
-//         }
-//         if j == boundary_with_prefix.len()
-//             && i + 1 < buf.len()
-//             && ((buf[i] == b'\r' && buf[i + 1] == b'\n') || (buf[i] == b'-' && buf[i + 1] == b'-'))
-//         {
-//             return (true, i - boundary_with_prefix.len());
-//         }
-//     }
-//     (false, 0)
-// }
-
-// fn process_multipart_header(
-//     header_line: &str,
-//     name: &mut String,
-//     file_name: &mut Option<String>,
-//     mime_type: &mut Option<String>,
-// ) {
-//     if let Some((k, v)) = header_line.split_once(":") {
-//         if k.eq_ignore_ascii_case("Content-Disposition") {
-//             for kv in v.split(";") {
-//                 if let Some((k, v)) = kv.split_once("=") {
-//                     if k.trim() == "name" {
-//                         *name = v[1..v.len() - 1].to_string();
-//                     }
-//                     if k.trim() == "filename" {
-//                         *file_name = Some(v[1..v.len() - 1].to_string())
-//                     }
-//                 }
-//             }
-//         } else if k.eq_ignore_ascii_case("Content-Type") {
-//             *mime_type = Some(v.trim().to_string())
-//         }
-//     }
-// }
-
-// fn check_mutipart_header(buf: &[u8]) -> (bool, usize) {
-//     let next = [0, 0, 1, 0];
-//     let p = b"\r\n\r\n";
-//     let mut i = 0;
-//     let mut j = 0_usize;
-//     while i < buf.len() {
-//         if buf[i] == p[j] {
-//             i += 1;
-//             j += 1;
-//         } else if j > 0 {
-//             j = next[j - 1];
-//         } else {
-//             i += 1;
-//         }
-//         if j == 4 {
-//             return (true, i);
-//         }
-//     }
-//     (false, 0)
-// }
 
 fn build_boundary_next_array(boundary: &[u8]) -> Vec<usize> {
     let mut ans = vec![0; boundary.len()];

@@ -14,6 +14,7 @@ use http_server::{
     server::HttpServer,
 };
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
@@ -48,12 +49,19 @@ struct StuInfo {
 
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
+
+    let p = str::from_utf8(&data.profile.temp_path).unwrap();
+    let mut f = tokio::fs::File::open(p).await.unwrap();
+    let mut s = String::new();
+    f.read_to_string(&mut s).await.unwrap();
+    println!("{}",s);
+
     format!(
         "name: {:?},age: {}, merried: {:?}, profile_len: {}, profile_name:{:?}",
         data.name,
         data.age,
         data.merried,
-        data.profile.data.len(),
+        data.profile.temp_path.len(),
         data.profile.file_name
     )
 }
