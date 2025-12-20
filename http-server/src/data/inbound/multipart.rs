@@ -23,7 +23,7 @@ pub trait TryFromMultipartDataMap: Sized {
 #[derive(Debug)]
 pub enum Part {
     Lit(String),
-    File (MultiPartFile),
+    File(MultiPartFile),
 }
 macro_rules! impl_try_from_part_for_parse_from_str {
     ($($t:ty),*) => {
@@ -78,12 +78,10 @@ impl Drop for MultiPartFile {
     }
 }
 
-
 impl TryFrom<Part> for MultiPartFile {
     type Error = String;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
-        if let Part::File(f) = value
-        {
+        if let Part::File(f) = value {
             Ok(f)
         } else {
             Err("not compatiable to transform part to MultiPartFile".to_string())
@@ -208,12 +206,18 @@ impl<'a> MultiPartBodyParser<'a> {
     fn is_file_body(&self) -> bool {
         self.header_info.file_name.is_some() || self.header_info.mime_type.is_some()
     }
-    async fn parse_file_body(&mut self) -> Result<String, String> {
-        let path = format!(
-            "/Users/dadigua/Desktop/graduation/temp{}",
-            rand::random::<u64>()
-        );
-        let mut f = tokio::fs::File::create(&path)
+    async fn parse_file_body(&mut self) -> Result<MultiPartFile, String> {
+        let file_name = self.header_info.file_name.take();
+        let mime_type = self.header_info.mime_type.take();
+        let multipart_file = MultiPartFile {
+            temp_path: format!(
+                "/Users/dadigua/Desktop/graduation/temp{}",
+                rand::random::<u64>()
+            ),
+            file_name,
+            mime_type,
+        };
+        let mut f = tokio::fs::File::create(&multipart_file.temp_path)
             .await
             .map_err(|x| x.to_string())?;
         loop {
@@ -240,7 +244,7 @@ impl<'a> MultiPartBodyParser<'a> {
             }
         }
         //delete file
-        Ok(path)
+        Ok(multipart_file)
     }
 
     fn check_body_end(&self) -> (bool, usize) {
@@ -305,15 +309,11 @@ impl<'a> MultiPartBodyParser<'a> {
             .take()
             .unwrap_or("default".to_string());
         if self.is_file_body() {
-            let path = self.parse_file_body().await?;
-            let file_name = self.header_info.file_name.take();
-            let mime_type = self.header_info.mime_type.take();
+            let multipart_file = self.parse_file_body().await?;
             if let Some(map) = self.map.as_mut() {
-                map.entry(key_name).or_default().push(Part::File (MultiPartFile {
-                    file_name,
-                    temp_path: path,
-                    mime_type,
-                    }));
+                map.entry(key_name)
+                    .or_default()
+                    .push(Part::File(multipart_file));
             }
         } else {
             let a = self.parse_lit_body().await?;
