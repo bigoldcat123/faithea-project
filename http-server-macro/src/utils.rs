@@ -110,7 +110,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
     let ipt_args = args.into_iter().map(FromHttpRequest::into_token_stream);
     let inner_handler_name = &f.sig.ident;
     quote! {
-        async fn #new_fn_name(mut _req: http_server::request::HttpRequest) -> Result<http_server::response::HttpResponse, String> {
+        async fn #new_fn_name(mut _req: http_server::request::HttpRequest) -> Result<http_server::response::HttpResponse, http_server::handler::FuError> {
             use  http_server::request::ConvertFromRefString;
             use  http_server::response::HttpResponseModifier;
 

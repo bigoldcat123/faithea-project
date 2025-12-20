@@ -10,11 +10,7 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire,
-    handler::HandlerTire,
-    request::{HttpRequest, parse_http_frame},
-    response::{HttpResponse, HttpResponseModifier},
-    route::Route,
+    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, parse_http_frame}, response::{HttpResponse, HttpResponseModifier}, route::Route
 };
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
 pub struct HttpServerBuilder {
@@ -100,7 +96,6 @@ impl HttpServer {
     }
 
     pub async fn start(self) {
-
         let server = TcpListener::bind(self.addr).await.unwrap();
         loop {
             let (socket, addr) = server.accept().await.unwrap();
@@ -126,12 +121,12 @@ async fn process(
 
     // Spawn writer task that consumes responses from the channel and writes them to the socket
     tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            message.serialize_to_socket(&mut writer).await;
+        while let Some(response) = rx.recv().await {
+            response.serialize_to_socket(&mut writer).await;
         }
     });
 
-    let mut buf = BytesMut::with_capacity(4096*100);
+    let mut buf = BytesMut::with_capacity(4096*100);// 4KB
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
         // println!("{:?}", req);
@@ -162,8 +157,13 @@ async fn handle_request(
             Ok(res) => {
                 let _ = tx.send(res).await;
             }
-            Err(_s) => {
-                let _ = tx.send(HttpResponse::error(_s)).await;
+            Err(mut err) => {
+                let mut response = HttpResponse::new();
+                if let Ok(_) = err.modify(&mut response).await {
+                    let _ = tx.send(response).await;
+                }else {
+                    let _ = tx.send(HttpResponse::not_found()).await;
+                }
             }
         }
     } else {

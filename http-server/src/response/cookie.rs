@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::{Deref, DerefMut}};
 
-use crate::response::HttpResponseModifier;
+use crate::{handler::FuError, response::HttpResponseModifier};
 
 #[derive(Debug, Default)]
 pub struct Cookie {
@@ -23,7 +23,7 @@ impl HttpResponseModifier for Cookie {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut super::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for (k,v) in self._innser.drain() {
                 res.headers.add(k,v);

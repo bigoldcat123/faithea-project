@@ -4,22 +4,23 @@ use bytes::Bytes;
 use serde::Serialize;
 
 use crate::{
-    data::Json,
-    map_str,
-    response::{HttpResponseModifier, ResponseBody},
+    data::Json, handler::FuError, res_modifiers, response::{HttpResponseModifier, ResponseBody}
 };
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: &Json<T>) -> Result<Self, Self::Error> {
-        let res = serde_json::to_vec(value).map_err(map_str!())?;
+        let res = serde_json::to_vec(value).map_err(|x| {
+            let err:Self::Error = Box::new(x.to_string());
+            err
+        })?;
         Ok(Self::Simple(Bytes::from(res)))
     }
 }
 impl<T: Serialize> TryFrom<&mut Json<T>> for ResponseBody {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: &mut Json<T>) -> Result<Self, Self::Error> {
-        let res = serde_json::to_vec(value).map_err(map_str!())?;
-        Ok(Self::Simple(Bytes::from(res)))
+        let im_ref = &(*value);
+        im_ref.try_into()
     }
 }
 
@@ -27,7 +28,7 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             use ResponseBody::*;
             res.add_header(("content-type".to_string(), "application/json".to_string()));
@@ -45,7 +46,7 @@ impl HttpResponseModifier for &str {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(("content-length".to_string(), self.len().to_string()));
@@ -59,7 +60,7 @@ impl HttpResponseModifier for String {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(("content-length".to_string(), self.len().to_string()));
@@ -77,12 +78,19 @@ impl <T:AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            let f = tokio::fs::File::open(self.0.as_ref()).await.map_err(map_str!())?;
-            let meta = f.metadata().await.map_err(map_str!())?;
+            let f = tokio::fs::File::open(self.0.as_ref()).await.map_err(|x| {
+                let err:FuError = Box::new(res_modifiers!(x.to_string()));
+                err
+            })?;
+            let meta = f.metadata().await.map_err(|x| {
+                let err:FuError = Box::new(res_modifiers!(x.to_string()));
+                err
+            })?;
             if !meta.is_file() {
-                return Err(format!("{:?} is not a File!!",self.0.as_ref()));
+                let err:FuError = Box::new( res_modifiers!(format!("{:?} is not a File!!",self.0.as_ref())));
+                return Err(err);
             }
 
             let len = meta.len();

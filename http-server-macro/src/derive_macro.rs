@@ -53,7 +53,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             quote! {
                 #field_ident: data
                     .remove(#field_name)
-                    .ok_or_else(|| format!("missing field `{}`", #field_name))?
+                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as http_server::handler::FuError)?
                     .try_convert_into()?
             }
         }
@@ -66,7 +66,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
                     String,
                     Vec<http_server::data::inbound::multipart::Part>,
                 >,
-            ) -> Result<Self, String> {
+            ) -> Result<Self, http_server::handler::FuError> {
                 use http_server::TryConvertInto;
                 Ok(Self {
                     #(#assigns,)*

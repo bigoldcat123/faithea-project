@@ -3,15 +3,15 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use crate::{
     regulate_url_path,
     request::{HttpRequest, method::Method},
-    response::HttpResponse,
+    response::{HttpResponse, HttpResponseModifier},
     route::{Route, RouteComponent}, server::HandlerModifier,
 };
-
+pub type FuError = Box<dyn HttpResponseModifier + Send + Sync>;
 pub type Fu = Box<
     dyn Fn(
             HttpRequest,
         )
-            -> Pin<Box<dyn Future<Output = Result<HttpResponse, String>> + Send + Sync + 'static>>
+            -> Pin<Box<dyn Future<Output = Result<HttpResponse, FuError>> + Send + Sync + 'static>>
         + Send
         + Sync
         + 'static,
@@ -42,7 +42,7 @@ impl HandlerTire {
     pub fn get<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -57,7 +57,7 @@ impl HandlerTire {
     pub fn post<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -73,7 +73,7 @@ impl HandlerTire {
     pub fn options<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, String>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -170,10 +170,10 @@ impl HandlerTire {
 }
 #[cfg(test)]
 mod test {
-    use crate::{handler::HandlerTire, request::HttpRequest, response::HttpResponse};
+    use crate::{handler::{FuError, HandlerTire}, request::HttpRequest, response::HttpResponse};
 
     /// Test handler that returns a default response.
-    async fn test_handler(_: HttpRequest) -> Result<HttpResponse, String> {
+    async fn test_handler(_: HttpRequest) -> Result<HttpResponse, FuError> {
         Ok(HttpResponse::new())
     }
 

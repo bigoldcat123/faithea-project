@@ -8,7 +8,7 @@ use http_server::{
             FromRequest,
             multipart::{MultiPartFile, Multipart, Part},
         },
-    }, get, handlers, post, request::{HttpRequest, search_param}, res_modifiers, response, server::HttpServer
+    }, get, handler::FuError, handlers, post, request::{HttpRequest, search_param}, res_modifiers, response, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -19,7 +19,7 @@ struct Stu {
     age: i32,
 }
 impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
@@ -32,14 +32,14 @@ struct A {
     value:String
 }
 impl TryFrom<Part> for A {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
         if let Part::Lit(s) = value {
             Ok(Self {
                 value:s
             })
         }else {
-            Err("ggg".to_string())
+            Err(Box::new("ggg") as FuError)
         }
     }
 }

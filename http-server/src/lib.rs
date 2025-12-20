@@ -36,6 +36,8 @@ pub mod server;
 
 pub use http_server_macro::*;
 
+use crate::handler::FuError;
+
 
 #[macro_export]
 macro_rules! map_str {
@@ -175,15 +177,15 @@ macro_rules! res_modifiers {
 }
 
 pub trait TryConvertFrom<T>: Sized {
-    fn try_convert_from(value: T) -> Result<Self, String>;
+    fn try_convert_from(value: T) -> Result<Self, FuError>;
 }
 /// please impl `TryConvertFrom`
 pub trait TryConvertInto<O> {
-    fn try_convert_into(self) -> Result<O, String>;
+    fn try_convert_into(self) -> Result<O, FuError>;
 }
 
 impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
-    fn try_convert_into(self) -> Result<T, String> {
+    fn try_convert_into(self) -> Result<T, FuError> {
         T::try_convert_from(self)
     }
 }

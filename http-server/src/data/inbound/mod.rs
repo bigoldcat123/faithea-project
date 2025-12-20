@@ -1,7 +1,7 @@
 pub mod multipart;
 use std::{ops::{Deref, DerefMut}, sync::Arc};
 
-use crate::{request::HttpRequest};
+use crate::{handler::FuError, request::HttpRequest};
 pub type Shared<T> = Arc<T>;
 
 
@@ -24,18 +24,18 @@ impl <T> DerefMut for FromRequest<T> {
     }
 }
 // deprecate
-impl <'a,T:TryFrom::<&'a HttpRequest> + 'a> TryFrom<&'a HttpRequest> for FromRequest<T> {
-    type Error = String;
+impl <'a,T:TryFrom<&'a HttpRequest> + 'a> TryFrom<&'a HttpRequest> for FromRequest<T> {
+    type Error = FuError;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
-        let a:T = value.try_into().map_err(|_| "can not covert httpReques  to T".to_string())?;
+        let a:T = value.try_into().map_err(|_| Box::new("can not covert httpReques  to T") as Self::Error)?;
         Ok(Self(a))
     }
 }
 
 impl <'a,T:TryFrom::<&'a mut HttpRequest> + 'a> TryFrom<&'a mut HttpRequest> for FromRequest<T> {
-    type Error = String;
+    type Error = FuError;
     fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
-        let a:T = value.try_into().map_err(|_| "can not covert httpReques  to T".to_string())?;
+        let a:T = value.try_into().map_err(|_| Box::new("can not covert httpReques  to T") as Self::Error)?;
         Ok(Self(a))
     }
 }

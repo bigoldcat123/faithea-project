@@ -3,7 +3,7 @@ pub mod cookie;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::{fs::File, io::AsyncWriteExt, net::tcp::OwnedWriteHalf};
 
-use crate::HttpHeader;
+use crate::{HttpHeader, handler::FuError};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -116,18 +116,17 @@ pub trait HttpResponseModifier {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>>;
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>>;
 }
 
 impl HttpResponseModifier for HttpHeader {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for kv in self.headers.drain() {
                 res.add_header(kv);
-
             }
             Ok(())
         })
@@ -142,7 +141,7 @@ impl HttpResponseModifier for ResponseStatusLine {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res.status_line.info = self.status.to_string();
             res.status_line.info = self.info.to_string();
@@ -151,19 +150,13 @@ impl HttpResponseModifier for ResponseStatusLine {
     }
 }
 impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Vec<Box<T>> {
-    // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
-    //     for m in self {
-    //         m.modify(res)?;
-    //     }
-    //     Ok(())
-    // }
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for m in self {
-                let m:std::pin::Pin<Box<dyn Future<Output = Result<(), std::string::String>> + Send + Sync>> = m.modify(res);
+                let m:std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + Send + Sync>> = m.modify(res);
                 m.await?;
             }
             Ok(())
@@ -176,7 +169,7 @@ mod test {
 
     use bytes::{Buf, Bytes};
 
-    use crate::response::{HttpResponse, ResponseStatusLine};
+    use crate::{response::{HttpResponse, HttpResponseModifier, ResponseStatusLine}};
 
     /// Tests conversion of `ResponseStatusLine` to bytes.
     #[test]
@@ -193,6 +186,14 @@ mod test {
         r.add_header(("Hello".to_string(), "World".to_string()));
         let b = r.line_header_bytes();
         println!("{:?}", b);
+    }
+    #[test]
+    fn modifier() {
+        let mut res = HttpResponse::new();
+        // let mut m:Box<dyn HttpResponseModifier> = Box::new("hello");
+        let mut m = "hello";
+        let _ = m.modify(&mut res);
+        println!("{:?}",res);
     }
 
     // #[test]
