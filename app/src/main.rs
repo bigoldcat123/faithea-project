@@ -121,6 +121,7 @@ async fn main() {
                 json
             ),
         ).mount("/static", handlers!(file_map))
+        .cors()
         .guard("/protected/**", async |req| Ok(req))
         .guard("/**", async |e| Ok(e))
         .build()

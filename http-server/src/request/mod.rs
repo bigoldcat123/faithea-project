@@ -3,6 +3,8 @@ pub mod cookie;
 pub mod method;
 pub mod path_param;
 pub mod search_param;
+use std::path::PathBuf;
+
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
@@ -26,6 +28,7 @@ use crate::{
 pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
+    Stream(PathBuf)// the path to a file saved on the disk
 }
 
 #[derive(Debug)]
