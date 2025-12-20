@@ -21,9 +21,9 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<& HttpRequest> for Stu {
+impl TryFrom<&mut HttpRequest> for Stu {
     type Error = String;
-    fn try_from(value: & HttpRequest) -> Result<Self, Self::Error> {
+    fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
@@ -50,8 +50,8 @@ struct StuInfo {
 #[post("/multipart")]
 async fn multipart(data: Multipart<StuInfo>) {
 
-    let p = str::from_utf8(&data.profile.temp_path).unwrap();
-    let mut f = tokio::fs::File::open(p).await.unwrap();
+
+    let mut f = tokio::fs::File::open(data.profile.temp_path.as_str()).await.unwrap();
     let mut s = String::new();
     f.read_to_string(&mut s).await.unwrap();
     println!("{}",s);

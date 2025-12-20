@@ -160,9 +160,9 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<&HttpRequest> for Stu {
+impl TryFrom<&mut HttpRequest> for Stu {
     type Error = String;
-    fn try_from(value: &HttpRequest) -> Result<Self, Self::Error> {
+    fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
