@@ -4,15 +4,12 @@ pub mod method;
 pub mod path_param;
 pub mod search_param;
 use bytes::{Buf, Bytes, BytesMut};
-use tokio::{
-    io::AsyncReadExt,
-    net::tcp::OwnedReadHalf,
-};
+use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
     HttpHeader, TryConvertFrom,
     data::{
-        inbound::multipart::{MultipartDataMap, parse_multipart_body},
+        inbound::multipart::{MultiPartBodyParser, MultipartDataMap},
         outbound::StaticFile,
     },
     map_str,
@@ -180,7 +177,7 @@ pub async fn parse_body_frame2(
     let content_type = ContentType::try_from(headers)?;
     match content_type {
         ApplicationJson => parse_simple_body(r, buf, len).await,
-        MultipartFormData(boundary) => parse_multipart_body(r, buf, len, boundary).await,
+        MultipartFormData(boundary) => MultiPartBodyParser::parse(r, buf, len, boundary).await,
         _ => parse_simple_body(r, buf, len).await,
     }
 }
@@ -382,7 +379,7 @@ impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String
 
 #[cfg(test)]
 mod tests {
-    use crate::{TryConvertInto, request::{ConvertFromRefString}};
+    use crate::{TryConvertInto, request::ConvertFromRefString};
     #[test]
     fn number_test() {
         let s = &"11".to_string();

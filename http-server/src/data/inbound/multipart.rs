@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ops::{Deref, DerefMut}, pin::Pin,
+    ops::{Deref, DerefMut},
 };
 
 use bytes::{Buf, Bytes, BytesMut};
@@ -147,8 +147,8 @@ pub struct MultiPartBodyParser<'a> {
     buf: &'a mut BytesMut,
     len: usize,
     readed: usize,
-    boundary: &'a str,
-    boundary_with_prefix: String,
+    boundary: &'a [u8],
+    boundary_with_prefix: Vec<u8>,
     boundary_with_prefix_next: Vec<usize>,
     map: Option<MultipartDataMap>,
     state: MultiPartBodyParserState,
@@ -159,12 +159,16 @@ impl<'a> MultiPartBodyParser<'a> {
         r: &'a mut OwnedReadHalf,
         buf: &'a mut BytesMut,
         len: usize,
-        boundary: &'a str,
+        boundary: &'a [u8],
     ) -> Self {
         let map = Some(MultipartDataMap::new());
         let readed = 0;
-        let boundary_with_prefix = format!("\r\n--{boundary}");
-        let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
+        // let boundary_with_prefix = format!("\r\n--{boundary}");
+        let mut boundary_with_prefix = BytesMut::new();
+        boundary_with_prefix.extend_from_slice(b"\r\n--");
+        boundary_with_prefix.extend_from_slice(boundary);
+        let boundary_with_prefix = boundary_with_prefix.to_vec();
+        let boundary_with_prefix_next = build_boundary_next_array(&boundary_with_prefix);
         let state = MultiPartBodyParserState::Start;
         let header_info = Default::default();
         Self {
@@ -186,7 +190,7 @@ impl<'a> MultiPartBodyParser<'a> {
         len: usize,
         boundary: &'a str,
     ) -> Result<RequestBody, String> {
-        let  state_machine = Self::new_with_start_state(r, buf, len, boundary);
+        let state_machine = Self::new_with_start_state(r, buf, len, boundary.as_bytes());
         state_machine.process().await
     }
     async fn process(mut self) -> Result<RequestBody, String> {
@@ -210,7 +214,7 @@ impl<'a> MultiPartBodyParser<'a> {
     fn is_file_body(&self) -> bool {
         self.header_info.file_name.is_some() || self.header_info.mime_type.is_some()
     }
-    async fn parse_file_body(&mut self) -> Result<Bytes,String> {
+    async fn parse_file_body(&mut self) -> Result<Bytes, String> {
         let path = format!(
             "/Users/dadigua/Desktop/graduation/temp{}",
             rand::random::<u64>()
@@ -225,7 +229,7 @@ impl<'a> MultiPartBodyParser<'a> {
                     return Err("Unexpected EOF".to_string());
                 }
             }
-            let (is_ended, len) = check_body_end(self.buf, &self.boundary_with_prefix, &self.boundary_with_prefix_next);
+            let (is_ended, len) = self.check_body_end();
             if is_ended {
                 let mut b = self.buf.split_to(len);
                 f.write_buf(&mut b).await.map_err(map_str!())?;
@@ -245,50 +249,86 @@ impl<'a> MultiPartBodyParser<'a> {
         Ok(a)
     }
 
-    async fn parse_body(&mut self) -> Result<(), String> {
-        if self.is_file_body() {
-            let data = self.parse_file_body().await?;
-            self.map.as_mut().unwrap().entry(self.header_info.name.take().unwrap_or("default".to_string())).or_default().push(Part::File {
-                file_name: self.header_info.file_name.take(),
-                data,
-                mime_type: self.header_info.mime_type.take(),
-            });
-        } else {
-            let mut simple_body = BytesMut::new();
-            loop {
-                while self.buf.len() <= self.boundary.len() + 6 {
-                    let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
-                    if read_len == 0 {
-                        return Err("Unexpected EOF".to_string());
-                    }
-                }
-                // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
-                let (is_ended, len) = check_body_end(
-                    self.buf,
-                    self.boundary_with_prefix.as_str(),
-                    &self.boundary_with_prefix_next,
-                );
-                if is_ended {
-                    let b = self.buf.split_to(len);
-                    simple_body.extend_from_slice(&b[..]);
-                    // /r/n --boundary /r/n => 2 + 2 + 2 + len
-                    let _ = self.buf.split_to(self.boundary.len() + 2 + 2 + 2);
-                    self.readed += self.boundary.len() + 2 + 2 + 2;
-                    self.readed += len;
-                    break;
-                } else {
-                    let b = self.buf.split_to(self.buf.len() - self.boundary.len() - 6);
-                    self.readed += self.buf.len() - self.boundary.len() - 6;
-                    simple_body.extend_from_slice(&b[..]);
+    fn check_body_end(&self) -> (bool, usize) {
+        let mut i = 0;
+        let mut j = 0;
+        while i < self.buf.len() {
+            if self.boundary_with_prefix[j] == self.buf[i] {
+                i += 1;
+                j += 1;
+            } else if j > 0 {
+                j = self.boundary_with_prefix_next[j - 1];
+            } else {
+                i += 1;
+            }
+            if j == self.boundary_with_prefix.len()
+                && i + 1 < self.buf.len()
+                && ((self.buf[i] == b'\r' && self.buf[i + 1] == b'\n')
+                    || (self.buf[i] == b'-' && self.buf[i + 1] == b'-'))
+            {
+                return (true, i - self.boundary_with_prefix.len());
+            }
+        }
+        (false, 0)
+    }
+
+    async fn parse_lit_body(&mut self) -> Result<Bytes, String> {
+        let mut simple_body = BytesMut::new();
+        loop {
+            while self.buf.len() <= self.boundary.len() + 6 {
+                let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                if read_len == 0 {
+                    return Err("Unexpected EOF".to_string());
                 }
             }
-            let a = simple_body.to_vec();
-            self.map.as_mut().unwrap().entry(self.header_info.name.take().unwrap_or("default".to_string()))
-                .or_default()
-                .push(Part::Lit(String::from_utf8(a).map_err(map_str!())?));
+            // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
+            let (is_ended, len) = self.check_body_end();
+            if is_ended {
+                let b = self.buf.split_to(len);
+                simple_body.extend_from_slice(&b[..]);
+                // /r/n --boundary /r/n => 2 + 2 + 2 + len
+                let _ = self.buf.split_to(self.boundary.len() + 2 + 2 + 2);
+                self.readed += self.boundary.len() + 2 + 2 + 2;
+                self.readed += len;
+                break;
+            } else {
+                let b = self.buf.split_to(self.buf.len() - self.boundary.len() - 6);
+                self.readed += self.buf.len() - self.boundary.len() - 6;
+                simple_body.extend_from_slice(&b[..]);
+            }
+        }
+        Ok(simple_body.freeze())
+    }
+
+    fn body_ends(&self) -> bool {
+        &self.buf[..] == b"\r\n" && self.readed + 2 == self.len
+    }
+    async fn parse_body(&mut self) -> Result<(), String> {
+        let key_name = self
+            .header_info
+            .name
+            .take()
+            .unwrap_or("default".to_string());
+        if self.is_file_body() {
+            let data = self.parse_file_body().await?;
+            let file_name = self.header_info.file_name.take();
+            let mime_type = self.header_info.mime_type.take();
+            if let Some(map) = self.map.as_mut() {
+                map.entry(key_name).or_default().push(Part::File {
+                    file_name,
+                    data,
+                    mime_type,
+                });
+            }
+        } else {
+            let a = self.parse_lit_body().await?;
+            let data = String::from_utf8(a.to_vec()).map_err(map_str!())?;
+            if let Some(map) = self.map.as_mut() {
+                map.entry(key_name).or_default().push(Part::Lit(data));
+            }
         }
         self.state = MultiPartBodyParserState::Header;
-        if &self.buf[..] == b"\r\n" && self.readed + 2 == self.len {
+        if self.body_ends() {
             self.state = MultiPartBodyParserState::End;
             let _ = self.buf.split();
             self.readed += 2;
@@ -296,10 +336,31 @@ impl<'a> MultiPartBodyParser<'a> {
         Ok(())
     }
 
+    fn check_mutipart_header(&self) -> (bool, usize) {
+        let next = [0, 0, 1, 0];
+        let p = b"\r\n\r\n";
+        let mut i = 0;
+        let mut j = 0_usize;
+        while i < self.buf.len() {
+            if self.buf[i] == p[j] {
+                i += 1;
+                j += 1;
+            } else if j > 0 {
+                j = next[j - 1];
+            } else {
+                i += 1;
+            }
+            if j == 4 {
+                return (true, i);
+            }
+        }
+        (false, 0)
+    }
+
     async fn parse_header(&mut self) -> Result<(), String> {
         let header_len;
         loop {
-            let (inner_is_ok, inner_header_len) = check_mutipart_header(self.buf);
+            let (inner_is_ok, inner_header_len) = self.check_mutipart_header();
             if inner_is_ok {
                 header_len = inner_header_len;
                 break;
@@ -309,20 +370,34 @@ impl<'a> MultiPartBodyParser<'a> {
                 return Err("Unexpected EOF".to_string());
             }
         }
-        let mut name = String::new();
-        let mut file_name = None;
-        let mut mime_type = None;
         self.readed += header_len;
         let b = self.buf.split_to(header_len);
         let b = str::from_utf8(&b).map_err(map_str!())?;
         for l in b.split("\r\n") {
             if !l.is_empty() {
-                process_multipart_header(l, &mut name, &mut file_name, &mut mime_type);
+                self.process_multipart_header(l);
             }
         }
-        self.header_info = HeaderInfo { name: Some(name), mime_type, file_name };
         self.state = MultiPartBodyParserState::Body;
         Ok(())
+    }
+    fn process_multipart_header(&mut self, header_line: &str) {
+        if let Some((k, v)) = header_line.split_once(":") {
+            if k.eq_ignore_ascii_case("Content-Disposition") {
+                for kv in v.split(";") {
+                    if let Some((k, v)) = kv.split_once("=") {
+                        if k.trim() == "name" {
+                            self.header_info.name = Some(v[1..v.len() - 1].to_string());
+                        }
+                        if k.trim() == "filename" {
+                            self.header_info.file_name = Some(v[1..v.len() - 1].to_string())
+                        }
+                    }
+                }
+            } else if k.eq_ignore_ascii_case("Content-Type") {
+                self.header_info.mime_type = Some(v.trim().to_string())
+            }
+        }
     }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
         // remove pre_fix
@@ -333,7 +408,7 @@ impl<'a> MultiPartBodyParser<'a> {
             }
         }
         if &self.buf[..2] != b"--"
-            || &self.buf[2..2 + self.boundary.len()] != self.boundary.as_bytes()
+            || &self.buf[2..2 + self.boundary.len()] != self.boundary
             || &self.buf[2 + self.boundary.len()..2 + self.boundary.len() + 2] != b"\r\n"
         {
             return Err("Invalid boundary".to_string());
@@ -345,252 +420,251 @@ impl<'a> MultiPartBodyParser<'a> {
     }
 }
 
-async fn remove_mutipart_body_prefix(
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    boundary: &str,
-    readed: &mut usize,
-) -> Result<(), String> {
-    let boundary_len = boundary.len();
-    // remove pre_fix
-    while buf.len() < boundary.len() + 2 {
-        let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-        if read_len == 0 {
-            return Err("Unexpected EOF".to_string());
-        }
-    }
-    if &buf[..2] != b"--"
-        || &buf[2..2 + boundary.len()] != boundary.as_bytes()
-        || &buf[2 + boundary.len()..2 + boundary.len() + 2] != b"\r\n"
-    {
-        return Err("Invalid boundary".to_string());
-    }
-    buf.advance(2 + boundary_len + 2);
-    *readed += 2 + boundary_len + 2;
-    Ok(())
-}
-async fn get_name_filename_mimetype(
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    readed: &mut usize,
-) -> Result<(String, Option<String>, Option<String>), String> {
-    let header_len;
-    loop {
-        let (inner_is_ok, inner_header_len) = check_mutipart_header(buf);
-        if inner_is_ok {
-            header_len = inner_header_len;
-            break;
-        }
-        let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-        if read_len == 0 {
-            return Err("Unexpected EOF".to_string());
-        }
-    }
-    let mut name = String::new();
-    let mut file_name = None;
-    let mut mime_type = None;
-    *readed += header_len;
-    let b = buf.split_to(header_len);
-    let b = str::from_utf8(&b).map_err(map_str!())?;
-    for l in b.split("\r\n") {
-        if !l.is_empty() {
-            process_multipart_header(l, &mut name, &mut file_name, &mut mime_type);
-        }
-    }
-    Ok((name, file_name, mime_type))
-}
-async fn read_file_body(
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    readed: &mut usize,
-    boundary: &str,
-    boundary_with_prefix: &str,
-    boundary_with_prefix_next: &[usize],
-) -> Result<Bytes, String> {
-    let path = format!(
-        "/Users/dadigua/Desktop/graduation/temp{}",
-        rand::random::<u64>()
-    );
-    let mut f = tokio::fs::File::create(&path)
-        .await
-        .map_err(|x| x.to_string())?;
-    loop {
-        while buf.len() < boundary.len() + 7 {
-            let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-            if read_len == 0 {
-                return Err("Unexpected EOF".to_string());
-            }
-        }
-        let (is_ended, len) = check_body_end(buf, boundary_with_prefix, &boundary_with_prefix_next);
-        if is_ended {
-            let mut b = buf.split_to(len);
-            f.write_buf(&mut b).await.map_err(map_str!())?;
-            let _ = buf.split_to(boundary.len() + 2 + 2 + 2);
-            *readed += boundary.len() + 2 + 2 + 2;
-            *readed += len;
-            break;
-        } else {
-            let mut b = buf.split_to(buf.len() - boundary.len() - 6);
-            *readed += b.len();
-            f.write_buf(&mut b).await.map_err(map_str!())?;
-        }
-    }
-    //delete file
-    std::fs::remove_file(&path).unwrap();
-    let a = Bytes::from_iter(path.as_bytes().iter().copied());
-    Ok(a)
-}
-pub async fn parse_multipart_body(
-    r: &mut OwnedReadHalf,
-    buf: &mut BytesMut,
-    len: usize,
-    boundary: &str,
-) -> Result<RequestBody, String> {
-    let mut map = MultipartDataMap::new();
-    let boundary_len = boundary.len();
-    let mut readed = 0;
-    // remove pre_fix
-    remove_mutipart_body_prefix(r, buf, boundary, &mut readed).await?;
+// async fn remove_mutipart_body_prefix(
+//     r: &mut OwnedReadHalf,
+//     buf: &mut BytesMut,
+//     boundary: &str,
+//     readed: &mut usize,
+// ) -> Result<(), String> {
+//     let boundary_len = boundary.len();
+//     // remove pre_fix
+//     while buf.len() < boundary.len() + 2 {
+//         let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+//         if read_len == 0 {
+//             return Err("Unexpected EOF".to_string());
+//         }
+//     }
+//     if &buf[..2] != b"--"
+//         || &buf[2..2 + boundary.len()] != boundary.as_bytes()
+//         || &buf[2 + boundary.len()..2 + boundary.len() + 2] != b"\r\n"
+//     {
+//         return Err("Invalid boundary".to_string());
+//     }
+//     buf.advance(2 + boundary_len + 2);
+//     *readed += 2 + boundary_len + 2;
+//     Ok(())
+// }
+// async fn get_name_filename_mimetype(
+//     r: &mut OwnedReadHalf,
+//     buf: &mut BytesMut,
+//     readed: &mut usize,
+// ) -> Result<(String, Option<String>, Option<String>), String> {
+//     let header_len;
+//     loop {
+//         let (inner_is_ok, inner_header_len) = check_mutipart_header(buf);
+//         if inner_is_ok {
+//             header_len = inner_header_len;
+//             break;
+//         }
+//         let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+//         if read_len == 0 {
+//             return Err("Unexpected EOF".to_string());
+//         }
+//     }
+//     let mut name = String::new();
+//     let mut file_name = None;
+//     let mut mime_type = None;
+//     *readed += header_len;
+//     let b = buf.split_to(header_len);
+//     let b = str::from_utf8(&b).map_err(map_str!())?;
+//     for l in b.split("\r\n") {
+//         if !l.is_empty() {
+//             process_multipart_header(l, &mut name, &mut file_name, &mut mime_type);
+//         }
+//     }
+//     Ok((name, file_name, mime_type))
+// }
+// async fn read_file_body(
+//     r: &mut OwnedReadHalf,
+//     buf: &mut BytesMut,
+//     readed: &mut usize,
+//     boundary: &str,
+//     boundary_with_prefix: &str,
+//     boundary_with_prefix_next: &[usize],
+// ) -> Result<Bytes, String> {
+//     let path = format!(
+//         "/Users/dadigua/Desktop/graduation/temp{}",
+//         rand::random::<u64>()
+//     );
+//     let mut f = tokio::fs::File::create(&path)
+//         .await
+//         .map_err(|x| x.to_string())?;
+//     loop {
+//         while buf.len() < boundary.len() + 7 {
+//             let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+//             if read_len == 0 {
+//                 return Err("Unexpected EOF".to_string());
+//             }
+//         }
+//         let (is_ended, len) = check_body_end(buf, boundary_with_prefix, &boundary_with_prefix_next);
+//         if is_ended {
+//             let mut b = buf.split_to(len);
+//             f.write_buf(&mut b).await.map_err(map_str!())?;
+//             let _ = buf.split_to(boundary.len() + 2 + 2 + 2);
+//             *readed += boundary.len() + 2 + 2 + 2;
+//             *readed += len;
+//             break;
+//         } else {
+//             let mut b = buf.split_to(buf.len() - boundary.len() - 6);
+//             *readed += b.len();
+//             f.write_buf(&mut b).await.map_err(map_str!())?;
+//         }
+//     }
+//     //delete file
+//     std::fs::remove_file(&path).unwrap();
+//     let a = Bytes::from_iter(path.as_bytes().iter().copied());
+//     Ok(a)
+// }
+// pub async fn parse_multipart_body(
+//     r: &mut OwnedReadHalf,
+//     buf: &mut BytesMut,
+//     len: usize,
+//     boundary: &str,
+// ) -> Result<RequestBody, String> {
+//     let mut map = MultipartDataMap::new();
+//     let boundary_len = boundary.len();
+//     let mut readed = 0;
+//     // remove pre_fix
+//     remove_mutipart_body_prefix(r, buf, boundary, &mut readed).await?;
 
-    let boundary_with_prefix = format!("\r\n--{boundary}");
-    let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
+//     let boundary_with_prefix = format!("\r\n--{boundary}");
+//     let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
 
-    while readed < len {
-        let (name, file_name, mime_type) = get_name_filename_mimetype(r, buf, &mut readed).await?;
+//     while readed < len {
+//         let (name, file_name, mime_type) = get_name_filename_mimetype(r, buf, &mut readed).await?;
 
-        if file_name.is_some() || mime_type.is_some() {
-            let data = read_file_body(
-                r,
-                buf,
-                &mut readed,
-                boundary,
-                &boundary_with_prefix,
-                &boundary_with_prefix_next,
-            )
-            .await?;
-            map.entry(name.to_string()).or_default().push(Part::File {
-                file_name,
-                data,
-                mime_type,
-            });
-        } else {
-            let mut simple_body = BytesMut::new();
-            loop {
-                while buf.len() <= boundary.len() + 6 {
-                    let read_len = r.read_buf(buf).await.map_err(map_str!())?;
-                    if read_len == 0 {
-                        return Err("Unexpected EOF".to_string());
-                    }
-                }
-                // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
-                let (is_ended, len) = check_body_end(
-                    buf,
-                    boundary_with_prefix.as_str(),
-                    &boundary_with_prefix_next,
-                );
-                if is_ended {
-                    let b = buf.split_to(len);
-                    simple_body.extend_from_slice(&b[..]);
-                    // /r/n --boundary /r/n => 2 + 2 + 2 + len
-                    let _ = buf.split_to(boundary_len + 2 + 2 + 2);
-                    readed += boundary_len + 2 + 2 + 2;
-                    readed += len;
-                    break;
-                } else {
-                    let b = buf.split_to(buf.len() - boundary.len() - 6);
-                    readed += buf.len() - boundary.len() - 6;
-                    simple_body.extend_from_slice(&b[..]);
-                }
-            }
-            let a = simple_body.to_vec();
-            map.entry(name)
-                .or_default()
-                .push(Part::Lit(String::from_utf8(a).map_err(map_str!())?));
-        }
-        if &buf[..] == b"\r\n" && readed + 2 == len {
-            let _ = buf.split();
-            readed += 2;
-        }
-    }
-    Ok(RequestBody::MultiPart(map))
-}
+//         if file_name.is_some() || mime_type.is_some() {
+//             let data = read_file_body(
+//                 r,
+//                 buf,
+//                 &mut readed,
+//                 boundary,
+//                 &boundary_with_prefix,
+//                 &boundary_with_prefix_next,
+//             )
+//             .await?;
+//             map.entry(name.to_string()).or_default().push(Part::File {
+//                 file_name,
+//                 data,
+//                 mime_type,
+//             });
+//         } else {
+//             let mut simple_body = BytesMut::new();
+//             loop {
+//                 while buf.len() <= boundary.len() + 6 {
+//                     let read_len = r.read_buf(buf).await.map_err(map_str!())?;
+//                     if read_len == 0 {
+//                         return Err("Unexpected EOF".to_string());
+//                     }
+//                 }
+//                 // println!("-> {:?} {:?} {:?} {:?}", buf,name,file_name,mime_type);
+//                 let (is_ended, len) = check_body_end(
+//                     buf,
+//                     boundary_with_prefix.as_str(),
+//                     &boundary_with_prefix_next,
+//                 );
+//                 if is_ended {
+//                     let b = buf.split_to(len);
+//                     simple_body.extend_from_slice(&b[..]);
+//                     // /r/n --boundary /r/n => 2 + 2 + 2 + len
+//                     let _ = buf.split_to(boundary_len + 2 + 2 + 2);
+//                     readed += boundary_len + 2 + 2 + 2;
+//                     readed += len;
+//                     break;
+//                 } else {
+//                     let b = buf.split_to(buf.len() - boundary.len() - 6);
+//                     readed += buf.len() - boundary.len() - 6;
+//                     simple_body.extend_from_slice(&b[..]);
+//                 }
+//             }
+//             let a = simple_body.to_vec();
+//             map.entry(name)
+//                 .or_default()
+//                 .push(Part::Lit(String::from_utf8(a).map_err(map_str!())?));
+//         }
+//         if &buf[..] == b"\r\n" && readed + 2 == len {
+//             let _ = buf.split();
+//             readed += 2;
+//         }
+//     }
+//     Ok(RequestBody::MultiPart(map))
+// }
 
-fn check_body_end(
-    buf: &mut BytesMut,
-    boundary_with_prefix: &str,
-    boundary_with_prefix_next: &[usize],
-) -> (bool, usize) {
-    let boundary_with_prefix = boundary_with_prefix.as_bytes();
+// fn check_body_end(
+//     buf: &mut BytesMut,
+//     boundary_with_prefix: &str,
+//     boundary_with_prefix_next: &[usize],
+// ) -> (bool, usize) {
+//     let boundary_with_prefix = boundary_with_prefix.as_bytes();
 
-    let mut i = 0;
-    let mut j = 0;
-    while i < buf.len() {
-        if boundary_with_prefix[j] == buf[i] {
-            i += 1;
-            j += 1;
-        } else if j > 0 {
-            j = boundary_with_prefix_next[j - 1];
-        } else {
-            i += 1;
-        }
-        if j == boundary_with_prefix.len()
-            && i + 1 < buf.len()
-            && ((buf[i] == b'\r' && buf[i + 1] == b'\n') || (buf[i] == b'-' && buf[i + 1] == b'-'))
-        {
-            return (true, i - boundary_with_prefix.len());
-        }
-    }
-    (false, 0)
-}
+//     let mut i = 0;
+//     let mut j = 0;
+//     while i < buf.len() {
+//         if boundary_with_prefix[j] == buf[i] {
+//             i += 1;
+//             j += 1;
+//         } else if j > 0 {
+//             j = boundary_with_prefix_next[j - 1];
+//         } else {
+//             i += 1;
+//         }
+//         if j == boundary_with_prefix.len()
+//             && i + 1 < buf.len()
+//             && ((buf[i] == b'\r' && buf[i + 1] == b'\n') || (buf[i] == b'-' && buf[i + 1] == b'-'))
+//         {
+//             return (true, i - boundary_with_prefix.len());
+//         }
+//     }
+//     (false, 0)
+// }
 
-fn process_multipart_header(
-    header_line: &str,
-    name: &mut String,
-    file_name: &mut Option<String>,
-    mime_type: &mut Option<String>,
-) {
-    if let Some((k, v)) = header_line.split_once(":") {
-        if k.eq_ignore_ascii_case("Content-Disposition") {
-            for kv in v.split(";") {
-                if let Some((k, v)) = kv.split_once("=") {
-                    if k.trim() == "name" {
-                        *name = v[1..v.len() - 1].to_string();
-                    }
-                    if k.trim() == "filename" {
-                        *file_name = Some(v[1..v.len() - 1].to_string())
-                    }
-                }
-            }
-        } else if k.eq_ignore_ascii_case("Content-Type") {
-            *mime_type = Some(v.trim().to_string())
-        }
-    }
-}
+// fn process_multipart_header(
+//     header_line: &str,
+//     name: &mut String,
+//     file_name: &mut Option<String>,
+//     mime_type: &mut Option<String>,
+// ) {
+//     if let Some((k, v)) = header_line.split_once(":") {
+//         if k.eq_ignore_ascii_case("Content-Disposition") {
+//             for kv in v.split(";") {
+//                 if let Some((k, v)) = kv.split_once("=") {
+//                     if k.trim() == "name" {
+//                         *name = v[1..v.len() - 1].to_string();
+//                     }
+//                     if k.trim() == "filename" {
+//                         *file_name = Some(v[1..v.len() - 1].to_string())
+//                     }
+//                 }
+//             }
+//         } else if k.eq_ignore_ascii_case("Content-Type") {
+//             *mime_type = Some(v.trim().to_string())
+//         }
+//     }
+// }
 
-fn check_mutipart_header(buf: &[u8]) -> (bool, usize) {
-    let next = [0, 0, 1, 0];
-    let p = b"\r\n\r\n";
-    let mut i = 0;
-    let mut j = 0_usize;
-    while i < buf.len() {
-        if buf[i] == p[j] {
-            i += 1;
-            j += 1;
-        } else if j > 0 {
-            j = next[j - 1];
-        } else {
-            i += 1;
-        }
-        if j == 4 {
-            return (true, i);
-        }
-    }
-    (false, 0)
-}
+// fn check_mutipart_header(buf: &[u8]) -> (bool, usize) {
+//     let next = [0, 0, 1, 0];
+//     let p = b"\r\n\r\n";
+//     let mut i = 0;
+//     let mut j = 0_usize;
+//     while i < buf.len() {
+//         if buf[i] == p[j] {
+//             i += 1;
+//             j += 1;
+//         } else if j > 0 {
+//             j = next[j - 1];
+//         } else {
+//             i += 1;
+//         }
+//         if j == 4 {
+//             return (true, i);
+//         }
+//     }
+//     (false, 0)
+// }
 
-fn build_boundary_next_array(boundary: &str) -> Vec<usize> {
+fn build_boundary_next_array(boundary: &[u8]) -> Vec<usize> {
     let mut ans = vec![0; boundary.len()];
-    let boundary = boundary.as_bytes();
     let mut i = 1;
     let mut len = 0;
     while i < boundary.len() - 1 {
@@ -607,171 +681,71 @@ fn build_boundary_next_array(boundary: &str) -> Vec<usize> {
     ans
 }
 
-// fn  parse_multipart_to_map(b: &[u8], boundary: &[u8], data: &mut MultipartDataMap) {
-//     let mut r = 0;
-//     let mut l = 0;
-//     while r < b.len() {
-//         // search headers for /r/n
-//         let mut name = "";
-//         let mut file_name = None;
-//         let mut mime_type = None;
-//         while r < b.len() {
-//             while r + 2 < b.len() && &b[r..r + 2] != b"\r\n" {
-//                 r += 1;
-//             }
-//             if l == r {
-//                 r += 2;
-//                 l = r;
-//                 break;
-//             }
-//             process_multipart_header(&b[l..r], &mut name, &mut file_name, &mut mime_type);
-//             r += 2;
-//             l = r;
-//         }
-//         //search for body /r/n +  boundary
-//         while r + 2 < b.len()
-//             && r + 2 + boundary.len() < b.len()
-//             && !(&b[r..r + 2] == b"\r\n" && &b[r + 2..r + 2 + boundary.len()] == boundary)
-//         {
-//             r += 1;
-//         }
-//         //the file part
-//         if file_name.is_some() || mime_type.is_some() {
-//             data.entry(name.to_string()).or_default().push(Part::File {
-//                 file_name,
-//                 data: Bytes::copy_from_slice(&b[l..r]),
-//                 mime_type,
-//             });
-//         } else {
-//             data.entry(name.to_string())
-//                 .or_default()
-//                 .push(Part::Lit(String::from_utf8_lossy(&b[l..r]).to_string()));
-//         }
-//         // bytes end with `--`
-//         if &b[r + boundary.len() + 2..r + 2 + boundary.len() + 2] == b"--" {
-//             break;
-//         }
-//         r += 2 + boundary.len() + 2;
-//         l = r;
-//     }
-// }
-
-// fn process_multipart_header<'a>(
-//     header_line: &'a [u8],
-//     name: &mut &'a str,
-//     file_name: &mut Option<String>,
-//     mime_type: &mut Option<String>,
-// ) {
-//     if let Ok(h) = str::from_utf8(header_line)
-//         && let Some((k, v)) = h.split_once(":")
-//     {
-//         if k.eq_ignore_ascii_case("Content-Disposition") {
-//             for kv in v.split(";") {
-//                 if let Some((k, v)) = kv.split_once("=") {
-//                     if k.trim() == "name" {
-//                         *name = &v[1..v.len() - 1];
-//                     }
-//                     if k.trim() == "filename" {
-//                         *file_name = Some(v[1..v.len() - 1].to_string())
-//                     }
-//                 }
-//             }
-//         } else if k.eq_ignore_ascii_case("Content-Type") {
-//             *mime_type = Some(v.trim().to_string())
-//         }
-//     }
-// }
-
-// fn get_multipart_boundary(req: &HttpRequest) -> Option<String> {
-//     if let Some(b) = req.headers.get("content-type")
-//         && let Some((_, b)) = b.split_once(";")
-//         && let Some((_, b)) = b.split_once("=")
-//     {
-//         return Some(format!("--{}", b));
-//     }
-//     None
-// }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     // struct Stu {
-//     //     name: String,
-//     //     age: u8,
-//     //     profile: Bytes,
-//     // }
-//     // impl Stu {
-
-//     // }
-//     #[test]
-//     fn test_multipart() {}
-// }
-
 #[cfg(test)]
 mod tests {
-    use bytes::BufMut;
+    // use bytes::BufMut;
 
-    use super::*;
+    // use super::*;
 
-    fn check_mutipart_header2(buf: &[u8]) -> (bool, usize) {
-        for i in 0..=buf.len() - 4 {
-            if &buf[i..i + 4] == b"\r\n\r\n" {
-                return (true, i + 4);
-            }
-        }
-        (false, 0)
-    }
-    fn check_body_end2(buf: &mut BytesMut, boundary: &str) -> (bool, usize) {
-        for i in 0..=buf.len() - boundary.len() - 2 - 2 - 2 {
-            if &buf[i..i + 2] == b"\r\n"// 2
-                && &buf[i + 2..i + 4] == b"--"// 4
-                && &buf[i + 4..i + boundary.len() + 4] == boundary.as_bytes()// 4 +  len
-                &&( &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"\r\n"|| &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"--")
-            // 6 + len
-            {
-                return (true, i);
-            }
-        }
-        (false, 0)
-    }
-    #[test]
-    fn check_mutipart_header_test2() {
-        let a = "abcab";
-        println!("{:?}", build_boundary_next_array(a));
+    // fn check_mutipart_header2(buf: &[u8]) -> (bool, usize) {
+    //     for i in 0..=buf.len() - 4 {
+    //         if &buf[i..i + 4] == b"\r\n\r\n" {
+    //             return (true, i + 4);
+    //         }
+    //     }
+    //     (false, 0)
+    // }
+    // fn check_body_end2(buf: &mut BytesMut, boundary: &str) -> (bool, usize) {
+    //     for i in 0..=buf.len() - boundary.len() - 2 - 2 - 2 {
+    //         if &buf[i..i + 2] == b"\r\n"// 2
+    //             && &buf[i + 2..i + 4] == b"--"// 4
+    //             && &buf[i + 4..i + boundary.len() + 4] == boundary.as_bytes()// 4 +  len
+    //             &&( &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"\r\n"|| &buf[i + boundary.len() + 4..i + boundary.len() + 6] == b"--")
+    //         // 6 + len
+    //         {
+    //             return (true, i);
+    //         }
+    //     }
+    //     (false, 0)
+    // }
+    // #[test]
+    // fn check_mutipart_header_test2() {
+    //     let a = "abcab";
+    //     println!("{:?}", build_boundary_next_array(a));
 
-        let boundary = "-------------asdjasujd";
-        let boundary_with_prefix = format!("\r\n--{}", boundary);
-        let mut buf = BytesMut::new();
-        buf.put(&b"asjdilas\r\n---------------asdjasujd\r\nasda"[..]);
-        let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
+    //     let boundary = "-------------asdjasujd";
+    //     let boundary_with_prefix = format!("\r\n--{}", boundary);
+    //     let mut buf = BytesMut::new();
+    //     buf.put(&b"asjdilas\r\n---------------asdjasujd\r\nasda"[..]);
+    //     let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
 
-        assert_eq!(
-            check_body_end(
-                &mut buf,
-                boundary_with_prefix.as_str(),
-                &boundary_with_prefix_next
-            ),
-            check_body_end2(&mut buf, boundary)
-        );
-        let boundary = "-------------asdjasujd";
-        let boundary_with_prefix = format!("\r\n--{}", boundary);
-        let mut buf = BytesMut::new();
-        buf.put(&b"asjdilas\r\n---------------asdjasujd--asda"[..]);
-        let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
+    //     assert_eq!(
+    //         check_body_end(
+    //             &mut buf,
+    //             boundary_with_prefix.as_str(),
+    //             &boundary_with_prefix_next
+    //         ),
+    //         check_body_end2(&mut buf, boundary)
+    //     );
+    //     let boundary = "-------------asdjasujd";
+    //     let boundary_with_prefix = format!("\r\n--{}", boundary);
+    //     let mut buf = BytesMut::new();
+    //     buf.put(&b"asjdilas\r\n---------------asdjasujd--asda"[..]);
+    //     let boundary_with_prefix_next = build_boundary_next_array(boundary_with_prefix.as_str());
 
-        assert_eq!(
-            check_body_end(
-                &mut buf,
-                boundary_with_prefix.as_str(),
-                &boundary_with_prefix_next
-            ),
-            check_body_end2(&mut buf, boundary)
-        );
-    }
+    //     assert_eq!(
+    //         check_body_end(
+    //             &mut buf,
+    //             boundary_with_prefix.as_str(),
+    //             &boundary_with_prefix_next
+    //         ),
+    //         check_body_end2(&mut buf, boundary)
+    //     );
+    // }
 
-    #[test]
-    fn check_mutipart_header_test() {
-        let b = "jasldasdasdjasdhasdasdaskuashdj\r\nasd\r\nasdjli".as_bytes();
-        assert_eq!(check_mutipart_header2(b), check_mutipart_header(b))
-    }
+    // #[test]
+    // fn check_mutipart_header_test() {
+    //     let b = "jasldasdasdjasdhasdasdaskuashdj\r\nasd\r\nasdjli".as_bytes();
+    //     assert_eq!(check_mutipart_header2(b), check_mutipart_header(b))
+    // }
 }
