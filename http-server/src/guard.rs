@@ -35,10 +35,10 @@ impl GuardTire {
         let url = regulate_url_path(url);
         let mut url_route = Route::from(url.as_str());
         url_route.r.reverse();
-        self.add_url(url_route, f);
+        self.add_with_route_components(url_route, f);
     }
 
-    fn add_url<F, O>(&mut self, mut url: Route, f: F)
+    fn add_with_route_components<F, O>(&mut self, mut url: Route, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
         O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
@@ -54,7 +54,7 @@ impl GuardTire {
                     .f
                     .push(Box::new(move |r: HttpRequest| Box::pin(f(r))))
             } else {
-                self.path.get_mut(&next).unwrap().add_url(url, f);
+                self.path.get_mut(&next).unwrap().add_with_route_components(url, f);
             }
         }
     }
