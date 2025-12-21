@@ -14,9 +14,11 @@ pub struct HttpResponse {
 impl HttpResponse {
 
     pub fn new() -> Self {
+        let mut headers = HttpHeader::new();
+        headers.add("Connection".to_string(), "keep-alive".to_string());
         Self {
             status_line: ResponseStatusLine::new("HTTP/1.1", "200", "OK"),
-            headers: Default::default(),
+            headers,
             body: ResponseBody::Empty,
         }
     }

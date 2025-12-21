@@ -77,22 +77,20 @@ impl HttpHeader {
             headers: HashMap::new(),
         }
     }
-    pub fn parse_new_header(&mut self, s: &str) -> Result<(), String> {
-        let mut k_v = s.split(":");
-        let k = k_v
-            .next()
-            .ok_or("no key".to_string())?
-            .trim()
-            .to_lowercase();
-        let v = k_v
-            .next()
-            .ok_or("no value".to_string())?
-            .trim().to_string();
-        self.headers.insert(k, v);
-        Ok(())
-    }
-
-
+    // pub fn parse_new_header(&mut self, s: &str) -> Result<(), String> {
+    //     let mut k_v = s.split(":");
+    //     let k = k_v
+    //         .next()
+    //         .ok_or("no key".to_string())?
+    //         .trim()
+    //         .to_lowercase();
+    //     let v = k_v
+    //         .next()
+    //         .ok_or("no value".to_string())?
+    //         .trim().to_string();
+    //     self.headers.insert(k, v);
+    //     Ok(())
+    // }
     pub fn get(&self, key: &str) -> Option<&String> {
         self.headers.get(key)
     }

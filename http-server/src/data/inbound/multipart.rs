@@ -112,7 +112,7 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
 impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
     type Error = FuError;
     fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
-        match req.body.as_mut() {
+        match req._inner.body_mut() {
             Some(RequestBody::MultiPart(body)) => {
                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
             }

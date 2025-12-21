@@ -1,8 +1,10 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
+use http::Method;
+
 use crate::{
     regulate_url_path,
-    request::{HttpRequest, method::Method},
+    request::{HttpRequest},
     response::{HttpResponse, HttpResponseModifier},
     route::{Route, RouteComponent}, server::HandlerModifier,
 };
@@ -156,7 +158,7 @@ impl HandlerTire {
                         // Continue matching deeper path segments
                         let mut path = current_path.clone();
                         path.r.push(component.clone());
-                        child.get_candidates(url_parts, candidates, idx + 1, path, method);
+                        child.get_candidates(url_parts, candidates, idx + 1, path, method.clone());
                     }
                 } else if let Some(f) = child.f.get(&method) {
                     // Reached the end of the URL, add handler if present
@@ -170,6 +172,8 @@ impl HandlerTire {
 }
 #[cfg(test)]
 mod test {
+    use http::Method;
+
     use crate::{handler::{FuError, HandlerTire}, request::HttpRequest, response::HttpResponse};
 
     /// Test handler that returns a default response.
@@ -194,7 +198,7 @@ mod test {
         handler.get("/url/**", test_handler);
 
         // Test URL that matches multiple patterns
-        let (matched_route, _) = handler.get_handler("/url/ab2c/efg", crate::request::method::Method::GET).unwrap();
+        let (matched_route, _) = handler.get_handler("/url/ab2c/efg", Method::GET).unwrap();
 
         // Should match the path parameter pattern, not the wildcards
         assert_eq!(

@@ -15,7 +15,7 @@ pub struct Json<T>(pub T);
 impl<'a, T: Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
     type Error = FuError;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
-        if let Some(RequestBody::Simple(body)) = value.body.as_ref() {
+        if let Some(RequestBody::Simple(body)) = value._inner.body() {
             Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(
                 |x| {
                     let a: Self::Error = Box::new(x.to_string());
@@ -67,7 +67,7 @@ mod tests {
             name: "hello".to_string(),
         })
         .unwrap();
-        req.body = Some(RequestBody::Simple(body.into()));
+        *req._inner.body_mut() = Some(RequestBody::Simple(body.into()));
         if let Ok(j) = Json::<Stu>::try_from(&req) {
             println!("{:?}", j);
         }

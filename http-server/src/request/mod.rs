@@ -1,21 +1,29 @@
 pub mod content_type;
 pub mod cookie;
-pub mod method;
+// pub mod method;
 pub mod path_param;
 pub mod search_param;
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use bytes::{Buf, Bytes, BytesMut};
+use http::{HeaderMap, HeaderName, HeaderValue, Request, Uri, Version, header::{AsHeaderName, CONTENT_LENGTH}};
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
-    HttpHeader, TryConvertFrom, data::{
+    TryConvertFrom,
+    data::{
         inbound::multipart::{MultiPartBodyParser, MultipartDataMap},
         outbound::StaticFile,
-    }, handler::FuError, map_str, request::{
-        content_type::ContentType, cookie::Cookie, method::Method, path_param::PathParam,
+    },
+    handler::FuError,
+    map_str,
+    request::{
+        content_type::ContentType, cookie::Cookie, path_param::PathParam,
         search_param::SearchParam,
-    }, res_modifiers, response::HttpResponseModifier, route::{Route, RouteComponent}
+    },
+    res_modifiers,
+    response::HttpResponseModifier,
+    route::{Route, RouteComponent},
 };
 
 #[derive(Debug)]
@@ -27,9 +35,7 @@ pub enum RequestBody {
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    pub(crate) req_line: HttpReqLine,
-    pub(crate) headers: HttpHeader,
-    pub(crate) body: Option<RequestBody>, // way too big!!!!!!!!!!!!
+    pub(crate) _inner: Request<Option<RequestBody>>, // way too big!!!!!!!!!!!!
     pub(crate) path_param: Option<PathParam>,
     pub(crate) search_param: Option<SearchParam>,
     pub(crate) multi_seg_param: Option<String>,
@@ -49,11 +55,18 @@ pub async fn static_map<P: AsRef<str>>(
 }
 
 impl HttpRequest {
-    pub fn new(req_line: HttpReqLine, headers: HttpHeader, body: Option<RequestBody>) -> Self {
+    pub fn new(parts: http::request::Parts, body: Option<RequestBody>) -> Self {
         Self {
-            req_line,
-            headers,
-            body,
+            _inner: Request::from_parts(parts, body),
+            path_param: None,
+            multi_seg_param: None,
+            search_param: None,
+            // cookie:None
+        }
+    }
+    pub fn from_req(req: Request<Option<RequestBody>>) -> Self {
+        Self {
+            _inner: req,
             path_param: None,
             multi_seg_param: None,
             search_param: None,
@@ -62,15 +75,29 @@ impl HttpRequest {
     }
     //#[allow(unused)]
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
-        self.headers
-            .get("cookie")
-            .map(|cookie| Cookie::from_cookie_header(cookie))
+        if let Some(cookie) = self._inner.headers().get("cookie") {
+            if let Ok(cookie) = cookie.to_str() {
+                Some(Cookie::from_cookie_header(cookie))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
     pub fn fake() -> Self {
-        let req_line = HttpReqLine::parse("POST /api/data HTTP/1.1").unwrap();
-        let headers = HttpHeader::new();
         let body = Some(RequestBody::Simple(Bytes::from("request payload")));
-        HttpRequest::new(req_line, headers, body)
+        Self {
+            _inner: Request::builder()
+                .method(http::Method::POST)
+                .version(http::Version::HTTP_11)
+                .uri("/api/data")
+                .body(body)
+                .unwrap(),
+            path_param: None,
+            search_param: None,
+            multi_seg_param: None,
+        }
     }
     fn assamble_path_param(&mut self, handler_route: &Route, incoming_route: &Route) {
         if let Ok(p) = PathParam::try_from_route(handler_route, incoming_route) {
@@ -93,13 +120,17 @@ impl HttpRequest {
             self.multi_seg_param = Some(s.join("/"))
         }
     }
+    pub fn get_header<K: AsHeaderName>(&self, k: K) -> Option<&HeaderValue> {
+        let a = self._inner.headers().get(k);
+        a
+    }
     pub(crate) fn process_routes(&mut self, handler_route: &Route, incoming_route: &Route) {
         self.assamble_path_param(handler_route, incoming_route);
         self.assamble_multi_seg_param(handler_route, incoming_route);
     }
 
-    pub(crate) fn process_search_param(&mut self, url: &str) {
-        self.search_param = Some(SearchParam::from_url(url));
+    pub(crate) fn process_search_param(&mut self) {
+        self.search_param = Some(SearchParam::from_query(self._inner.uri().query()));
     }
 
     pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
@@ -119,47 +150,54 @@ impl HttpRequest {
     }
 }
 
-#[derive(Debug)]
-pub struct HttpReqLine {
-    pub method: Method,
-    pub url: String,
-    pub version: String,
-}
+// #[derive(Debug)]
+// pub struct HttpReqLine {
+//     pub method: Method,
+//     pub url: String,
+//     pub version: String,
+// }
 
-impl HttpReqLine {
-    pub fn parse(s: &str) -> Result<Self, String> {
-        let mut head_line = s.split_whitespace();
-        let method = head_line
-            .next()
-            .ok_or("method parsing error".to_string())?
-            .to_string();
-        let url = head_line
-            .next()
-            .ok_or("url parsing error".to_string())?
-            .to_string();
-        let version = head_line
-            .next()
-            .ok_or("version parsing error".to_string())?
-            .to_string();
-        Ok(Self {
-            method: method.try_into()?,
-            url,
-            version,
-        })
-    }
-}
+// impl HttpReqLine {
+//     pub fn parse(s: &str) -> Result<Self, String> {
+//         let mut head_line = s.split_whitespace();
+//         let method = head_line
+//             .next()
+//             .ok_or("method parsing error".to_string())?
+//             .to_string();
+//         let url = head_line
+//             .next()
+//             .ok_or("url parsing error".to_string())?
+//             .to_string();
+//         let version = head_line
+//             .next()
+//             .ok_or("version parsing error".to_string())?
+//             .to_string();
+//         Ok(Self {
+//             method: method.try_into()?,
+//             url,
+//             version,
+//         })
+//     }
+// }
 
 pub async fn parse_http_frame(
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
-    let (l, h) = parse_line_header_frame(r, buf).await?;
-    let mut req = HttpRequest::new(l, h, None);
-    if let Some(len) = req.headers.get("content-length") {
-        let len = len.parse::<usize>().map_err(map_str!())?;
-        let body = parse_body_frame2(len, r, buf, &req.headers).await?;
+    let mut builder = http::Request::builder();
+    builder = parse_line_header_frame(r, buf, builder).await?;
+    let mut req = HttpRequest::from_req(builder.body(None).map_err(map_str!())?);
+
+    if let Some(len) = req.get_header(CONTENT_LENGTH) {
+        let len = len
+            .to_str()
+            .map_err(map_str!())?
+            .parse::<usize>()
+            .map_err(map_str!())?;
+
+        let body = parse_body_frame2(len, r, buf, req._inner.headers()).await?;
         // let body = buf.split_to(len).freeze();
-        req.body = Some(body);
+        *req._inner.body_mut() = Some(body);
     }
     Ok(req)
 }
@@ -168,7 +206,7 @@ pub async fn parse_body_frame2(
     len: usize,
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
-    headers: &HttpHeader,
+    headers:  &HeaderMap<HeaderValue>,
 ) -> Result<RequestBody, String> {
     use ContentType::*;
     let content_type = ContentType::try_from(headers)?;
@@ -201,7 +239,8 @@ async fn parse_simple_body(
 async fn parse_line_header_frame(
     r: &mut OwnedReadHalf,
     buf: &mut BytesMut,
-) -> Result<(HttpReqLine, HttpHeader), String> {
+    builder: http::request::Builder,
+) -> Result<http::request::Builder, String> {
     loop {
         if let Ok(read_len) = r.read_buf(buf).await {
             if read_len == 0 {
@@ -209,9 +248,9 @@ async fn parse_line_header_frame(
             }
             let (check_header_is_ok, position) = check_header(buf.chunk());
             if check_header_is_ok {
-                let (l, h) = parse_line_header(&buf[..position])?;
+                let b = parse_line_header(&buf[..position], builder)?;
                 buf.advance(position);
-                return Ok((l, h));
+                return Ok(b);
             }
         } else {
             return Err(
@@ -220,22 +259,51 @@ async fn parse_line_header_frame(
         }
     }
 }
+fn parse_line(builder: http::request::Builder, s: &str) -> Result<http::request::Builder, String> {
+    let mut head_line = s.split_whitespace();
+    let method = head_line.next().ok_or("method parsing error".to_string())?;
+    let method: http::Method = method.try_into().map_err(map_str!())?;
 
-fn parse_line_header(raw_header: &[u8]) -> Result<(HttpReqLine, HttpHeader), String> {
+    let uri = head_line.next().ok_or("uri parsing error".to_string())?;
+    let uri = Uri::from_str(uri).map_err(map_str!())?;
+
+    let version = head_line
+        .next()
+        .ok_or("version parsing error".to_string())?;
+    let v = match version {
+        "HTTP/1.1" => Version::HTTP_11,
+        "HTTP/1.0" => Version::HTTP_10,
+        _ => return Err("version parsing error".to_string()),
+    };
+    Ok(builder.method(method).uri(uri).version(v))
+}
+
+fn parse_line_header(
+    raw_header: &[u8],
+    builder: http::request::Builder,
+) -> Result<http::request::Builder, String> {
     let raw_header = str::from_utf8(raw_header).map_err(map_str!())?;
     let mut raw_header = raw_header.split("\r\n");
-    let req_line = HttpReqLine::parse(
+    let mut builder = parse_line(
+        builder,
         raw_header
             .next()
-            .ok_or("parse req line error".to_string())?,
+            .ok_or("parse req line error-> no req line".to_string())?,
     )?;
-    let mut http_header = HttpHeader::new();
+    let header_map = builder.headers_mut().unwrap();
+
     for h in raw_header {
         if !h.is_empty() {
-            http_header.parse_new_header(h)?;
+            let mut k_v = h.split(":");
+            let k = k_v.next().ok_or("no header key".to_string())?.trim();
+            let v = k_v.next().ok_or("no header value".to_string())?.trim();
+            let value = HeaderValue::from_maybe_shared(v.to_string()).map_err(map_str!())?;
+            let name = HeaderName::from_str(k).unwrap();
+            header_map.insert(name, value);
         }
     }
-    Ok((req_line, http_header))
+
+    Ok(builder)
 }
 
 fn check_header(c: &[u8]) -> (bool, usize) {
@@ -403,10 +471,10 @@ mod tests {
     #[test]
     fn option_test() {
         let s = &"true".to_string();
-        let a: Result<Option<i32>,FuError> = s.try_convert_into();
+        let a: Result<Option<i32>, FuError> = s.try_convert_into();
         assert_eq!(a.is_ok(), true);
         fn a2(_: Option<bool>) {}
-        a2(s.try_convert_into().map_err(|_|"").unwrap());
+        a2(s.try_convert_into().map_err(|_| "").unwrap());
     }
 
     // #[test]

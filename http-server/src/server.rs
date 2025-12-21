@@ -131,7 +131,7 @@ async fn process(
         let req = parse_http_frame(&mut reader, &mut buf).await?;
         // println!("{:?}", req);
 
-        match guards.guard(&req.req_line.url.clone()[..], req).await {
+        match guards.guard(&req._inner.uri().path().to_string()[..], req).await {
             Ok(req) => {
                 handle_request(handlers.clone(), req, tx.clone()).await;
             }
@@ -147,12 +147,12 @@ async fn handle_request(
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
 ) {
-    let req_url = req.req_line.url.to_string();
     if let Some((_matched_url, handler)) =
-        handlers.get_handler(&req.req_line.url, req.req_line.method)
+        handlers.get_handler(&req._inner.uri().path(), req._inner.method().clone())
     {
-        req.process_routes(&_matched_url, &Route::from(req.req_line.url.as_str()));
-        req.process_search_param(&req_url);
+        req.process_routes(&_matched_url, &Route::from(req._inner.uri().path()));
+
+        req.process_search_param();
         match handler(req).await {
             Ok(res) => {
                 let _ = tx.send(res).await;
