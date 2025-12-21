@@ -1,5 +1,5 @@
 pub mod cookie;
-
+pub mod cors;
 use bytes::Bytes;
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode, header::{ CONTENT_LENGTH, IntoHeaderName}

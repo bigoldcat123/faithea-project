@@ -8,7 +8,7 @@ use http_server::{
             FromRequest,
             multipart::{MultiPartFile, Multipart, Part},
         },
-    }, get, handler::FuError, handlers, header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN}, post, request::{HttpRequest, search_param}, res_modifiers, response, server::HttpServer
+    }, get, handler::FuError, handlers, header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN}, post, request::{HttpRequest, search_param}, res_modifiers, response::{self, cors::CORS}, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -77,12 +77,7 @@ async fn multipart(data: Multipart<StuInfo>) {
 async fn hello_world() {
     println!("哈哈哈");
 
-    let mut header = HeaderMap::new();
-    header.insert(ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
-    header.insert(ACCESS_CONTROL_ALLOW_HEADERS, "*".parse().unwrap());
-    header.insert(ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE".parse().unwrap());
-    header.insert(ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());
-    res_modifiers!("Hello,World",header)
+    res_modifiers!("Hello,World",CORS)
 }
 #[get("/cookie")]
 async fn cookie() {

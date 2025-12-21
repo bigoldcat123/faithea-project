@@ -88,6 +88,7 @@ impl Default for HttpServerBuilder {
     }
 }
 
+
 pub struct HttpServer {
     /// Socket address the server is bound to
     addr: SocketAddr,
