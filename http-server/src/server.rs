@@ -104,6 +104,8 @@ impl HttpServer {
     }
 
     pub async fn start(self) {
+        println!("HTTP server starting on http://{}",self.addr);
+        println!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await.unwrap();
         loop {
             let (socket, addr) = server.accept().await.unwrap();

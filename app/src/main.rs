@@ -114,8 +114,6 @@ async fn fromRequest(stu: FromRequest<Stu>) {
 //(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    println!("HTTP server starting on http://127.0.0.1:8899");
-    println!("Press Ctrl+C to stop the server");
     HttpServer::builder()
         .mount(
             "/",
