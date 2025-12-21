@@ -37,13 +37,13 @@ impl<'a, T: Deserialize<'a>> TryFrom<&'a mut HttpRequest> for Json<T> {
 }
 #[cfg(test)]
 mod tests {
+    use http::{HeaderMap, StatusCode};
     use serde::Deserialize;
 
     use crate::{
-        HttpHeader,
         request::HttpRequest,
         res_modifiers,
-        response::{HttpResponse, HttpResponseModifier, ResponseBody, ResponseStatusLine},
+        response::{HttpResponse, HttpResponseModifier, ResponseBody},
     };
 
     use super::*;
@@ -77,9 +77,9 @@ mod tests {
     async fn constuct_response() {
         let mut res = HttpResponse::new();
 
-        let mut header = HttpHeader::new();
-        header.add("wo".into(), "cao".into());
-        let res_line = ResponseStatusLine::new("a", "b", "c");
+        let mut header = HeaderMap::new();
+        header.insert("wo", "cao".parse().unwrap());
+        let res_line = StatusCode::OK;
         let j = Json(Stu {
             name: "hello".to_string(),
         });

@@ -1,79 +1,92 @@
 pub mod cookie;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::Bytes;
+use http::{
+    HeaderMap, HeaderValue, Response, StatusCode, header::{ CONTENT_LENGTH, IntoHeaderName}
+};
 use tokio::{fs::File, io::AsyncWriteExt, net::tcp::OwnedWriteHalf};
 
-use crate::{HttpHeader, handler::FuError};
+use crate::handler::FuError;
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
-    status_line: ResponseStatusLine,
-    headers: HttpHeader,
-    pub body: ResponseBody,
+    // status_line: ResponseStatusLine,
+    // headers: HttpHeader,
+    // pub body: ResponseBody,
+    pub(crate) _innser: Response<ResponseBody>,
 }
 impl HttpResponse {
-
     pub fn new() -> Self {
-        let mut headers = HttpHeader::new();
-        headers.add("Connection".to_string(), "keep-alive".to_string());
-        Self {
-            status_line: ResponseStatusLine::new("HTTP/1.1", "200", "OK"),
-            headers,
-            body: ResponseBody::Empty,
-        }
+        let _innser = Response::builder()
+            .header("Connection", "keep-alive")
+            .body(ResponseBody::Empty)
+            .expect("impossible!!");
+        Self { _innser }
     }
 
     pub fn not_found() -> Self {
         let mut r = Self::new();
-        r.status_line.status = "404".to_string();
-        r.status_line.info = "Not Found".to_string();
-        r.headers.add("Content-length".to_string(), "9".to_string());
+        *r._innser.status_mut() = StatusCode::NOT_FOUND;
+
+        // r.status_line.info = "Not Found".to_string();
+        r._innser
+            .headers_mut()
+            .insert(CONTENT_LENGTH, HeaderValue::from_static("9"));
         r.set_body(ResponseBody::Simple("not found".into()));
         r
     }
     pub fn error(err_message: String) -> Self {
         let mut r = Self::new();
-        r.status_line.status = "500".to_string();
-        r.status_line.info = "error!".to_string();
+        *r._innser.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         let body: Bytes = err_message.into();
-        r.headers.add("Content-length".to_string(), body.len().to_string());
+        r._innser.headers_mut().insert(
+            CONTENT_LENGTH,
+            HeaderValue::from_maybe_shared(body.len().to_string()).expect("impossible!"),
+        );
         r.set_body(ResponseBody::Simple(body));
         r
     }
     pub fn set_body(&mut self, body: ResponseBody) {
-        self.body = body
+        *self._innser.body_mut() = body
     }
 
-    pub fn add_header(&mut self, header_k_v: (String, String)) {
-        self.headers.add(header_k_v.0, header_k_v.1);
+    pub fn add_header<K: IntoHeaderName>(&mut self, key: K, value: HeaderValue) {
+        self._innser.headers_mut().insert(key, value);
     }
 
-    pub fn line_header_bytes(&self) -> Bytes {
-        let mut bytes = BytesMut::new();
-        let line_bytes: Bytes = (&self.status_line).into();
-        bytes.put(line_bytes);
-        let header_bytes: Bytes = (&self.headers).into();
-        bytes.put(header_bytes);
-        bytes.freeze()
-    }
-    pub async fn serialize_to_socket(self, socket: &mut OwnedWriteHalf) {
-        use self::ResponseBody::*;
-        let mut line_header: Bytes = self.line_header_bytes();
-        while line_header.has_remaining() {
-            let _ = socket.write_buf(&mut line_header).await;
+    pub async  fn write_line_header_bytes(&self,socket: &mut OwnedWriteHalf) -> Result<(),std::io::Error> {
+        // line
+        let line_bytes = format!("{:?} {}\r\n",self._innser.version(),self._innser.status());
+        socket.write_all(line_bytes.as_bytes()).await?;
+        // header
+        for (k,v) in self._innser.headers().iter() {
+            socket.write_all(k.as_str().as_bytes()).await?;
+            socket.write_all(": ".as_bytes()).await?;
+            socket.write_all(v.as_bytes()).await?;
+            socket.write_all("\r\n".as_bytes()).await?;
         }
-        match self.body {
-            Simple(mut b) => {
-                let _ = socket.write_all_buf(&mut b).await;
+        socket.write_all("\r\n".as_bytes()).await?;
+
+        Ok(())
+    }
+    pub async fn serialize_to_socket(mut self, socket: &mut OwnedWriteHalf) -> Result<(),std::io::Error> {
+        use self::ResponseBody::*;
+
+        self.write_line_header_bytes(socket).await?;
+
+        match self._innser.body_mut() {
+            Simple( b) => {
+                socket.write_all_buf( b).await?;
             }
-            File(mut f) => {
-                let _ = tokio::io::copy(&mut f, socket).await;
+            File( f) => {
+                tokio::io::copy( f, socket).await?;
             }
             Empty => {
                 // No body to write
             }
         }
-        let _ = socket.flush().await;
+        socket.flush().await?;
+        Ok(())
     }
 }
 #[derive(Default, Debug)]
@@ -87,32 +100,14 @@ pub enum ResponseBody {
     Empty,
 }
 
-#[derive(Default, Debug)]
-pub struct ResponseStatusLine {
-    version: String,
-    status: String,
-    info: String,
-}
 
-impl ResponseStatusLine {
-
-    pub fn new(version: &str, status: &str, info: &str) -> Self {
-        Self {
-            version: version.into(),
-            status: status.into(),
-            info: info.into(),
-        }
-    }
-}
-
-impl From<&ResponseStatusLine> for Bytes {
-
-    fn from(value: &ResponseStatusLine) -> Self {
-        let mut bytes = BytesMut::with_capacity(64);
-        bytes.put(format!("{} {} {}\r\n", value.version, value.status, value.info).as_bytes());
-        bytes.freeze()
-    }
-}
+// impl From<&ResponseStatusLine> for Bytes {
+//     fn from(value: &ResponseStatusLine) -> Self {
+//         let mut bytes = BytesMut::with_capacity(64);
+//         bytes.put(format!("{} {} {}\r\n", value.version, value.status, value.info).as_bytes());
+//         bytes.freeze()
+//     }
+// }
 
 pub trait HttpResponseModifier {
     fn modify<'a>(
@@ -121,20 +116,22 @@ pub trait HttpResponseModifier {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>>;
 }
 
-impl HttpResponseModifier for HttpHeader {
+impl HttpResponseModifier for HeaderMap {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            for kv in self.headers.drain() {
-                res.add_header(kv);
+            for (k,v) in self.drain() {
+                if let Some(k) = k {
+                    res.add_header(k,v);
+                }
             }
             Ok(())
         })
     }
 }
-impl HttpResponseModifier for ResponseStatusLine {
+impl HttpResponseModifier for StatusCode {
     // fn modify(&self, res: &mut HttpResponse) -> Result<(), String> {
     //     res.status_line.info = self.status.to_string();
     //     res.status_line.info = self.info.to_string();
@@ -145,8 +142,7 @@ impl HttpResponseModifier for ResponseStatusLine {
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            res.status_line.info = self.status.to_string();
-            res.status_line.info = self.info.to_string();
+            *res._innser.status_mut() = *self;
             Ok(())
         })
     }
@@ -158,7 +154,8 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for m in self {
-                let m:std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + Send + Sync>> = m.modify(res);
+                let m: std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + Send + Sync>> =
+                    m.modify(res);
                 m.await?;
             }
             Ok(())
@@ -169,34 +166,6 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
 #[cfg(test)]
 mod test {
 
-    use bytes::{Buf, Bytes};
-
-    use crate::{response::{HttpResponse, HttpResponseModifier, ResponseStatusLine}};
-
-    /// Tests conversion of `ResponseStatusLine` to bytes.
-    #[test]
-    fn into_bytes_test() {
-        let r = ResponseStatusLine::new("Http", "200", "ok");
-        let b: Bytes = (&r).into();
-        assert_eq!(b"Http 200 ok\r\n", b.chunk());
-    }
-
-    /// Tests serialization of status line and headers to bytes.
-    #[test]
-    fn line_header_test() {
-        let mut r = HttpResponse::new();
-        r.add_header(("Hello".to_string(), "World".to_string()));
-        let b = r.line_header_bytes();
-        println!("{:?}", b);
-    }
-    #[test]
-    fn modifier() {
-        let mut res = HttpResponse::new();
-        // let mut m:Box<dyn HttpResponseModifier> = Box::new("hello");
-        let mut m = "hello";
-        let _ = m.modify(&mut res);
-        println!("{:?}",res);
-    }
 
     // #[test]
     // fn fuck() {

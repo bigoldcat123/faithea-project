@@ -1,14 +1,44 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut}};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
+
+use http::{HeaderValue, header::SET_COOKIE};
 
 use crate::{handler::FuError, response::HttpResponseModifier};
 
-#[derive(Debug, Default)]
+pub enum CookieType {
+    KeyValue(String, String),
+    Attribute(String),
+}
+impl Debug for CookieType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CookieType::Attribute(attr) => {
+                write!(f, "{attr};")
+            }
+            CookieType::KeyValue(k, v) => {
+                write!(f, "{k}={v};")
+            }
+        }
+    }
+}
+#[derive(Default)]
 pub struct Cookie {
-    _innser: HashMap<String, String>,
+    _innser: Vec<CookieType>,
+}
+
+impl Debug for Cookie {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for c in &self._innser {
+            write!(f, "{:?}", c)?;
+        }
+        Ok(())
+    }
 }
 
 impl Deref for Cookie {
-    type Target = HashMap<String,String>;
+    type Target = Vec<CookieType>;
     fn deref(&self) -> &Self::Target {
         &self._innser
     }
@@ -25,9 +55,11 @@ impl HttpResponseModifier for Cookie {
         res: &'a mut super::HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            for (k,v) in self._innser.drain() {
-                res.headers.add(k,v);
-            }
+            res._innser.headers_mut().insert(
+                SET_COOKIE,
+                HeaderValue::from_maybe_shared(format!("{:?}", self))
+                    .map_err(|e| Box::new(e.to_string()) as FuError)?,
+            );
             Ok(())
         })
     }

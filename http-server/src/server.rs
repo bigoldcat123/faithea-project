@@ -4,13 +4,24 @@ use std::{
 };
 
 use bytes::BytesMut;
+use http::{
+    HeaderMap,
+    header::{
+        ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
+        ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+    },
+};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc::{self, Sender},
 };
 
 use crate::{
-    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, parse_http_frame}, response::{HttpResponse, HttpResponseModifier}, route::Route
+    guard::GuardTire,
+    handler::HandlerTire,
+    request::{HttpRequest, parse_http_frame},
+    response::{HttpResponse, HttpResponseModifier},
+    route::Route,
 };
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
 pub struct HttpServerBuilder {
@@ -29,11 +40,7 @@ impl HttpServerBuilder {
         self
     }
 
-    pub fn mount(
-        mut self,
-        pre_fix: &'static str,
-        handlers: Vec<HandlerModifier>,
-    ) -> Self {
+    pub fn mount(mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) -> Self {
         self.handlers.mount(pre_fix, handlers);
         self
     }
@@ -48,21 +55,22 @@ impl HttpServerBuilder {
         self
     }
     pub fn cors(mut self) -> Self {
-        self.handlers.options("/**",  |_:HttpRequest| {
-            async move {
-                let mut res = HttpResponse::new();
-                let mut c = crate::response::cookie::Cookie::default();
-                c.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
-                c.insert("Access-Control-Allow-Methods".to_string(), "GET, POST, PUT, DELETE".to_string());
-                c.insert("Access-Control-Allow-Headers".to_string(), "*".to_string());
-                c.insert("Access-Control-Allow-Credentials".to_string(), "true".to_string());
-                c.modify(&mut res).await?;
-                Ok(res)
-            }
+        self.handlers.options("/**", |_: HttpRequest| async move {
+            let mut res = HttpResponse::new();
+            let mut header = HeaderMap::new();
+            header.insert(ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+            header.insert(ACCESS_CONTROL_ALLOW_HEADERS, "*".parse().unwrap());
+            header.insert(
+                ACCESS_CONTROL_ALLOW_METHODS,
+                "GET, POST, PUT, DELETE".parse().unwrap(),
+            );
+            header.insert(ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());
+            header.modify(&mut res).await?;
+            Ok(res)
         });
         self
     }
-    pub fn build( self) -> HttpServer {
+    pub fn build(self) -> HttpServer {
         HttpServer {
             addr: self.addr,
             handlers: Arc::new(self.handlers),
@@ -90,7 +98,6 @@ pub struct HttpServer {
 }
 
 impl HttpServer {
-
     pub fn builder() -> HttpServerBuilder {
         Default::default()
     }
@@ -122,16 +129,21 @@ async fn process(
     // Spawn writer task that consumes responses from the channel and writes them to the socket
     tokio::spawn(async move {
         while let Some(response) = rx.recv().await {
-            response.serialize_to_socket(&mut writer).await;
+            if let Err(_) = response.serialize_to_socket(&mut writer).await {
+                println!("sending response error!");
+            }
         }
     });
 
-    let mut buf = BytesMut::with_capacity(4096*100);// 4KB
+    let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
         let req = parse_http_frame(&mut reader, &mut buf).await?;
         // println!("{:?}", req);
 
-        match guards.guard(&req._inner.uri().path().to_string()[..], req).await {
+        match guards
+            .guard(&req._inner.uri().path().to_string()[..], req)
+            .await
+        {
             Ok(req) => {
                 handle_request(handlers.clone(), req, tx.clone()).await;
             }
@@ -148,7 +160,7 @@ async fn handle_request(
     tx: Sender<HttpResponse>,
 ) {
     if let Some((_matched_url, handler)) =
-        handlers.get_handler(&req._inner.uri().path(), req._inner.method().clone())
+        handlers.get_handler(req._inner.uri().path(), req._inner.method().clone())
     {
         req.process_routes(&_matched_url, &Route::from(req._inner.uri().path()));
 
@@ -159,9 +171,9 @@ async fn handle_request(
             }
             Err(mut err) => {
                 let mut response = HttpResponse::new();
-                if let Ok(_) = err.modify(&mut response).await {
+                if err.modify(&mut response).await.is_ok() {
                     let _ = tx.send(response).await;
-                }else {
+                } else {
                     let _ = tx.send(HttpResponse::not_found()).await;
                 }
             }

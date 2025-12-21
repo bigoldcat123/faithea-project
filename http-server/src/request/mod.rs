@@ -121,8 +121,7 @@ impl HttpRequest {
         }
     }
     pub fn get_header<K: AsHeaderName>(&self, k: K) -> Option<&HeaderValue> {
-        let a = self._inner.headers().get(k);
-        a
+        self._inner.headers().get(k)
     }
     pub(crate) fn process_routes(&mut self, handler_route: &Route, incoming_route: &Route) {
         self.assamble_path_param(handler_route, incoming_route);
@@ -288,16 +287,17 @@ fn parse_line_header(
         builder,
         raw_header
             .next()
-            .ok_or("parse req line error-> no req line".to_string())?,
+            .ok_or("parse req line error-> no req line")?,
     )?;
     let header_map = builder.headers_mut().unwrap();
 
     for h in raw_header {
         if !h.is_empty() {
             let mut k_v = h.split(":");
-            let k = k_v.next().ok_or("no header key".to_string())?.trim();
-            let v = k_v.next().ok_or("no header value".to_string())?.trim();
-            let value = HeaderValue::from_maybe_shared(v.to_string()).map_err(map_str!())?;
+            let k = k_v.next().ok_or("no header key")?.trim();
+            let v = k_v.next().ok_or("no header value")?.trim();
+            // let value = HeaderValue::from_maybe_shared(v.to_string()).map_err(map_str!())?;
+            let value = v.parse().map_err(map_str!())?;
             let name = HeaderName::from_str(k).unwrap();
             header_map.insert(name, value);
         }

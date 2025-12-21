@@ -22,9 +22,6 @@
 //! - `guard`: Guard middleware for request validation
 //! - `route`: Route pattern matching components
 
-use std::collections::HashMap;
-
-use bytes::{BufMut, Bytes, BytesMut};
 
 pub mod data;
 pub mod guard;
@@ -33,9 +30,9 @@ pub mod request;
 pub mod response;
 pub mod route;
 pub mod server;
-
+pub mod header;
 pub use http_server_macro::*;
-
+pub use http::HeaderMap;
 use crate::handler::FuError;
 
 
@@ -43,6 +40,13 @@ use crate::handler::FuError;
 macro_rules! map_str {
     () => {
         |x| format!("{}", x)
+    };
+}
+
+#[macro_export]
+macro_rules! map_fu {
+    () => {
+        |x| Box::new(format!("{}", x)) as FuError
     };
 }
 // impl ConvertFromRefString<i32> for  &String {
@@ -67,52 +71,18 @@ macro_rules! map_str {
 
 
 
-#[derive(Debug, Default)]
-pub struct HttpHeader {
-    headers: HashMap<String, String>,
-}
-impl HttpHeader {
-    pub fn new() -> Self {
-        Self {
-            headers: HashMap::new(),
-        }
-    }
-    // pub fn parse_new_header(&mut self, s: &str) -> Result<(), String> {
-    //     let mut k_v = s.split(":");
-    //     let k = k_v
-    //         .next()
-    //         .ok_or("no key".to_string())?
-    //         .trim()
-    //         .to_lowercase();
-    //     let v = k_v
-    //         .next()
-    //         .ok_or("no value".to_string())?
-    //         .trim().to_string();
-    //     self.headers.insert(k, v);
-    //     Ok(())
-    // }
-    pub fn get(&self, key: &str) -> Option<&String> {
-        self.headers.get(key)
-    }
 
+// impl From<&HttpHeader> for Bytes {
+//     fn from(value: &HttpHeader) -> Self {
+//         let mut b = BytesMut::with_capacity(256);
+//         for (k, v) in value.headers.iter() {
+//             b.put(format!("{k}:{v}\r\n").as_bytes());
+//         }
+//         b.put("\r\n".as_bytes());
 
-    pub fn add(&mut self, key: String, value: String) {
-        self.headers
-            .insert(key, value);
-    }
-}
-
-impl From<&HttpHeader> for Bytes {
-    fn from(value: &HttpHeader) -> Self {
-        let mut b = BytesMut::with_capacity(256);
-        for (k, v) in value.headers.iter() {
-            b.put(format!("{k}:{v}\r\n").as_bytes());
-        }
-        b.put("\r\n".as_bytes());
-
-        b.freeze()
-    }
-}
+//         b.freeze()
+//     }
+// }
 
 pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
     let a: &str = s.as_ref();
@@ -128,36 +98,37 @@ pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
 
 #[cfg(test)]
 mod test {
+    // use http::{HeaderMap, header::{ACCEPT, CONNECTION, HOST, USER_AGENT}};
 
-    use bytes::{Buf, Bytes};
 
-    use crate::HttpHeader;
 
-    #[test]
-    fn into_bytes_test() {
-        let mut header = HttpHeader::new();
-        // some real HTTP headers
-        header.add("Host".to_string(), "example.com".to_string());
-        header.add("User-Agent".to_string(), "rust-test/0.1".to_string());
-        header.add("Accept".to_string(), "*/*".to_string());
-        header.add("Connection".to_string(), "close".to_string());
+    // #[test]
+    // fn into_bytes_test() {
+    //     let mut header = HeaderMap::new();
+    //     // some real HTTP headers
+    //     header.insert(HOST, "example.com".parse().unwrap());
+    //     header.insert(USER_AGENT, "rust-test/0.1".parse().unwrap());
+    //     header.insert(ACCEPT, "*/*".parse().unwrap());
+    //     header.insert(CONNECTION, "close".parse().unwrap());
 
-        let bytes: Bytes = (&header).into();
-        let s = std::str::from_utf8(bytes.chunk()).unwrap();
-        // Split into lines (ignore the final empty line caused by the trailing \r\n\r\n),
-        // sort to avoid depending on HashMap iteration order, and compare.
-        let mut got: Vec<&str> = s.split("\r\n").filter(|l| !l.is_empty()).collect();
-        got.sort();
-        let mut expected = vec![
-            "Host:example.com",
-            "User-Agent:rust-test/0.1",
-            "Accept:*/*",
-            "Connection:close",
-        ];
-        expected.sort();
-        assert_eq!(got, expected);
-        assert!(s.ends_with("\r\n\r\n"));
-    }
+
+
+    //     let bytes: Bytes = (&header).into();
+    //     let s = std::str::from_utf8(bytes.chunk()).unwrap();
+    //     // Split into lines (ignore the final empty line caused by the trailing \r\n\r\n),
+    //     // sort to avoid depending on HashMap iteration order, and compare.
+    //     let mut got: Vec<&str> = s.split("\r\n").filter(|l| !l.is_empty()).collect();
+    //     got.sort();
+    //     let mut expected = vec![
+    //         "Host:example.com",
+    //         "User-Agent:rust-test/0.1",
+    //         "Accept:*/*",
+    //         "Connection:close",
+    //     ];
+    //     expected.sort();
+    //     assert_eq!(got, expected);
+    //     assert!(s.ends_with("\r\n\r\n"));
+    // }
 }
 
 
@@ -191,16 +162,11 @@ impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
 
 #[cfg(test)]
 mod tests {
-
-
-    use crate::response::{ResponseStatusLine};
-
-    use super::*;
-
+    use http::{HeaderMap, StatusCode};
     #[test]
     fn macro_test() {
-        let a = HttpHeader::new();
-        let b = ResponseStatusLine::default();
-        let _ = res_modifiers!(a,b);
+        let s = StatusCode::OK;
+        let h = HeaderMap::new();
+        let _ = res_modifiers!(s,h);
     }
 }

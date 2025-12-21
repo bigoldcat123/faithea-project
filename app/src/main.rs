@@ -2,13 +2,13 @@
 use chenzhonghai_app::json;
 use chenzhonghai_app::static_file_map::file_map;
 use http_server::{
-    MultipartData, TryConvertFrom, data::{
+    HeaderMap, MultipartData, TryConvertFrom, data::{
         Json,
         inbound::{
             FromRequest,
             multipart::{MultiPartFile, Multipart, Part},
         },
-    }, get, handler::FuError, handlers, post, request::{HttpRequest, search_param}, res_modifiers, response, server::HttpServer
+    }, get, handler::FuError, handlers, header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN}, post, request::{HttpRequest, search_param}, res_modifiers, response, server::HttpServer
 };
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -77,12 +77,12 @@ async fn multipart(data: Multipart<StuInfo>) {
 async fn hello_world() {
     println!("哈哈哈");
 
-    let mut c = response::cookie::Cookie::default();
-    c.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
-    c.insert("Access-Control-Allow-Methods".to_string(), "GET, POST, PUT, DELETE".to_string());
-    c.insert("Access-Control-Allow-Headers".to_string(), "*".to_string());
-    c.insert("Access-Control-Allow-Credentials".to_string(), "true".to_string());
-    res_modifiers!("Hello,World",c)
+    let mut header = HeaderMap::new();
+    header.insert(ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+    header.insert(ACCESS_CONTROL_ALLOW_HEADERS, "*".parse().unwrap());
+    header.insert(ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE".parse().unwrap());
+    header.insert(ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());
+    res_modifiers!("Hello,World",header)
 }
 #[get("/cookie")]
 async fn cookie() {
