@@ -4,7 +4,7 @@ use bytes::Bytes;
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode, header::{ CONTENT_LENGTH, IntoHeaderName}
 };
-use tokio::{fs::File, io::AsyncWriteExt, net::tcp::OwnedWriteHalf};
+use tokio::{fs::File, io::{AsyncWrite, AsyncWriteExt}};
 
 use crate::handler::FuError;
 
@@ -54,7 +54,7 @@ impl HttpResponse {
         self._innser.headers_mut().insert(key, value);
     }
 
-    pub async  fn write_line_header_bytes(&self,socket: &mut OwnedWriteHalf) -> Result<(),std::io::Error> {
+    pub async  fn write_line_header_bytes<W:AsyncWrite + Unpin>(&self,socket: &mut W) -> Result<(),std::io::Error> {
         // line
         let line_bytes = format!("{:?} {}\r\n",self._innser.version(),self._innser.status());
         socket.write_all(line_bytes.as_bytes()).await?;
@@ -69,7 +69,7 @@ impl HttpResponse {
 
         Ok(())
     }
-    pub async fn serialize_to_socket(mut self, socket: &mut OwnedWriteHalf) -> Result<(),std::io::Error> {
+    pub async fn serialize_to_socket<W:AsyncWrite + Unpin>(mut self, socket: &mut W) -> Result<(),std::io::Error> {
         use self::ResponseBody::*;
 
         self.write_line_header_bytes(socket).await?;

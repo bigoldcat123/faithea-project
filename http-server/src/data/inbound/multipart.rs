@@ -4,10 +4,9 @@ use std::{
 };
 
 use bytes::{Buf, Bytes, BytesMut};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::tcp::OwnedReadHalf,
-};
+use tokio::
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt}
+;
 
 use crate::{
     TryConvertFrom, handler::FuError, map_str, request::{HttpRequest, RequestBody}
@@ -133,8 +132,8 @@ struct HeaderInfo {
     mime_type: Option<String>,
     file_name: Option<String>,
 }
-pub struct MultiPartBodyParser<'a> {
-    r: &'a mut OwnedReadHalf,
+pub struct MultiPartBodyParser<'a,R:AsyncRead + Unpin> {
+    r: &'a mut R,
     buf: &'a mut BytesMut,
     len: usize,
     readed: usize,
@@ -145,9 +144,9 @@ pub struct MultiPartBodyParser<'a> {
     state: MultiPartBodyParserState,
     header_info: HeaderInfo,
 }
-impl<'a> MultiPartBodyParser<'a> {
+impl<'a,R:AsyncRead + Unpin> MultiPartBodyParser<'a,R> {
     fn new_with_start_state(
-        r: &'a mut OwnedReadHalf,
+        r: &'a mut R,
         buf: &'a mut BytesMut,
         len: usize,
         boundary: &'a [u8],
@@ -176,7 +175,7 @@ impl<'a> MultiPartBodyParser<'a> {
         }
     }
     pub async fn parse(
-        r: &'a mut OwnedReadHalf,
+        r: &'a mut R,
         buf: &'a mut BytesMut,
         len: usize,
         boundary: &'a str,

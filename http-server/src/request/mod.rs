@@ -7,7 +7,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use bytes::{Buf, Bytes, BytesMut};
 use http::{HeaderMap, HeaderName, HeaderValue, Request, Uri, Version, header::{AsHeaderName, CONTENT_LENGTH}};
-use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     TryConvertFrom,
@@ -179,8 +179,8 @@ impl HttpRequest {
 //     }
 // }
 
-pub async fn parse_http_frame(
-    r: &mut OwnedReadHalf,
+pub async fn parse_http_frame<R:AsyncRead + Unpin>(
+    r: &mut R,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
     let mut builder = http::Request::builder();
@@ -201,9 +201,9 @@ pub async fn parse_http_frame(
     Ok(req)
 }
 
-pub async fn parse_body_frame2(
+pub async fn parse_body_frame2<R:AsyncRead + Unpin>(
     len: usize,
-    r: &mut OwnedReadHalf,
+    r: &mut R,
     buf: &mut BytesMut,
     headers:  &HeaderMap<HeaderValue>,
 ) -> Result<RequestBody, String> {
@@ -216,8 +216,8 @@ pub async fn parse_body_frame2(
     }
 }
 
-async fn parse_simple_body(
-    r: &mut OwnedReadHalf,
+async fn parse_simple_body<R:AsyncRead + Unpin>(
+    r: &mut R,
     buf: &mut BytesMut,
     len: usize,
 ) -> Result<RequestBody, String> {
@@ -235,8 +235,8 @@ async fn parse_simple_body(
         }
     }
 }
-async fn parse_line_header_frame(
-    r: &mut OwnedReadHalf,
+async fn parse_line_header_frame<R:AsyncRead + Unpin>(
+    r: &mut R,
     buf: &mut BytesMut,
     builder: http::request::Builder,
 ) -> Result<http::request::Builder, String> {

@@ -4,7 +4,11 @@ use http_server::TryConvertInto;
 use serde::{Deserialize, Serialize};
 
 
-
+#[test]
+fn u() {
+    // let a:Result<&str, String> = Err(format!("{}:{}:{}",file!(),line!(),column!()));
+    // a.unwrap();
+}
 
 #[test]
 fn a() {

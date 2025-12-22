@@ -130,7 +130,13 @@ async fn main() {
         .cors()
         .guard("/protected/**", async |req| Ok(req))
         .guard("/**", async |e| Ok(e))
+        .tls("/Users/dadigua/Desktop/graduation/key2.pem", "/Users/dadigua/Desktop/graduation/cert.pem")
+        .h2()
+        .host("0.0.0.0")
+        .port(443)
         .build()
         .start()
-        .await;
+        .await
+        .unwrap();
+
 }
