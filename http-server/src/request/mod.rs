@@ -6,7 +6,11 @@ pub mod search_param;
 use std::{path::PathBuf, str::FromStr};
 
 use bytes::{Buf, Bytes, BytesMut};
-use http::{HeaderMap, HeaderName, HeaderValue, Request, Uri, Version, header::{AsHeaderName, CONTENT_LENGTH}};
+use h2::RecvStream;
+use http::{
+    HeaderMap, HeaderName, HeaderValue, Request, Uri, Version,
+    header::{AsHeaderName, CONTENT_LENGTH},
+};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
@@ -18,8 +22,7 @@ use crate::{
     handler::FuError,
     map_str,
     request::{
-        content_type::ContentType, cookie::Cookie, path_param::PathParam,
-        search_param::SearchParam,
+        content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
     },
     res_modifiers,
     response::HttpResponseModifier,
@@ -147,39 +150,20 @@ impl HttpRequest {
             None
         }
     }
+    pub(crate) async fn parse_h1<R: AsyncRead + Unpin>(
+        r: &mut R,
+        buf: &mut BytesMut,
+    ) -> Result<HttpRequest, String> {
+        parse_http_frame(r, buf).await
+    }
+    pub(crate) async fn parse_h2(
+        stream_req:Request<RecvStream>
+    ) -> Result<HttpRequest, String> {
+        unimplemented!()
+    }
 }
 
-// #[derive(Debug)]
-// pub struct HttpReqLine {
-//     pub method: Method,
-//     pub url: String,
-//     pub version: String,
-// }
-
-// impl HttpReqLine {
-//     pub fn parse(s: &str) -> Result<Self, String> {
-//         let mut head_line = s.split_whitespace();
-//         let method = head_line
-//             .next()
-//             .ok_or("method parsing error".to_string())?
-//             .to_string();
-//         let url = head_line
-//             .next()
-//             .ok_or("url parsing error".to_string())?
-//             .to_string();
-//         let version = head_line
-//             .next()
-//             .ok_or("version parsing error".to_string())?
-//             .to_string();
-//         Ok(Self {
-//             method: method.try_into()?,
-//             url,
-//             version,
-//         })
-//     }
-// }
-
-pub async fn parse_http_frame<R:AsyncRead + Unpin>(
+async fn parse_http_frame<R: AsyncRead + Unpin>(
     r: &mut R,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
@@ -194,18 +178,18 @@ pub async fn parse_http_frame<R:AsyncRead + Unpin>(
             .parse::<usize>()
             .map_err(map_str!())?;
 
-        let body = parse_body_frame2(len, r, buf, req._inner.headers()).await?;
+        let body = parse_body_frame(len, r, buf, req._inner.headers()).await?;
         // let body = buf.split_to(len).freeze();
         *req._inner.body_mut() = Some(body);
     }
     Ok(req)
 }
 
-pub async fn parse_body_frame2<R:AsyncRead + Unpin>(
+pub async fn parse_body_frame<R: AsyncRead + Unpin>(
     len: usize,
     r: &mut R,
     buf: &mut BytesMut,
-    headers:  &HeaderMap<HeaderValue>,
+    headers: &HeaderMap<HeaderValue>,
 ) -> Result<RequestBody, String> {
     use ContentType::*;
     let content_type = ContentType::try_from(headers)?;
@@ -216,7 +200,7 @@ pub async fn parse_body_frame2<R:AsyncRead + Unpin>(
     }
 }
 
-async fn parse_simple_body<R:AsyncRead + Unpin>(
+async fn parse_simple_body<R: AsyncRead + Unpin>(
     r: &mut R,
     buf: &mut BytesMut,
     len: usize,
@@ -235,7 +219,7 @@ async fn parse_simple_body<R:AsyncRead + Unpin>(
         }
     }
 }
-async fn parse_line_header_frame<R:AsyncRead + Unpin>(
+async fn parse_line_header_frame<R: AsyncRead + Unpin>(
     r: &mut R,
     buf: &mut BytesMut,
     builder: http::request::Builder,

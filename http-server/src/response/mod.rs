@@ -1,6 +1,7 @@
 pub mod cookie;
 pub mod cors;
 use bytes::Bytes;
+use h2::server::SendResponse;
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode, header::{ CONTENT_LENGTH, IntoHeaderName}
 };
@@ -69,7 +70,7 @@ impl HttpResponse {
 
         Ok(())
     }
-    pub async fn serialize_to_socket<W:AsyncWrite + Unpin>(mut self, socket: &mut W) -> Result<(),std::io::Error> {
+    pub async fn serialize_to_socket_h1<W:AsyncWrite + Unpin>(mut self, socket: &mut W) -> Result<(),std::io::Error> {
         use self::ResponseBody::*;
 
         self.write_line_header_bytes(socket).await?;
@@ -86,6 +87,26 @@ impl HttpResponse {
             }
         }
         socket.flush().await?;
+        Ok(())
+    }
+
+    pub async fn serialize_to_socket_h2(mut self, respond:&mut SendResponse<Bytes>) -> Result<(),std::io::Error> {
+        use self::ResponseBody::*;
+        unimplemented!();
+        // self.write_line_header_bytes(socket).await?;
+
+        // match self._innser.body_mut() {
+        //     Simple( b) => {
+        //         socket.write_all_buf( b).await?;
+        //     }
+        //     File( f) => {
+        //         tokio::io::copy( f, socket).await?;
+        //     }
+        //     Empty => {
+        //         // No body to write
+        //     }
+        // }
+        // socket.flush().await?;
         Ok(())
     }
 }

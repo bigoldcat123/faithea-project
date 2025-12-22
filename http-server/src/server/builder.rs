@@ -20,7 +20,7 @@ use crate::{
     handler::HandlerTire,
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
-    server::{HandlerModifier, HttpServer},
+    server::{HandlerModifier, HttpServer, Server, http1::H1Server},
 };
 
 pub(crate) struct TlsConfig {
@@ -109,14 +109,20 @@ impl HttpServerBuilder {
         });
         self
     }
-    pub fn build(self) -> HttpServer {
-        HttpServer {
+    pub fn build(self) -> Server {
+        // Server::H1Server(H1Server {
+        //     addr: self.addr,
+        //     handlers: Arc::new(self.handlers),
+        //     guards: Arc::new(self.guards),
+        //     tls: self.tls,
+        // })
+        Server::O(HttpServer {
             addr: self.addr,
             handlers: Arc::new(self.handlers),
             guards: Arc::new(self.guards),
             tls: self.tls,
-            h2: self.h2,
-        }
+            h2:self.h2
+        })
     }
 }
 impl Default for HttpServerBuilder {

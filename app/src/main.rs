@@ -8,7 +8,7 @@ use http_server::{
             FromRequest,
             multipart::{MultiPartFile, Multipart, Part},
         },
-    }, get, handler::FuError, handlers, header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN}, post, request::{HttpRequest, search_param}, res_modifiers, response::{self, cors::CORS}, server::HttpServer
+    }, get, handler::FuError, handlers, header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN}, post, request::{HttpRequest, search_param}, res_modifiers, response::{self, cors::CORS}, server::{HttpServer}
 };
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -130,12 +130,12 @@ async fn main() {
         .cors()
         .guard("/protected/**", async |req| Ok(req))
         .guard("/**", async |e| Ok(e))
-        .tls("/Users/dadigua/Desktop/graduation/key2.pem", "/Users/dadigua/Desktop/graduation/cert.pem")
-        .h2()
-        .host("0.0.0.0")
-        .port(443)
+        // .tls("/Users/dadigua/Desktop/graduation/key.pem", "/Users/dadigua/Desktop/graduation/cert.pem")
+        // .h2()
+        // .host("0.0.0.0")
+        // .port(443)
         .build()
-        .start()
+        .run()
         .await
         .unwrap();
 

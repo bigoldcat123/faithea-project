@@ -1,4 +1,6 @@
 pub mod builder;
+mod http2;
+mod http1;
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -12,12 +14,28 @@ use tokio::{
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
-    request::{HttpRequest, RequestBody, parse_http_frame},
+    request::{HttpRequest, RequestBody},
     response::HttpResponse,
     route::Route,
-    server::builder::{HttpServerBuilder, TlsConfig},
+    server::{builder::{HttpServerBuilder, TlsConfig}, http1::H1Server},
 };
+
+
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
+
+pub enum Server {
+ H1Server(H1Server),
+ O(HttpServer)
+}
+
+impl Server {
+    pub async fn run(self) -> Result<(), Box<dyn Error>>{
+        match self {
+            Server::H1Server(server) => server.run().await,
+            Server::O(server) => server.run().await,
+        }
+    }
+}
 
 pub struct HttpServer {
     /// Socket address the server is bound to
@@ -55,6 +73,8 @@ impl HttpServer {
         }
     }
     async fn start_h2(self) -> Result<(), Box<dyn Error>> {
+        println!("HTTP{} server starting on http{}://{}", if self.h2 {"S"}else{""},if self.h2 {"s"}else{""},self.addr,);
+        println!("Press Ctrl+C to stop the server");
         let listener = TcpListener::bind(self.addr).await?;
         match self.tls {
             Some(ref cfg) => {
@@ -152,7 +172,7 @@ impl HttpServer {
         });
     }
 
-    pub async fn start(self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
         if self.h2 {
             self.start_h2().await?;
         } else {
@@ -160,6 +180,8 @@ impl HttpServer {
         }
         Ok(())
     }
+
+
 }
 
 async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
@@ -173,7 +195,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     // Spawn writer task that consumes responses from the channel and writes them to the socket
     tokio::spawn(async move {
         while let Some(response) = rx.recv().await {
-            if response.serialize_to_socket(&mut writer).await.is_err() {
+            if response.serialize_to_socket_h1(&mut writer).await.is_err() {
                 println!("sending response error!");
             }
         }
@@ -181,7 +203,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
 
     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
-        let req = parse_http_frame(&mut reader, &mut buf).await?;
+        let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
         // println!("{:?}", req);
         process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
     }
