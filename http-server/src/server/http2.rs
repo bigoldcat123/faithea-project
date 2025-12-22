@@ -1,20 +1,21 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use bytes::Bytes;
+use h2::server::Connection;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
-    sync::mpsc::Receiver,
 };
 
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
-    request::{HttpRequest, parse_body_frame},
+    request::HttpRequest,
     response::HttpResponse,
     server::{builder::TlsConfig, process_request},
 };
 
-struct H2Server {
+pub struct H2Server {
     pub(crate) tls: Option<TlsConfig>,
     pub(crate) addr: SocketAddr,
     pub(crate) handlers: Arc<HandlerTire>,
@@ -56,28 +57,47 @@ impl H2Server {
         socket: IO,
         _addr: SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("client {} enter", _addr);
 
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
-            let mut h2 = h2::server::handshake(socket).await.expect("hand shake error");
-            while let Some(Ok((request, mut respond))) = h2.accept().await {
-
-                let request = HttpRequest::parse_h2(request).await.expect("parse h2 request error");
-                let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
-                tokio::spawn(async move {
-                    while let Some(r) = rx.recv().await {
-                        let _ = r.serialize_to_socket_h2(&mut respond).await;
-                    }
-                });
-                process_request(guards.clone(), handlers.clone(), request, tx).await;
-            }
+            let e = process(socket, guards, handlers).await;
+            println!("{:?}", e);
+            println!("client {} left", _addr);
         });
 
         Ok(())
     }
 }
 
-struct H2ResponseActor {
-    rx: Receiver<HttpResponse>,
+async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+    socket: IO,
+    guards: Arc<GuardTire>,
+    handlers: Arc<HandlerTire>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut h2 = h2::server::handshake(socket).await?;
+
+    while let Some(Ok((request, mut respond))) = h2.accept().await {
+        let guards = guards.clone();
+        let handlers = handlers.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
+        tokio::spawn(async move {
+            while let Some(r) = rx.recv().await {
+                let _ = r.serialize_to_socket_h2(&mut respond).await;
+            }
+        });
+        tokio::spawn(async move {
+
+            let request = HttpRequest::parse_h2(request).await.unwrap();
+
+            process_request(guards, handlers, request, tx).await;
+        });
+    }
+
+    Ok(())
 }
+
+// struct H2ResponseActor {
+//     rx: Receiver<HttpResponse>,
+// }

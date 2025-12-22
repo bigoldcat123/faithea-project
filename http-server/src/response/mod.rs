@@ -1,11 +1,17 @@
 pub mod cookie;
 pub mod cors;
-use bytes::Bytes;
+use std::{future::poll_fn, task::Poll};
+
+use bytes::{Bytes, BytesMut};
 use h2::server::SendResponse;
 use http::{
-    HeaderMap, HeaderValue, Response, StatusCode, header::{ CONTENT_LENGTH, IntoHeaderName}
+    HeaderMap, HeaderValue, Response, StatusCode,
+    header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName},
 };
-use tokio::{fs::File, io::{AsyncWrite, AsyncWriteExt}};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
+};
 
 use crate::handler::FuError;
 
@@ -55,12 +61,15 @@ impl HttpResponse {
         self._innser.headers_mut().insert(key, value);
     }
 
-    pub async  fn write_line_header_bytes<W:AsyncWrite + Unpin>(&self,socket: &mut W) -> Result<(),std::io::Error> {
+    pub async fn write_line_header_bytes<W: AsyncWrite + Unpin>(
+        &self,
+        socket: &mut W,
+    ) -> Result<(), std::io::Error> {
         // line
-        let line_bytes = format!("{:?} {}\r\n",self._innser.version(),self._innser.status());
+        let line_bytes = format!("{:?} {}\r\n", self._innser.version(), self._innser.status());
         socket.write_all(line_bytes.as_bytes()).await?;
         // header
-        for (k,v) in self._innser.headers().iter() {
+        for (k, v) in self._innser.headers().iter() {
             socket.write_all(k.as_str().as_bytes()).await?;
             socket.write_all(": ".as_bytes()).await?;
             socket.write_all(v.as_bytes()).await?;
@@ -70,17 +79,20 @@ impl HttpResponse {
 
         Ok(())
     }
-    pub async fn serialize_to_socket_h1<W:AsyncWrite + Unpin>(mut self, socket: &mut W) -> Result<(),std::io::Error> {
+    pub async fn serialize_to_socket_h1<W: AsyncWrite + Unpin>(
+        mut self,
+        socket: &mut W,
+    ) -> Result<(), std::io::Error> {
         use self::ResponseBody::*;
 
         self.write_line_header_bytes(socket).await?;
 
         match self._innser.body_mut() {
-            Simple( b) => {
-                socket.write_all_buf( b).await?;
+            Simple(b) => {
+                socket.write_all_buf(b).await?;
             }
-            File( f) => {
-                tokio::io::copy( f, socket).await?;
+            File(f) => {
+                tokio::io::copy(f, socket).await?;
             }
             Empty => {
                 // No body to write
@@ -90,26 +102,90 @@ impl HttpResponse {
         Ok(())
     }
 
-    pub async fn serialize_to_socket_h2(mut self, respond:&mut SendResponse<Bytes>) -> Result<(),std::io::Error> {
-        use self::ResponseBody::*;
-        unimplemented!();
-        // self.write_line_header_bytes(socket).await?;
+    // pub async fn serialize_to_socket_h2(
+    //     self,
+    //     respond: &mut SendResponse<Bytes>,
+    // ) -> Result<(), h2::Error> {
+    //     let (mut h, b) = self._innser.into_parts();
+    //     h.headers.remove(CONTENT_LENGTH);
+    //     h.headers.remove(CONNECTION);
 
-        // match self._innser.body_mut() {
-        //     Simple( b) => {
-        //         socket.write_all_buf( b).await?;
-        //     }
-        //     File( f) => {
-        //         tokio::io::copy( f, socket).await?;
-        //     }
-        //     Empty => {
-        //         // No body to write
-        //     }
-        // }
-        // socket.flush().await?;
+    //     let mut body_stream = respond
+    //         .send_response(Response::from_parts(h, ()), false)?;
+
+    //     match b {
+    //         ResponseBody::Simple(b) => {
+    //             wait_capacity(&mut body_stream, b.len()).await?;
+    //             body_stream.send_data(b, true)?;
+    //         }
+
+    //         ResponseBody::File(mut f) => {
+    //             let mut buf = BytesMut::with_capacity(4096);
+
+    //             while let Ok(n) = f.read_buf(&mut buf).await {
+    //                 if n == 0 {
+    //                     break;
+    //                 }
+
+    //                 let bytes = buf.split_to(n).freeze();
+    //                 wait_capacity(&mut body_stream, bytes.len()).await?;
+    //                 body_stream.send_data(bytes, false)?;
+    //             }
+
+    //             body_stream.send_data(Bytes::new(), true)?;
+    //         }
+
+    //         ResponseBody::Empty => {
+    //             body_stream.send_data(Bytes::new(), true)?;
+    //         }
+    //     }
+
+    //     Ok(())
+    // }
+
+    pub async fn serialize_to_socket_h2(
+        self,
+        respond: &mut SendResponse<Bytes>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use self::ResponseBody::*;
+        let (mut h, b) = self._innser.into_parts();
+        h.headers.remove(CONTENT_LENGTH);
+        h.headers.remove(CONNECTION);
+        let mut body_stream = respond.send_response(Response::from_parts(h, ()), false).unwrap();
+        match b {
+            Simple(b) => {
+                body_stream.send_data(b, true)?;
+            }
+            File(mut f) => {
+                let mut buf = BytesMut::with_capacity(4096);
+                while let Ok(n) = f.read_buf(&mut buf).await {
+                    if n == 0 {
+                        body_stream.send_data(buf.freeze(), true)?;
+                        break;
+                    }
+                    body_stream.send_data(buf.split_to(n).freeze(), false)?;
+                }
+            }
+            Empty => {
+                body_stream.send_data(Bytes::new(), true)?;
+            }
+        }
         Ok(())
     }
 }
+// async fn wait_capacity(
+//     stream: &mut h2::SendStream<Bytes>,
+//     need: usize,
+// ) -> Result<(), h2::Error> {
+//     poll_fn(|cx| {
+//         if stream.capacity() >= need {
+//             Poll::Ready(Ok(()))
+//         } else {
+//             stream.reserve_capacity(need);
+//             stream.poll_capacity(cx).map(|_| Ok(()))
+//         }
+//     }).await
+// }
 #[derive(Default, Debug)]
 pub enum ResponseBody {
     /// In-memory byte data for small responses.
@@ -120,7 +196,6 @@ pub enum ResponseBody {
     #[default]
     Empty,
 }
-
 
 // impl From<&ResponseStatusLine> for Bytes {
 //     fn from(value: &ResponseStatusLine) -> Self {
@@ -143,9 +218,9 @@ impl HttpResponseModifier for HeaderMap {
         res: &'a mut HttpResponse,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
         Box::pin(async move {
-            for (k,v) in self.drain() {
+            for (k, v) in self.drain() {
                 if let Some(k) = k {
-                    res.add_header(k,v);
+                    res.add_header(k, v);
                 }
             }
             Ok(())
@@ -186,7 +261,6 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
 
 #[cfg(test)]
 mod test {
-
 
     // #[test]
     // fn fuck() {

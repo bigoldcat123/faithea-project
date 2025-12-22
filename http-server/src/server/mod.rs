@@ -1,6 +1,6 @@
 pub mod builder;
-mod http2;
 mod http1;
+mod http2;
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -17,22 +17,27 @@ use crate::{
     request::{HttpRequest, RequestBody},
     response::HttpResponse,
     route::Route,
-    server::{builder::{HttpServerBuilder, TlsConfig}, http1::H1Server},
+    server::{
+        builder::{HttpServerBuilder, TlsConfig},
+        http1::H1Server,
+        http2::H2Server,
+    },
 };
-
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
 
 pub enum Server {
- H1Server(H1Server),
- O(HttpServer)
+    H1Server(H1Server),
+    H2Server(H2Server),
+    // O(HttpServer)
 }
 
 impl Server {
-    pub async fn run(self) -> Result<(), Box<dyn Error>>{
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
             Server::H1Server(server) => server.run().await,
-            Server::O(server) => server.run().await,
+            // Server::O(server) => server.run().await,
+            Server::H2Server(server) => server.run().await,
         }
     }
 }
@@ -73,7 +78,12 @@ impl HttpServer {
         }
     }
     async fn start_h2(self) -> Result<(), Box<dyn Error>> {
-        println!("HTTP{} server starting on http{}://{}", if self.h2 {"S"}else{""},if self.h2 {"s"}else{""},self.addr,);
+        println!(
+            "HTTP{} server starting on http{}://{}",
+            if self.h2 { "S" } else { "" },
+            if self.h2 { "s" } else { "" },
+            self.addr,
+        );
         println!("Press Ctrl+C to stop the server");
         let listener = TcpListener::bind(self.addr).await?;
         match self.tls {
@@ -87,7 +97,7 @@ impl HttpServer {
                             println!("{:?}", e);
                         }
                     } else {
-                        println!( "搞事情?");
+                        println!("搞事情?");
                     }
                 }
             }
@@ -180,8 +190,6 @@ impl HttpServer {
         }
         Ok(())
     }
-
-
 }
 
 async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(

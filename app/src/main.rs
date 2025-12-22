@@ -60,7 +60,7 @@ async fn multipart(data: Multipart<StuInfo>) {
     let mut f = tokio::fs::File::open(data.profile.temp_path.as_str()).await.unwrap();
     // let mut s = String::new();
     // f.read_to_string(&mut s).await.unwrap();
-    println!("{}",f.metadata().await.unwrap().len());
+    println!("{:?}",f.metadata().await.unwrap().len());
 
     format!(
         "name: {:?},age: {}, merried: {:?}, profile_len: {}, profile_name:{:?} other_info:{:?}",
@@ -114,7 +114,7 @@ async fn fromRequest(stu: FromRequest<Stu>) {
 //(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    HttpServer::builder()
+    let r = HttpServer::builder()
         .mount(
             "/",
             handlers!(
@@ -129,14 +129,18 @@ async fn main() {
         ).mount("/static", handlers!(file_map))
         .cors()
         .guard("/protected/**", async |req| Ok(req))
-        .guard("/**", async |e| Ok(e))
-        // .tls("/Users/dadigua/Desktop/graduation/key.pem", "/Users/dadigua/Desktop/graduation/cert.pem")
-        // .h2()
-        // .host("0.0.0.0")
-        // .port(443)
+        .guard("/**", async |e| {
+            // println!("{e:?}",);
+             Ok(e)
+        })
+        .tls("/Users/dadigua/Desktop/graduation/key.pem", "/Users/dadigua/Desktop/graduation/cert.pem")
+        .h2()
+        .host("0.0.0.0")
+        .port(443)
         .build()
         .run()
-        .await
-        .unwrap();
+        .await;
+    println!("{:?}",r);
+
 
 }

@@ -5,7 +5,7 @@ pub mod path_param;
 pub mod search_param;
 use std::{path::PathBuf, str::FromStr};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Request, Uri, Version,
@@ -16,7 +16,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use crate::{
     TryConvertFrom,
     data::{
-        inbound::multipart::{MultiPartBodyParser, MultipartDataMap},
+        inbound::multipart::{H2MultiPartBodyParser, MultiPartBodyParser, MultipartDataMap},
         outbound::StaticFile,
     },
     handler::FuError,
@@ -159,7 +159,30 @@ impl HttpRequest {
     pub(crate) async fn parse_h2(
         stream_req:Request<RecvStream>
     ) -> Result<HttpRequest, String> {
-        unimplemented!()
+        use ContentType::*;
+        let (p,mut body_stream) = stream_req.into_parts();
+        let content_type = ContentType::try_from(&p.headers)?;
+        let body =  match content_type {
+            MultipartFormData(boundary) =>{
+                let mut buf = BytesMut::with_capacity(4096 * 100);
+                H2MultiPartBodyParser::parse_h2(body_stream, &mut buf, boundary.as_bytes()).await?
+            },
+            _ => {
+                let mut buf = BytesMut::with_capacity(1024);
+                while let Some(chunk)  = body_stream.data().await {
+                    let chunk = chunk.map_err(map_str!())?;
+                    println!("{:?}",chunk);
+                    println!("{}",body_stream.is_end_stream());
+                    let len = chunk.len();
+                    buf.put(chunk);
+                    body_stream.flow_control().release_capacity(len).map_err(map_str!())?;
+                }
+                RequestBody::Simple(buf.freeze())
+            }
+        };
+        let req = HttpRequest::new(p, Some(body));
+
+        Ok(req)
     }
 }
 
@@ -195,7 +218,7 @@ pub async fn parse_body_frame<R: AsyncRead + Unpin>(
     let content_type = ContentType::try_from(headers)?;
     match content_type {
         ApplicationJson => parse_simple_body(r, buf, len).await,
-        MultipartFormData(boundary) => MultiPartBodyParser::parse(r, buf, len, boundary).await,
+        MultipartFormData(boundary) => MultiPartBodyParser::parse_h1(r, buf, len, boundary).await,
         _ => parse_simple_body(r, buf, len).await,
     }
 }

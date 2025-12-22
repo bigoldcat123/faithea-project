@@ -11,7 +11,7 @@ use crate::{
     guard::GuardTire, handler::HandlerTire, request::HttpRequest, response::HttpResponse, server::{builder::TlsConfig, process_request}
 };
 
-pub(crate) struct H1Server {
+pub struct H1Server {
     pub(crate) tls: Option<TlsConfig>,
     pub(crate) addr: SocketAddr,
     pub(crate) handlers: Arc<HandlerTire>,
@@ -20,7 +20,7 @@ pub(crate) struct H1Server {
 }
 impl H1Server {
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
-        println!("HTTP server starting on http://{}", self.addr);
+        println!("HTTP{} server starting on http{}://{}",if self.tls.is_some() {"S"} else {""},if self.tls.is_some() {"s"} else {""}, self.addr);
         println!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
         match self.tls {
