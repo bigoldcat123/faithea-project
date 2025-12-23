@@ -1,7 +1,7 @@
 pub mod cookie;
 pub mod cors;
 use bytes::{Bytes, BytesMut};
-use h2::server::SendResponse;
+use h2::{SendStream, server::SendResponse};
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode,
     header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName},
@@ -99,80 +99,16 @@ impl HttpResponse {
         socket.flush().await?;
         Ok(())
     }
-
-    // pub async fn serialize_to_socket_h2(
-    //     self,
-    //     respond: &mut SendResponse<Bytes>,
-    // ) -> Result<(), h2::Error> {
-    //     let (mut h, b) = self._innser.into_parts();
-    //     h.headers.remove(CONTENT_LENGTH);
-    //     h.headers.remove(CONNECTION);
-
-    //     let mut body_stream = respond
-    //         .send_response(Response::from_parts(h, ()), false)?;
-
-    //     match b {
-    //         ResponseBody::Simple(b) => {
-    //             wait_capacity(&mut body_stream, b.len()).await?;
-    //             body_stream.send_data(b, true)?;
-    //         }
-
-    //         ResponseBody::File(mut f) => {
-    //             let mut buf = BytesMut::with_capacity(4096);
-
-    //             while let Ok(n) = f.read_buf(&mut buf).await {
-    //                 if n == 0 {
-    //                     break;
-    //                 }
-
-    //                 let bytes = buf.split_to(n).freeze();
-    //                 wait_capacity(&mut body_stream, bytes.len()).await?;
-    //                 body_stream.send_data(bytes, false)?;
-    //             }
-
-    //             body_stream.send_data(Bytes::new(), true)?;
-    //         }
-
-    //         ResponseBody::Empty => {
-    //             body_stream.send_data(Bytes::new(), true)?;
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
     pub async fn serialize_to_socket_h2(
         self,
         respond: &mut SendResponse<Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use self::ResponseBody::*;
         let (mut h, b) = self._innser.into_parts();
         h.headers.remove(CONTENT_LENGTH);
         h.headers.remove(CONNECTION);
-        let mut body_stream = respond.send_response(Response::from_parts(h, ()), false).unwrap();
-        match b {
-            Simple(b) => {
-                body_stream.reserve_capacity(b.len());
-                body_stream.send_data(b, true)?;
-            }
-            File(mut f) => {
-                let mut buf = BytesMut::with_capacity(4096);
-                while let Ok(n) = f.read_buf(&mut buf).await {
-                    if n == 0 {
-                        body_stream.send_data(buf.freeze(), true)?;
-                        break;
-                    }
-                    body_stream.reserve_capacity(n);
-                    body_stream.send_data(buf.split_to(n).freeze(), false)?;
-
-                }
-            }
-            Empty => {
-                body_stream.reserve_capacity(0);
-                body_stream.send_data(Bytes::new(), true)?;
-            }
-        }
-        Ok(())
+        let body_stream = respond
+            .send_response(Response::from_parts(h, ()), false)?;
+        b.seriliaze_to_h2_stream(body_stream).await
     }
 }
 // async fn wait_capacity(
@@ -197,6 +133,34 @@ pub enum ResponseBody {
     /// No body content.
     #[default]
     Empty,
+}
+
+impl ResponseBody {
+    async fn seriliaze_to_h2_stream(self,mut body_stream:SendStream<Bytes>) -> Result<(),Box<dyn std::error::Error>>{
+        use ResponseBody::*;
+        match self {
+            Simple(b) => {
+                body_stream.reserve_capacity(b.len());
+                body_stream.send_data(b, true)?;
+            }
+            File(mut f) => {
+                let mut buf = BytesMut::with_capacity(4096);
+                while let Ok(n) = f.read_buf(&mut buf).await {
+                    if n == 0 {
+                        body_stream.send_data(buf.freeze(), true)?;
+                        break;
+                    }
+                    body_stream.reserve_capacity(n);
+                    body_stream.send_data(buf.split_to(n).freeze(), false)?;
+                }
+            }
+            Empty => {
+                body_stream.reserve_capacity(0);
+                body_stream.send_data(Bytes::new(), true)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // impl From<&ResponseStatusLine> for Bytes {

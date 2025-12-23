@@ -79,7 +79,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
         let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
-        // println!("{:?}", req);
+        println!("{:?}", req._inner.uri());
         process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
     }
 }

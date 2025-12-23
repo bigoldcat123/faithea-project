@@ -76,11 +76,12 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut h2 = h2::server::handshake(socket).await?;
 
-    while let Some(Ok((request, mut respond))) = h2.accept().await {
+    while let Some(Ok((request, respond))) = h2.accept().await {
         let guards = guards.clone();
         let handlers = handlers.clone();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
         tokio::spawn(async move {
+            let mut respond = respond;
             while let Some(r) = rx.recv().await {
                 let _ = r.serialize_to_socket_h2(&mut respond).await;
             }
