@@ -80,24 +80,9 @@ impl HttpResponse {
     pub async fn serialize_to_socket_h1<W: AsyncWrite + Unpin>(
         mut self,
         socket: &mut W,
-    ) -> Result<(), std::io::Error> {
-        use self::ResponseBody::*;
-
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.write_line_header_bytes(socket).await?;
-
-        match self._innser.body_mut() {
-            Simple(b) => {
-                socket.write_all_buf(b).await?;
-            }
-            File(f) => {
-                tokio::io::copy(f, socket).await?;
-            }
-            Empty => {
-                // No body to write
-            }
-        }
-        socket.flush().await?;
-        Ok(())
+        self._innser.body_mut().serialize_to_h1_socket(socket).await
     }
     pub async fn serialize_to_socket_h2(
         self,
@@ -159,6 +144,22 @@ impl ResponseBody {
                 body_stream.send_data(Bytes::new(), true)?;
             }
         }
+        Ok(())
+    }
+    async fn serialize_to_h1_socket<W:AsyncWrite + Unpin>(&mut self,socket:&mut W)-> Result<(),Box<dyn std::error::Error>> {
+        use self::ResponseBody::*;
+        match self {
+            Simple(b) => {
+                socket.write_all_buf(b).await?;
+            }
+            File(f) => {
+                tokio::io::copy(f, socket).await?;
+            }
+            Empty => {
+                // No body to write
+            }
+        }
+        socket.flush().await?;
         Ok(())
     }
 }
