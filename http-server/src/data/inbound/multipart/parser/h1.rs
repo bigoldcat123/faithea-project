@@ -1,7 +1,17 @@
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-use crate::{data::inbound::multipart::{MultiPartFile, MultipartDataMap, Part, parser::{HeaderInfo, MultiPartBodyParserState, build_boundary_next_array}}, map_str, request::RequestBody};
+use crate::{
+    data::inbound::multipart::{
+        MultiPartFile, MultipartDataMap, Part,
+        parser::{
+            HeaderInfo, MultiPartBodyParserState, MultipartParserStateMachine,
+            build_boundary_next_array,
+        },
+    },
+    map_str,
+    request::RequestBody,
+};
 
 pub struct MultiPartBodyParser<'a, R: AsyncRead + Unpin> {
     r: &'a mut R,
@@ -51,25 +61,8 @@ impl<'a, R: AsyncRead + Unpin> MultiPartBodyParser<'a, R> {
         len: usize,
         boundary: &'a str,
     ) -> Result<RequestBody, String> {
-        let state_machine = Self::new_with_start_state(r, buf, len, boundary.as_bytes());
+        let mut state_machine = Self::new_with_start_state(r, buf, len, boundary.as_bytes());
         state_machine.process().await
-    }
-    async fn process(mut self) -> Result<RequestBody, String> {
-        use MultiPartBodyParserState::*;
-        loop {
-            match self.state {
-                Start => {
-                    self.remove_mutipart_body_prefix().await?;
-                }
-                Header => {
-                    self.parse_header().await?;
-                }
-                Body => {
-                    self.parse_body().await?;
-                }
-                End => return Ok(RequestBody::MultiPart(self.map.take().unwrap())),
-            }
-        }
     }
 
     fn is_file_body(&self) -> bool {
@@ -171,6 +164,51 @@ impl<'a, R: AsyncRead + Unpin> MultiPartBodyParser<'a, R> {
     fn body_ends(&self) -> bool {
         &self.buf[..] == b"\r\n" && self.readed + 2 == self.len
     }
+
+    fn check_mutipart_header(&self) -> (bool, usize) {
+        let next = [0, 0, 1, 0];
+        let p = b"\r\n\r\n";
+        let mut i = 0;
+        let mut j = 0_usize;
+        while i < self.buf.len() {
+            if self.buf[i] == p[j] {
+                i += 1;
+                j += 1;
+            } else if j > 0 {
+                j = next[j - 1];
+            } else {
+                i += 1;
+            }
+            if j == 4 {
+                return (true, i);
+            }
+        }
+        (false, 0)
+    }
+
+    fn process_multipart_header(&mut self, header_line: &str) {
+        if let Some((k, v)) = header_line.split_once(":") {
+            if k.eq_ignore_ascii_case("Content-Disposition") {
+                for kv in v.split(";") {
+                    if let Some((k, v)) = kv.split_once("=") {
+                        if k.trim() == "name" {
+                            self.header_info.name = Some(v[1..v.len() - 1].to_string());
+                        }
+                        if k.trim() == "filename" {
+                            self.header_info.file_name = Some(v[1..v.len() - 1].to_string())
+                        }
+                    }
+                }
+            } else if k.eq_ignore_ascii_case("Content-Type") {
+                self.header_info.mime_type = Some(v.trim().to_string())
+            }
+        }
+    }
+}
+impl<'a, R: AsyncRead + Unpin> MultipartParserStateMachine for MultiPartBodyParser<'a, R> {
+    fn current_sate(&self) -> MultiPartBodyParserState {
+        self.state
+    }
     async fn parse_body(&mut self) -> Result<(), String> {
         let key_name = self
             .header_info
@@ -199,28 +237,9 @@ impl<'a, R: AsyncRead + Unpin> MultiPartBodyParser<'a, R> {
         }
         Ok(())
     }
-
-    fn check_mutipart_header(&self) -> (bool, usize) {
-        let next = [0, 0, 1, 0];
-        let p = b"\r\n\r\n";
-        let mut i = 0;
-        let mut j = 0_usize;
-        while i < self.buf.len() {
-            if self.buf[i] == p[j] {
-                i += 1;
-                j += 1;
-            } else if j > 0 {
-                j = next[j - 1];
-            } else {
-                i += 1;
-            }
-            if j == 4 {
-                return (true, i);
-            }
-        }
-        (false, 0)
+    fn generate_multipart(&mut self) -> MultipartDataMap {
+        self.map.take().unwrap()
     }
-
     async fn parse_header(&mut self) -> Result<(), String> {
         let header_len;
         loop {
@@ -244,24 +263,6 @@ impl<'a, R: AsyncRead + Unpin> MultiPartBodyParser<'a, R> {
         }
         self.state = MultiPartBodyParserState::Body;
         Ok(())
-    }
-    fn process_multipart_header(&mut self, header_line: &str) {
-        if let Some((k, v)) = header_line.split_once(":") {
-            if k.eq_ignore_ascii_case("Content-Disposition") {
-                for kv in v.split(";") {
-                    if let Some((k, v)) = kv.split_once("=") {
-                        if k.trim() == "name" {
-                            self.header_info.name = Some(v[1..v.len() - 1].to_string());
-                        }
-                        if k.trim() == "filename" {
-                            self.header_info.file_name = Some(v[1..v.len() - 1].to_string())
-                        }
-                    }
-                }
-            } else if k.eq_ignore_ascii_case("Content-Type") {
-                self.header_info.mime_type = Some(v.trim().to_string())
-            }
-        }
     }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
         // remove pre_fix

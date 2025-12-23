@@ -1,9 +1,18 @@
-
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{ AsyncWriteExt};
 
-use crate::{data::inbound::multipart::{MultiPartFile, MultipartDataMap, Part, parser::{HeaderInfo, MultiPartBodyParserState, build_boundary_next_array}}, map_str, request::RequestBody};
+use crate::{
+    data::inbound::multipart::{
+        MultiPartFile, MultipartDataMap, Part,
+        parser::{
+            HeaderInfo, MultiPartBodyParserState, MultipartParserStateMachine,
+            build_boundary_next_array,
+        },
+    },
+    map_str,
+    request::RequestBody,
+};
 
 pub struct H2MultiPartBodyParser<'a> {
     body_stream: RecvStream,
@@ -16,11 +25,7 @@ pub struct H2MultiPartBodyParser<'a> {
     header_info: HeaderInfo,
 }
 impl<'a> H2MultiPartBodyParser<'a> {
-    fn new_with_start_state(
-        body_stream: RecvStream,
-        buf: BytesMut,
-        boundary: &'a [u8],
-    ) -> Self {
+    fn new_with_start_state(body_stream: RecvStream, buf: BytesMut, boundary: &'a [u8]) -> Self {
         let map = Some(MultipartDataMap::new());
         // let boundary_with_prefix = format!("\r\n--{boundary}");
         let mut boundary_with_prefix = BytesMut::new();
@@ -45,26 +50,9 @@ impl<'a> H2MultiPartBodyParser<'a> {
         body_stream: RecvStream,
         boundary: &'a [u8],
     ) -> Result<RequestBody, String> {
-        let state_machine = Self::new_with_start_state(body_stream, BytesMut::with_capacity(4096 * 400), boundary);
+        let mut state_machine =
+            Self::new_with_start_state(body_stream, BytesMut::with_capacity(4096 * 400), boundary);
         state_machine.process().await
-    }
-
-    async fn process(mut self) -> Result<RequestBody, String> {
-        use MultiPartBodyParserState::*;
-        loop {
-            match self.state {
-                Start => {
-                    self.remove_mutipart_body_prefix().await?;
-                }
-                Header => {
-                    self.parse_header().await?;
-                }
-                Body => {
-                    self.parse_body().await?;
-                }
-                End => return Ok(RequestBody::MultiPart(self.map.take().unwrap())),
-            }
-        }
     }
 
     fn is_file_body(&self) -> bool {
@@ -126,33 +114,6 @@ impl<'a> H2MultiPartBodyParser<'a> {
         }
         (false, 0)
     }
-    async fn parse_body(&mut self) -> Result<(), String> {
-        let key_name = self
-            .header_info
-            .name
-            .take()
-            .unwrap_or("default".to_string());
-        if self.is_file_body() {
-            let multipart_file = self.parse_file_body().await?;
-            if let Some(map) = self.map.as_mut() {
-                map.entry(key_name)
-                    .or_default()
-                    .push(Part::File(multipart_file));
-            }
-        } else {
-            let a = self.parse_lit_body().await?;
-            let data = String::from_utf8(a.to_vec()).map_err(map_str!())?;
-            if let Some(map) = self.map.as_mut() {
-                map.entry(key_name).or_default().push(Part::Lit(data));
-            }
-        }
-        self.state = MultiPartBodyParserState::Header;
-        if self.body_ends() {
-            self.state = MultiPartBodyParserState::End;
-            let _ = self.buf.split();
-        }
-        Ok(())
-    }
 
     async fn parse_lit_body(&mut self) -> Result<Bytes, String> {
         let mut simple_body = BytesMut::new();
@@ -205,31 +166,6 @@ impl<'a> H2MultiPartBodyParser<'a> {
         (false, 0)
     }
 
-    async fn parse_header(&mut self) -> Result<(), String> {
-        let header_len;
-        loop {
-            let (inner_is_ok, inner_header_len) = self.check_mutipart_header();
-            if inner_is_ok {
-                header_len = inner_header_len;
-                break;
-            }
-            // let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
-            // if read_len == 0 {
-            //     return Err("Unexpected EOF".to_string());
-            // }
-            self.read_data().await?;
-        }
-        let b = self.buf.split_to(header_len);
-        let b = str::from_utf8(&b).map_err(map_str!())?;
-        for l in b.split("\r\n") {
-            if !l.is_empty() {
-                self.process_multipart_header(l);
-            }
-        }
-        self.state = MultiPartBodyParserState::Body;
-        Ok(())
-    }
-
     fn process_multipart_header(&mut self, header_line: &str) {
         if let Some((k, v)) = header_line.split_once(":") {
             if k.eq_ignore_ascii_case("Content-Disposition") {
@@ -261,7 +197,15 @@ impl<'a> H2MultiPartBodyParser<'a> {
         };
         Ok(())
     }
+}
 
+impl<'a> MultipartParserStateMachine for H2MultiPartBodyParser<'a> {
+    fn current_sate(&self) -> MultiPartBodyParserState {
+        self.state
+    }
+    fn generate_multipart(&mut self) -> MultipartDataMap {
+        self.map.take().unwrap()
+    }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
         // remove pre_fix
         while self.buf.len() < self.boundary.len() + 2 {
@@ -275,6 +219,57 @@ impl<'a> H2MultiPartBodyParser<'a> {
         }
         self.buf.advance(2 + self.boundary.len() + 2);
         self.state = MultiPartBodyParserState::Header;
+        Ok(())
+    }
+    async fn parse_body(&mut self) -> Result<(), String> {
+        let key_name = self
+            .header_info
+            .name
+            .take()
+            .unwrap_or("default".to_string());
+        if self.is_file_body() {
+            let multipart_file = self.parse_file_body().await?;
+            if let Some(map) = self.map.as_mut() {
+                map.entry(key_name)
+                    .or_default()
+                    .push(Part::File(multipart_file));
+            }
+        } else {
+            let a = self.parse_lit_body().await?;
+            let data = String::from_utf8(a.to_vec()).map_err(map_str!())?;
+            if let Some(map) = self.map.as_mut() {
+                map.entry(key_name).or_default().push(Part::Lit(data));
+            }
+        }
+        self.state = MultiPartBodyParserState::Header;
+        if self.body_ends() {
+            self.state = MultiPartBodyParserState::End;
+            let _ = self.buf.split();
+        }
+        Ok(())
+    }
+    async fn parse_header(&mut self) -> Result<(), String> {
+        let header_len;
+        loop {
+            let (inner_is_ok, inner_header_len) = self.check_mutipart_header();
+            if inner_is_ok {
+                header_len = inner_header_len;
+                break;
+            }
+            // let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+            // if read_len == 0 {
+            //     return Err("Unexpected EOF".to_string());
+            // }
+            self.read_data().await?;
+        }
+        let b = self.buf.split_to(header_len);
+        let b = str::from_utf8(&b).map_err(map_str!())?;
+        for l in b.split("\r\n") {
+            if !l.is_empty() {
+                self.process_multipart_header(l);
+            }
+        }
+        self.state = MultiPartBodyParserState::Body;
         Ok(())
     }
 }

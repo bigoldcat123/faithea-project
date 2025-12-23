@@ -1,7 +1,5 @@
 pub mod cookie;
 pub mod cors;
-use std::{future::poll_fn, task::Poll};
-
 use bytes::{Bytes, BytesMut};
 use h2::server::SendResponse;
 use http::{
@@ -154,6 +152,7 @@ impl HttpResponse {
         let mut body_stream = respond.send_response(Response::from_parts(h, ()), false).unwrap();
         match b {
             Simple(b) => {
+                body_stream.reserve_capacity(b.len());
                 body_stream.send_data(b, true)?;
             }
             File(mut f) => {
@@ -163,10 +162,13 @@ impl HttpResponse {
                         body_stream.send_data(buf.freeze(), true)?;
                         break;
                     }
+                    body_stream.reserve_capacity(n);
                     body_stream.send_data(buf.split_to(n).freeze(), false)?;
+
                 }
             }
             Empty => {
+                body_stream.reserve_capacity(0);
                 body_stream.send_data(Bytes::new(), true)?;
             }
         }

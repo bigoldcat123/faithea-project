@@ -71,9 +71,10 @@ async fn multipart(data: Multipart<StuInfo>) {
         .iter()
         .map(|x| x.file_name.clone())
         .collect::<Vec<_>>();
-    let mut file = tokio::fs::File::open(&data.profile[0].temp_path).await.unwrap();
-    let mut target =  tokio::fs::File::create(format!("/Users/dadigua/Desktop/graduation/{}",&data.profile[0].file_name.as_ref().unwrap())).await.unwrap();
-    tokio::io::copy(&mut file, &mut target).await.unwrap();
+    // let mut file = tokio::fs::File::open(&data.profile[0].temp_path).await.unwrap();
+    // let mut target =  tokio::fs::File::create(format!("/Users/dadigua/Desktop/graduation/{}",&data.profile[0].file_name.as_ref().unwrap())).await.unwrap();
+    // tokio::io::copy(&mut file, &mut target).await.unwrap();
+    println!("哈哈哈");
 
     format!(
         "name: {:?},age: {}, merried: {:?}, other_info:{:?},profile_len: {:?},  ",
@@ -83,7 +84,6 @@ async fn multipart(data: Multipart<StuInfo>) {
 
 #[get("/")]
 async fn hello_world() {
-    println!("哈哈哈");
 
     res_modifiers!("Hello,World", CORS)
 }
