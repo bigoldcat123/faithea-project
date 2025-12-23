@@ -1,7 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use bytes::Bytes;
-use h2::server::Connection;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,

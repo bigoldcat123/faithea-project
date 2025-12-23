@@ -16,7 +16,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use crate::{
     TryConvertFrom,
     data::{
-        inbound::multipart::{H2MultiPartBodyParser, MultiPartBodyParser, MultipartDataMap},
+        inbound::multipart::{ MultipartDataMap, parser::{h1::MultiPartBodyParser, h2::H2MultiPartBodyParser}},
         outbound::StaticFile,
     },
     handler::FuError,
@@ -160,30 +160,30 @@ impl HttpRequest {
         stream_req:Request<RecvStream>
     ) -> Result<HttpRequest, String> {
         use ContentType::*;
-        let (p,mut body_stream) = stream_req.into_parts();
+        let (p,body_stream) = stream_req.into_parts();
         let content_type = ContentType::try_from(&p.headers)?;
         let body =  match content_type {
             MultipartFormData(boundary) =>{
-                let mut buf = BytesMut::with_capacity(4096 * 100);
-                H2MultiPartBodyParser::parse_h2(body_stream, &mut buf, boundary.as_bytes()).await?
+                H2MultiPartBodyParser::parse_h2(body_stream, boundary.as_bytes()).await?
             },
             _ => {
-                let mut buf = BytesMut::with_capacity(1024);
-                while let Some(chunk)  = body_stream.data().await {
-                    let chunk = chunk.map_err(map_str!())?;
-                    println!("{:?}",chunk);
-                    println!("{}",body_stream.is_end_stream());
-                    let len = chunk.len();
-                    buf.put(chunk);
-                    body_stream.flow_control().release_capacity(len).map_err(map_str!())?;
-                }
-                RequestBody::Simple(buf.freeze())
+                parse_simple_h2_body(body_stream).await?
             }
         };
         let req = HttpRequest::new(p, Some(body));
 
         Ok(req)
     }
+}
+async fn parse_simple_h2_body(mut body_stream:RecvStream) -> Result<RequestBody,String> {
+    let mut buf = BytesMut::with_capacity(1024);
+    while let Some(chunk)  = body_stream.data().await {
+        let chunk = chunk.map_err(map_str!())?;
+        let len = chunk.len();
+        buf.put(chunk);
+        body_stream.flow_control().release_capacity(len).map_err(map_str!())?;
+    }
+    Ok(RequestBody::Simple(buf.freeze()))
 }
 
 async fn parse_http_frame<R: AsyncRead + Unpin>(
