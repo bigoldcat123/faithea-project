@@ -7,7 +7,7 @@ use syn::{
 
 pub fn add_return_type(f: &mut ItemFn) {
     f.sig.output = syn::parse_quote! {
-        -> impl http_server::response::HttpResponseModifier
+        -> impl faithea::response::HttpResponseModifier
     }
 }
 pub enum FromHttpRequest {
@@ -22,7 +22,7 @@ impl FromHttpRequest {
         match self {
             PathParam(name) => {
                 quote! {
-                    http_server::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
+                    faithea::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
                 }
             }
             Body => {
@@ -37,7 +37,7 @@ impl FromHttpRequest {
             }
             SearchParam(name) => {
                 quote! {
-                    http_server::TryConvertInto::try_convert_into(_req.get_search_param(#name))?,
+                    faithea::TryConvertInto::try_convert_into(_req.get_search_param(#name))?,
                 }
             }
         }
@@ -110,13 +110,13 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
     let ipt_args = args.into_iter().map(FromHttpRequest::into_token_stream);
     let inner_handler_name = &f.sig.ident;
     quote! {
-        async fn #new_fn_name(mut _req: http_server::request::HttpRequest) -> Result<http_server::response::HttpResponse, http_server::handler::FuError> {
-            use  http_server::request::ConvertFromRefString;
-            use  http_server::response::HttpResponseModifier;
+        async fn #new_fn_name(mut _req: faithea::request::HttpRequest) -> Result<faithea::response::HttpResponse, faithea::handler::FuError> {
+            use  faithea::request::ConvertFromRefString;
+            use  faithea::response::HttpResponseModifier;
 
             #f
 
-            let mut res = http_server::response::HttpResponse::new();
+            let mut res = faithea::response::HttpResponse::new();
 
             let mut res_modifier = #inner_handler_name(
                 #(#ipt_args)*
@@ -132,7 +132,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
 fn add_req_param(f: &mut ItemFn) {
     f.sig
         .inputs
-        .push(parse_quote!(_req:&http_server::request::HttpRequest));
+        .push(parse_quote!(_req:&faithea::request::HttpRequest));
 }
 pub fn handler_fn(f: &mut ItemFn, name: &str, ipt_args: Vec<FromHttpRequest>) -> TokenStream {
     add_req_param(f);
@@ -149,7 +149,7 @@ pub fn handler_modifier_fn(
     let handler_fn_name = create_handler_fn_name(origin_name);
     let method_name = Ident::new(method, Span::call_site());
     quote! {
-        pub fn #handler_modifier_fn_name(h:&mut http_server::handler::HandlerTire,pre_fix:&str) {
+        pub fn #handler_modifier_fn_name(h:&mut faithea::handler::HandlerTire,pre_fix:&str) {
 
             #handler_fn
             let mut r = format!("{}{}",pre_fix,#route);

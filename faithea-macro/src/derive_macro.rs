@@ -53,21 +53,21 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             quote! {
                 #field_ident: data
                     .remove(#field_name)
-                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as http_server::handler::FuError)?
+                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as faithea::handler::FuError)?
                     .try_convert_into()?
             }
         }
     });
 
     Ok(quote! {
-        impl http_server::data::inbound::multipart::TryFromMultipartDataMap for #struct_name {
+        impl faithea::data::inbound::multipart::TryFromMultipartDataMap for #struct_name {
             fn try_from_multipart_data_map(
                 data: &mut std::collections::HashMap<
                     String,
-                    Vec<http_server::data::inbound::multipart::Part>,
+                    Vec<faithea::data::inbound::multipart::Part>,
                 >,
-            ) -> Result<Self, http_server::handler::FuError> {
-                use http_server::TryConvertInto;
+            ) -> Result<Self, faithea::handler::FuError> {
+                use faithea::TryConvertInto;
                 Ok(Self {
                     #(#assigns,)*
                 })

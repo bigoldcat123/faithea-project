@@ -1,7 +1,7 @@
 pub mod static_file_map;
 use std::collections::HashMap;
 
-use http_server::{data::Json, post};
+use faithea::{data::Json, post};
 use serde::{Deserialize, Serialize};
 
 

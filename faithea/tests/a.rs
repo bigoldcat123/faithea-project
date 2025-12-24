@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use http_server::TryConvertInto;
+use faithea::TryConvertInto;
 use serde::{Deserialize, Serialize};
 
 
