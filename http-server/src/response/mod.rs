@@ -3,8 +3,7 @@ pub mod cors;
 use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
-    HeaderMap, HeaderValue, Response, StatusCode,
-    header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName},
+    HeaderMap, HeaderValue, Response, StatusCode, header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName}
 };
 use tokio::{
     fs::File,
@@ -23,7 +22,7 @@ pub struct HttpResponse {
 impl HttpResponse {
     pub fn new() -> Self {
         let _innser = Response::builder()
-            .header("Connection", "keep-alive")
+            // .version(Version::HTTP_2)
             .body(ResponseBody::Empty)
             .expect("impossible!!");
         Self { _innser }
@@ -91,24 +90,12 @@ impl HttpResponse {
         let (mut h, b) = self._innser.into_parts();
         h.headers.remove(CONTENT_LENGTH);
         h.headers.remove(CONNECTION);
-        let body_stream = respond
-            .send_response(Response::from_parts(h, ()), false)?;
+        let body_stream =
+            respond.send_response(Response::from_parts(h, ()), false)?;
         b.seriliaze_to_h2_stream(body_stream).await
     }
 }
-// async fn wait_capacity(
-//     stream: &mut h2::SendStream<Bytes>,
-//     need: usize,
-// ) -> Result<(), h2::Error> {
-//     poll_fn(|cx| {
-//         if stream.capacity() >= need {
-//             Poll::Ready(Ok(()))
-//         } else {
-//             stream.reserve_capacity(need);
-//             stream.poll_capacity(cx).map(|_| Ok(()))
-//         }
-//     }).await
-// }
+
 #[derive(Default, Debug)]
 pub enum ResponseBody {
     /// In-memory byte data for small responses.
@@ -118,10 +105,22 @@ pub enum ResponseBody {
     /// No body content.
     #[default]
     Empty,
+    // _WsBody
 }
 
 impl ResponseBody {
-    async fn seriliaze_to_h2_stream(self,mut body_stream:SendStream<Bytes>) -> Result<(),Box<dyn std::error::Error>>{
+    // fn is_empty_body(&self) -> bool {
+    //     if let ResponseBody::Empty = self {
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
+
+    async fn seriliaze_to_h2_stream(
+        self,
+        mut body_stream: SendStream<Bytes>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use ResponseBody::*;
         match self {
             Simple(b) => {
@@ -139,14 +138,15 @@ impl ResponseBody {
                     body_stream.send_data(buf.split_to(n).freeze(), false)?;
                 }
             }
-            Empty => {
-                body_stream.reserve_capacity(0);
-                body_stream.send_data(Bytes::new(), true)?;
-            }
+            Empty => {}
         }
+
         Ok(())
     }
-    async fn serialize_to_h1_socket<W:AsyncWrite + Unpin>(&mut self,socket:&mut W)-> Result<(),Box<dyn std::error::Error>> {
+    async fn serialize_to_h1_socket<W: AsyncWrite + Unpin>(
+        &mut self,
+        socket: &mut W,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use self::ResponseBody::*;
         match self {
             Simple(b) => {

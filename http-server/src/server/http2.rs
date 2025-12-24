@@ -1,5 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use h2::server::Builder;
+use http::Method;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
@@ -34,6 +36,7 @@ impl H2Server {
         match self.tls {
             Some(ref cfg) => {
                 let acceptor = cfg.tls_acceptor()?;
+
                 loop {
                     if let Ok((socket, addr)) = listener.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
@@ -74,9 +77,11 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     guards: Arc<GuardTire>,
     handlers: Arc<HandlerTire>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut h2 = h2::server::handshake(socket).await?;
+    let mut h2 = Builder::new().enable_connect_protocol().handshake(socket).await?;
+    // let mut h2 = h2::server::handshake(socket).await?;
 
-    while let Some(Ok((request, respond))) = h2.accept().await {
+    while let Some(req) = h2.accept().await {
+        let (request, respond) = req?;
         let guards = guards.clone();
         let handlers = handlers.clone();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
@@ -88,9 +93,23 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         });
         tokio::spawn(async move {
 
-            let request = HttpRequest::parse_h2(request).await.unwrap();
+            if request.method() == Method::CONNECT {
+                let  r = HttpResponse::new();
 
-            process_request(guards, handlers, request, tx).await;
+                tx.send(r).await.unwrap();
+                tokio::spawn(async move {
+                    let request = HttpRequest::parse_h2(request).await.unwrap();
+                    println!("{:?}",request);
+
+                    process_request(guards, handlers, request, tx).await;
+                });
+            }else {
+                let request = HttpRequest::parse_h2(request).await.unwrap();
+
+                process_request(guards, handlers, request, tx).await;
+            }
+
+
         });
     }
 

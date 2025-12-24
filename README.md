@@ -36,6 +36,7 @@
 -  add vec support for multipart ✅
 -  Tls ✅
 -  http2 ✅
+-  WebSocket Support 💼
 
 
 # Example

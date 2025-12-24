@@ -39,7 +39,7 @@ impl TlsConfig {
             .with_no_client_auth()
             .with_single_cert(certs, key)?;
         if self.h2 {
-            config.alpn_protocols = vec![b"h2".to_vec()];
+            config.alpn_protocols = vec![b"h2".to_vec(),b"http1.1".to_vec()];
         }
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
