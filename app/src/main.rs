@@ -1,8 +1,8 @@
-#![allow(unused)]
+// #![allow(unused)]
 use chenzhonghai_app::json;
 use chenzhonghai_app::static_file_map::file_map;
 use faithea::{
-    HeaderMap, MultipartData, TryConvertFrom,
+    MultipartData, TryConvertFrom,
     data::{
         Json,
         inbound::{
@@ -13,18 +13,14 @@ use faithea::{
     get,
     handler::FuError,
     handlers,
-    header::{
-        ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
-        ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
-    },
     post,
-    request::{HttpRequest, search_param},
+    request::HttpRequest,
     res_modifiers,
-    response::{self, cors::CORS},
+    response::cors::CORS,
     server::HttpServer,
 };
 use serde::{Deserialize, Serialize};
-use tokio::{fs, io::AsyncReadExt};
+use sqlx::mysql::MySqlPoolOptions;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
@@ -114,7 +110,17 @@ async fn pathParam(name: String, age: MyAge) {
 
 #[get("/searchParam")]
 async fn search_param(#[search_param] name: &String, #[search_param] age: Option<MyAge>) {
+    let a = hell().await.unwrap();
+    // let a = tokio::spawn(async {
+    //     a
+    // }).await.unwrap();
     format!("name is {} and age is {:?}", name, age)
+}
+
+#[derive(Debug)]
+struct Ae{}
+async fn hell() -> Result<String,Ae>{
+    Err(Ae{})
 }
 
 #[post("/fromRequest")]
