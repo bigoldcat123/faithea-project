@@ -4,16 +4,17 @@ use http::Method;
 
 use crate::{
     regulate_url_path,
-    request::{HttpRequest},
+    request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
-    route::{Route, RouteComponent}, server::HandlerModifier,
+    route::{Route, RouteComponent},
+    server::HandlerModifier,
 };
 pub type FuError = Box<dyn HttpResponseModifier + Send + Sync>;
 pub type Fu = Box<
     dyn Fn(
             HttpRequest,
         )
-            -> Pin<Box<dyn Future<Output = Result<HttpResponse, FuError>> + Send + Sync + 'static>>
+            -> Pin<Box<dyn Future<Output = Result<HttpResponse, FuError>> + Send + 'static>>
         + Send
         + Sync
         + 'static,
@@ -33,7 +34,7 @@ impl HandlerTire {
     pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) {
         let pre_fix = if let Some(pre_fix) = pre_fix.strip_suffix("/") {
             pre_fix
-        }else {
+        } else {
             pre_fix
         };
         for m in handlers {
@@ -44,7 +45,7 @@ impl HandlerTire {
     pub fn get<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -59,7 +60,7 @@ impl HandlerTire {
     pub fn post<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -94,11 +95,7 @@ impl HandlerTire {
                 self.path.insert(next.clone(), Default::default());
             }
             if url.is_empty() {
-                self.path
-                    .get_mut(&next)
-                    .unwrap()
-                    .f
-                    .insert(method, f);
+                self.path.get_mut(&next).unwrap().f.insert(method, f);
             } else {
                 self.path.get_mut(&next).unwrap().add_route(url, f, method);
             }
@@ -114,13 +111,7 @@ impl HandlerTire {
         let url = regulate_url_path(url);
         let url_parts: Vec<&str> = url.split("/").collect();
         let mut candidates: Vec<(Route, &Fu)> = vec![];
-        self.get_candidates(
-            &url_parts,
-            &mut candidates,
-            0,
-            Route { r: vec![] },
-            method,
-        );
+        self.get_candidates(&url_parts, &mut candidates, 0, Route { r: vec![] }, method);
 
         candidates.sort_by(|a, b| a.0.cmp(&b.0));
         // Debug logging (commented out in production):
@@ -174,7 +165,11 @@ impl HandlerTire {
 mod test {
     use http::Method;
 
-    use crate::{handler::{FuError, HandlerTire}, request::HttpRequest, response::HttpResponse};
+    use crate::{
+        handler::{FuError, HandlerTire},
+        request::HttpRequest,
+        response::HttpResponse,
+    };
 
     /// Test handler that returns a default response.
     async fn test_handler(_: HttpRequest) -> Result<HttpResponse, FuError> {
