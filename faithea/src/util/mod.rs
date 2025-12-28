@@ -13,7 +13,8 @@ pub async fn static_map<P: AsRef<str>>(
     _req: &HttpRequest,
     path: P,
 ) -> Vec<Box<dyn HttpResponseModifier + Send + Sync>> {
-    if let Some(multi_seg_param) = _req.multi_seg_param.as_ref() {
+    if let Some(multi_seg_param) = _req.multi_seg_param.as_ref() &&
+       let Ok(multi_seg_param) = urlencoding::decode(multi_seg_param) {
         let a: StaticFile<String> = StaticFile(format!("{}/{}", path.as_ref(), multi_seg_param));
         res_modifiers!(a)
     } else {
