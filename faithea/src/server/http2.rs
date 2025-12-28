@@ -1,10 +1,11 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use h2::server::Builder;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use h2::{RecvStream, server::Builder};
 use http::Method;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
+    net::TcpListener, sync::mpsc::Sender,
 };
 
 use crate::{
@@ -77,14 +78,18 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     guards: Arc<GuardTire>,
     handlers: Arc<HandlerTire>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut h2 = Builder::new().enable_connect_protocol().handshake(socket).await?;
+    let mut h2 = Builder::new()
+        .enable_connect_protocol()
+        .handshake(socket)
+        .await?;
     // let mut h2 = h2::server::handshake(socket).await?;
 
     while let Some(req) = h2.accept().await {
-        let (request, respond) = req?;
+        let (mut request, respond) = req?;
         let guards = guards.clone();
         let handlers = handlers.clone();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
+
         tokio::spawn(async move {
             let mut respond = respond;
             while let Some(r) = rx.recv().await {
@@ -92,27 +97,97 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
             }
         });
         tokio::spawn(async move {
-
             if request.method() == Method::CONNECT {
-                let  r = HttpResponse::new();
-
+                let r = HttpResponse::new();
                 tx.send(r).await.unwrap();
+                let  (tx,rx) = tokio::sync::mpsc::channel::<Bytes>(128);
                 tokio::spawn(async move {
-                    let request = HttpRequest::parse_h2(request).await.unwrap();
-                    println!("{:?}",request);
-
-                    process_request(guards, handlers, request, tx).await;
+                    decode_ws_frame(request.body_mut(),tx).await.unwrap();
                 });
-            }else {
+            } else {
                 let request = HttpRequest::parse_h2(request).await.unwrap();
 
                 process_request(guards, handlers, request, tx).await;
             }
-
-
         });
     }
 
+    Ok(())
+}
+async fn decode_ws_frame(stream: &mut RecvStream,sender:Sender<Bytes>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut buf = BytesMut::with_capacity(2048);
+    let mut len: Option<usize> = None;
+    let mut mask: Option<[u8; 4]> = None;
+    let mut readed = 0;
+    let mut msg = BytesMut::with_capacity(2048);
+    let mut msg_finished = false;
+    while let Some(chunk) = stream.data().await {
+        let chunk = chunk?;
+        let chunk_len = chunk.len();
+
+        buf.put(chunk);
+
+        while buf.has_remaining() {
+            if let Some(len_) = len
+                && let Some(mask_) = mask
+            {
+                let remain = len_ - readed;
+                let mut real = vec![];
+                let new_msg_len = buf.len().min(remain as usize);
+                for (i, &d) in buf[..new_msg_len].iter().enumerate() {
+                    real.push(d ^ mask_[(i + msg.len()) % 4]);
+                }
+                msg.put(&real[..]);
+                readed += new_msg_len;
+                let _ = buf.split_to(new_msg_len);
+                println!("readed {readed}",);
+
+                if readed == len_ {
+                    if msg_finished {
+                        // println!("{:?} -> {}", msg, msg.len());
+                        let _ = sender.send(msg.split_off(0).freeze()).await;
+                    }
+                    readed = 0;
+                    len = None;
+                    mask = None;
+                    break;
+                }
+            } else {
+                if buf.remaining() < 2 {
+                    break;
+                }
+                let p = buf.get_u8();
+                println!("{:x}", p);
+                if p & 0x80 == 0x80 {
+                    msg_finished = true;
+                }else {
+                    msg_finished = false;
+                }
+
+                let mut len_ = (buf.get_u8() & 0x7f) as usize;
+                if len_ == 126 {
+                    if buf.remaining() < 2 {
+                        break;
+                    }
+                    len_ = buf.get_u16() as usize;
+                } else if len_ == 127 {
+                    if buf.remaining() < 8 {
+                        break;
+                    }
+                    len_ = buf.get_u64() as usize;
+                }
+                len = Some(len_);
+
+                println!("len : {len_}",);
+
+                if buf.remaining() < 4 {
+                    break;
+                }
+                mask = Some([buf.get_u8(), buf.get_u8(), buf.get_u8(), buf.get_u8()]);
+            }
+        }
+        stream.flow_control().release_capacity(chunk_len).unwrap();
+    }
     Ok(())
 }
 

@@ -152,13 +152,13 @@ async fn main() {
             // println!("{e:?}",);
             Ok(e)
         })
-        // .tls(
-        //     "/Users/dadigua/Desktop/graduation/key.pem",
-        //     "/Users/dadigua/Desktop/graduation/cert.pem",
-        // )
-        // .h2()
-        // .host("0.0.0.0")
-        // .port(443)
+        .tls(
+            "/Users/dadigua/Desktop/graduation/key.pem",
+            "/Users/dadigua/Desktop/graduation/cert.pem",
+        )
+        .h2()
+        .host("0.0.0.0")
+        .port(443)
         .build()
         .run()
         .await;
