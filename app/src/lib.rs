@@ -1,4 +1,5 @@
 pub mod static_file_map;
+pub mod util;
 use std::collections::HashMap;
 
 use faithea::{data::Json, post};

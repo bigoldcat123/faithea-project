@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ DeriveInput, Ident, ItemFn, LitStr, Token, parse_macro_input, punctuated::Punctuated};
+use syn::{ DeriveInput, ItemFn, LitStr, Path, Token, parse_macro_input, punctuated::Punctuated};
 use crate::{derive_macro::expand_multipart, utils::expand_macro} ;
 mod utils;
 mod derive_macro;
@@ -24,26 +24,26 @@ macro_define!(get,post,delete,put);
 
 #[proc_macro]
 pub fn handlers(input: TokenStream) -> TokenStream {
-    // 解析输入为 ident 列表： a, b, c
-    let idents = parse_macro_input!(input with Punctuated::<Ident, Token![,]>::parse_terminated);
+    // 解析为 Path 列表（支持 ident 和 a::b::c）
+    let paths = parse_macro_input!(
+        input with Punctuated::<Path, Token![,]>::parse_terminated
+    );
 
-    // 为每个 ident 生成 ident_abc
-    let expanded_items = idents.iter().map(|ident| {
-        let new_ident = syn::Ident::new(&format!("{}", ident), ident.span());
+    let expanded_items = paths.iter().map(|path| {
         quote! {
-            Box::new(#new_ident)
+            Box::new(#path)
         }
     });
 
-    // 生成最终 vec![...]
-    let output = quote! {
+    quote! {
         vec![
             #(#expanded_items),*
         ]
-    };
-
-    output.into()
+    }
+    .into()
 }
+
+
 #[proc_macro_derive(MultipartData)]
 pub fn derive_multipart_data(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

@@ -130,6 +130,7 @@ async fn fromRequest(stu: FromRequest<Stu>) {
 //(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+
     let r = HttpServer::builder()
         .mount(
             "/",
@@ -140,7 +141,8 @@ async fn main() {
                 pathParam,
                 search_param,
                 fromRequest,
-                json
+                json,
+                chenzhonghai_app::util::inner_util::util2
             ),
         )
         .mount("/static", handlers!(file_map))
