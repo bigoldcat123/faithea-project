@@ -31,6 +31,7 @@ pub mod response;
 pub mod route;
 pub mod server;
 pub mod header;
+pub mod util;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
 use crate::handler::FuError;

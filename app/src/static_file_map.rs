@@ -1,4 +1,4 @@
-use faithea::{get, request::static_map};
+use faithea::{get, util::static_map};
 
 #[get("/**")]
 pub async fn file_map() {
