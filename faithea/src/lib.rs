@@ -34,7 +34,7 @@ pub mod header;
 pub mod util;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
-use crate::handler::FuError;
+use crate::handler::HttpHandlerError;
 pub mod websocket;
 
 
@@ -48,7 +48,7 @@ macro_rules! map_str {
 #[macro_export]
 macro_rules! map_fu {
     () => {
-        |x| Box::new(format!("{}", x)) as FuError
+        |x| Box::new(format!("{}", x)) as HttpHandlerError
     };
 }
 // impl ConvertFromRefString<i32> for  &String {
@@ -148,15 +148,15 @@ macro_rules! res_modifiers {
 }
 
 pub trait TryConvertFrom<T>: Sized {
-    fn try_convert_from(value: T) -> Result<Self, FuError>;
+    fn try_convert_from(value: T) -> Result<Self, HttpHandlerError>;
 }
 /// please impl `TryConvertFrom`
 pub trait TryConvertInto<O> {
-    fn try_convert_into(self) -> Result<O, FuError>;
+    fn try_convert_into(self) -> Result<O, HttpHandlerError>;
 }
 
 impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
-    fn try_convert_into(self) -> Result<T, FuError> {
+    fn try_convert_into(self) -> Result<T, HttpHandlerError> {
         T::try_convert_from(self)
     }
 }

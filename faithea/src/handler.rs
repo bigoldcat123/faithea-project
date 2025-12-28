@@ -1,6 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use http::Method;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
     regulate_url_path,
@@ -8,24 +9,37 @@ use crate::{
     response::{HttpResponse, HttpResponseModifier},
     route::{Route, RouteComponent},
     server::HandlerModifier,
+    websocket::data::WebSocketDataPayLoad,
 };
-pub type FuError = Box<dyn HttpResponseModifier + Send + Sync>;
-pub type Fu = Box<
+pub type HttpHandlerError = Box<dyn HttpResponseModifier + Send + Sync>;
+pub type HttpHandler = Box<
     dyn Fn(
             HttpRequest,
-        )
-            -> Pin<Box<dyn Future<Output = Result<HttpResponse, FuError>> + Send + 'static>>
+        ) -> Pin<Box<dyn Future<Output = Result<HttpResponse, HttpHandlerError>> + Send + 'static>>
         + Send
         + Sync
         + 'static,
 >;
+pub type WebSocketHandler = Box<
+    dyn Fn(
+            Receiver<WebSocketDataPayLoad>,
+            Sender<WebSocketDataPayLoad>,
+            HttpRequest,
+        ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
+        + Send
+        + 'static,
+>;
+enum Handler {
+    Http(HttpHandler),
+    WbeSocket(WebSocketHandler)
+}
 
 #[derive(Default)]
 pub struct HandlerTire {
     /// Child nodes in the routing trie, keyed by route components
     path: HashMap<RouteComponent, Box<Self>>,
     /// Handler function stored at this node (if this is a terminal node)
-    f: HashMap<Method, Fu>,
+    f: HashMap<Method, HttpHandler>,
 }
 impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
@@ -45,7 +59,7 @@ impl HandlerTire {
     pub fn get<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send,
+        O: Future<Output = Result<HttpResponse, HttpHandlerError>> + 'static + Send,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -60,7 +74,7 @@ impl HandlerTire {
     pub fn post<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send,
+        O: Future<Output = Result<HttpResponse, HttpHandlerError>> + 'static + Send,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -76,7 +90,7 @@ impl HandlerTire {
     pub fn options<F, O, P>(&mut self, url: P, f: F)
     where
         F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpResponse, FuError>> + 'static + Send + Sync,
+        O: Future<Output = Result<HttpResponse, HttpHandlerError>> + 'static + Send + Sync,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -89,7 +103,7 @@ impl HandlerTire {
         );
     }
 
-    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Fu, method: Method) {
+    fn add_route(&mut self, mut url: Vec<RouteComponent>, f: HttpHandler, method: Method) {
         if let Some(next) = url.pop() {
             if !self.path.contains_key(&next) {
                 self.path.insert(next.clone(), Default::default());
@@ -102,7 +116,7 @@ impl HandlerTire {
         }
     }
 
-    pub fn get_handler(&self, url: &str, method: Method) -> Option<(Route, &Fu)> {
+    pub fn get_handler(&self, url: &str, method: Method) -> Option<(Route, &HttpHandler)> {
         let url = if let Some((url, _search)) = url.split_once("?") {
             url
         } else {
@@ -110,7 +124,7 @@ impl HandlerTire {
         };
         let url = regulate_url_path(url);
         let url_parts: Vec<&str> = url.split("/").collect();
-        let mut candidates: Vec<(Route, &Fu)> = vec![];
+        let mut candidates: Vec<(Route, &HttpHandler)> = vec![];
         self.get_candidates(&url_parts, &mut candidates, 0, Route { r: vec![] }, method);
 
         candidates.sort_by(|a, b| a.0.cmp(&b.0));
@@ -125,7 +139,7 @@ impl HandlerTire {
     fn get_candidates<'a>(
         &'a self,
         url_parts: &Vec<&str>,
-        candidates: &mut Vec<(Route, &'a Fu)>,
+        candidates: &mut Vec<(Route, &'a HttpHandler)>,
         idx: usize,
         current_path: Route,
         method: Method,
@@ -166,13 +180,13 @@ mod test {
     use http::Method;
 
     use crate::{
-        handler::{FuError, HandlerTire},
+        handler::{HttpHandlerError, HandlerTire},
         request::HttpRequest,
         response::HttpResponse,
     };
 
     /// Test handler that returns a default response.
-    async fn test_handler(_: HttpRequest) -> Result<HttpResponse, FuError> {
+    async fn test_handler(_: HttpRequest) -> Result<HttpResponse, HttpHandlerError> {
         Ok(HttpResponse::new())
     }
 

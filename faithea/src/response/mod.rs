@@ -10,7 +10,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWrite, AsyncWriteExt}, sync::mpsc::Receiver,
 };
 
-use crate::{handler::FuError, websocket::data::WebSocketDataPayLoad};
+use crate::{handler::HttpHandlerError, websocket::data::WebSocketDataPayLoad};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -186,14 +186,14 @@ pub trait HttpResponseModifier {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>>;
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>;
 }
 
 impl HttpResponseModifier for HeaderMap {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for (k, v) in self.drain() {
                 if let Some(k) = k {
@@ -213,7 +213,7 @@ impl HttpResponseModifier for StatusCode {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             *res._innser.status_mut() = *self;
             Ok(())
@@ -224,10 +224,10 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             for m in self {
-                let m: std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + Send + Sync>> =
+                let m: std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + Send + Sync>> =
                     m.modify(res);
                 m.await?;
             }

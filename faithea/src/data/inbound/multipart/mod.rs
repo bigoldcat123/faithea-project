@@ -7,14 +7,14 @@ use std::{
 
 use crate::{
     TryConvertFrom,
-    handler::FuError,
+    handler::HttpHandlerError,
     request::{HttpRequest, RequestBody},
 };
 
 pub type MultipartDataMap = HashMap<String, Vec<Part>>;
 /// macro generate!
 pub trait TryFromMultipartDataMap: Sized {
-    fn try_from_multipart_data_map(data: &mut MultipartDataMap) -> Result<Self, FuError>;
+    fn try_from_multipart_data_map(data: &mut MultipartDataMap) -> Result<Self, HttpHandlerError>;
 }
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ macro_rules! impl_try_from_part_for_parse_from_str {
     ($($t:ty),*) => {
         $(
             impl TryFrom<Part> for $t {
-                type Error = $crate::handler::FuError;
+                type Error = $crate::handler::HttpHandlerError;
                 fn try_from(value: Part) -> Result<Self, Self::Error> {
                     if let Part::Lit(l) = value {
                         Ok(l.parse::<Self>().map_err(|x| Box::new(x.to_string()) as Self::Error)?)
@@ -43,18 +43,18 @@ impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
 
-impl<T: TryFrom<Part, Error = FuError>> TryConvertFrom<Vec<Part>> for T {
-    fn try_convert_from(mut value: Vec<Part>) -> Result<Self, FuError> {
+impl<T: TryFrom<Part, Error = HttpHandlerError>> TryConvertFrom<Vec<Part>> for T {
+    fn try_convert_from(mut value: Vec<Part>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value.pop() {
             value.try_into()
         } else {
-            Err(Box::new("there is no data in multipart map") as FuError)
+            Err(Box::new("there is no data in multipart map") as HttpHandlerError)
         }
     }
 }
 
 impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for Vec<T> {
-    fn try_convert_from(value: Vec<Part>) -> Result<Self, FuError> {
+    fn try_convert_from(value: Vec<Part>) -> Result<Self, HttpHandlerError> {
         Ok(value
             .into_iter()
             .filter_map(|x| T::try_from(x).ok())
@@ -76,12 +76,12 @@ impl Drop for MultiPartFile {
 }
 
 impl TryFrom<Part> for MultiPartFile {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
         if let Part::File(f) = value {
             Ok(f)
         } else {
-            Err(Box::new("not compatiable to transform part to MultiPartFile") as FuError)
+            Err(Box::new("not compatiable to transform part to MultiPartFile") as HttpHandlerError)
         }
     }
 }
@@ -108,13 +108,13 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
 }
 
 impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
         match req._inner.body_mut() {
             Some(RequestBody::MultiPart(body)) => {
                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
             }
-            _ => Err(Box::new("no boundary") as FuError),
+            _ => Err(Box::new("no boundary") as HttpHandlerError),
         }
     }
 }

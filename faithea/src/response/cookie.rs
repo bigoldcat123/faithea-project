@@ -5,7 +5,7 @@ use std::{
 
 use http::{HeaderValue, header::SET_COOKIE};
 
-use crate::{handler::FuError, response::HttpResponseModifier};
+use crate::{handler::HttpHandlerError, response::HttpResponseModifier};
 
 pub enum CookieType {
     KeyValue(String, String),
@@ -53,12 +53,12 @@ impl HttpResponseModifier for Cookie {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut super::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
         Box::pin(async move {
             res._innser.headers_mut().insert(
                 SET_COOKIE,
                 HeaderValue::from_maybe_shared(format!("{:?}", self))
-                    .map_err(|e| Box::new(e.to_string()) as FuError)?,
+                    .map_err(|e| Box::new(e.to_string()) as HttpHandlerError)?,
             );
             Ok(())
         })

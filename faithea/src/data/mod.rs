@@ -2,7 +2,7 @@ use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    handler::FuError,
+    handler::HttpHandlerError,
     request::{HttpRequest, RequestBody},
 };
 
@@ -13,7 +13,7 @@ pub mod outbound;
 pub struct Json<T>(pub T);
 
 impl<'a, T: Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
         if let Some(RequestBody::Simple(body)) = value._inner.body() {
             Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(
@@ -29,7 +29,7 @@ impl<'a, T: Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
     }
 }
 impl<'a, T: Deserialize<'a>> TryFrom<&'a mut HttpRequest> for Json<T> {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
         let im_ref = &(*value);
         im_ref.try_into()

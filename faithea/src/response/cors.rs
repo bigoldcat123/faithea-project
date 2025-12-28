@@ -15,7 +15,7 @@ impl HttpResponseModifier for CORS {
         &'a mut self,
         res: &'a mut super::HttpResponse,
     ) -> std::pin::Pin<
-        Box<dyn Future<Output = Result<(), crate::handler::FuError>> + 'a + Send + Sync>,
+        Box<dyn Future<Output = Result<(), crate::handler::HttpHandlerError>> + 'a + Send + Sync>,
     > {
         Box::pin(async move {
             let mut header = HeaderMap::new();

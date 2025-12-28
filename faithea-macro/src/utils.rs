@@ -110,7 +110,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
     let ipt_args = args.into_iter().map(FromHttpRequest::into_token_stream);
     let inner_handler_name = &f.sig.ident;
     quote! {
-        async fn #new_fn_name(mut _req: faithea::request::HttpRequest) -> Result<faithea::response::HttpResponse, faithea::handler::FuError> {
+        async fn #new_fn_name(mut _req: faithea::request::HttpRequest) -> Result<faithea::response::HttpResponse, faithea::handler::HttpHandlerError> {
             use  faithea::request::ConvertFromRefString;
             use  faithea::response::HttpResponseModifier;
 

@@ -11,7 +11,7 @@ use faithea::{
         },
     },
     get,
-    handler::FuError,
+    handler::HttpHandlerError,
     handlers,
     post,
     request::HttpRequest,
@@ -29,7 +29,7 @@ struct Stu {
     age: i32,
 }
 impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
@@ -42,12 +42,12 @@ struct A {
     value: String,
 }
 impl TryFrom<Part> for A {
-    type Error = FuError;
+    type Error = HttpHandlerError;
     fn try_from(value: Part) -> Result<Self, Self::Error> {
         if let Part::Lit(s) = value {
             Ok(Self { value: s })
         } else {
-            Err(Box::new("ggg") as FuError)
+            Err(Box::new("ggg") as HttpHandlerError)
         }
     }
 }
@@ -93,14 +93,14 @@ struct MyAge {
     age: i32,
 }
 impl TryConvertFrom<Option<&String>> for MyAge {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, FuError> {
+    fn try_convert_from(value: Option<&String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             let a = value
                 .parse::<i32>()
-                .map_err(|e| Box::new(e.to_string()) as FuError)?;
+                .map_err(|e| Box::new(e.to_string()) as HttpHandlerError)?;
             Ok(Self { age: a })
         } else {
-            Err(Box::new("e") as FuError)
+            Err(Box::new("e") as HttpHandlerError)
         }
     }
 }
