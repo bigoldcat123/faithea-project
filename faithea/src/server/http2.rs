@@ -1,19 +1,20 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use h2::{RecvStream, server::Builder};
 use http::Method;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener, sync::mpsc::Sender,
+    net::TcpListener,
+    sync::mpsc::Sender,
 };
 
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     request::HttpRequest,
-    response::HttpResponse,
-    server::{builder::TlsConfig, process_request},
+    response::{HttpResponse, ResponseBody},
+    server::{builder::TlsConfig, process_request}, websocket::data::WebSocketDataPayLoad,
 };
 
 pub struct H2Server {
@@ -98,11 +99,14 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         });
         tokio::spawn(async move {
             if request.method() == Method::CONNECT {
-                let r = HttpResponse::new();
+                // before_open();
+                let mut r = HttpResponse::new();
+                let (ws_tx, rx) = tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(128);
+                r.set_body(ResponseBody::WsBody(rx));
                 tx.send(r).await.unwrap();
-                let  (tx,rx) = tokio::sync::mpsc::channel::<Bytes>(128);
+
                 tokio::spawn(async move {
-                    decode_ws_frame(request.body_mut(),tx).await.unwrap();
+                    decode_ws_frame(request.body_mut(), ws_tx).await.unwrap();
                 });
             } else {
                 let request = HttpRequest::parse_h2(request).await.unwrap();
@@ -114,7 +118,10 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
 
     Ok(())
 }
-async fn decode_ws_frame(stream: &mut RecvStream,sender:Sender<Bytes>) -> Result<(), Box<dyn std::error::Error>> {
+async fn decode_ws_frame(
+    stream: &mut RecvStream,
+    sender: Sender<WebSocketDataPayLoad>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = BytesMut::with_capacity(2048);
     let mut len: Option<usize> = None;
     let mut mask: Option<[u8; 4]> = None;
@@ -145,7 +152,7 @@ async fn decode_ws_frame(stream: &mut RecvStream,sender:Sender<Bytes>) -> Result
                 if readed == len_ {
                     if msg_finished {
                         // println!("{:?} -> {}", msg, msg.len());
-                        let _ = sender.send(msg.split_off(0).freeze()).await;
+                        let _ = sender.send(WebSocketDataPayLoad::new(msg.split_off(0).freeze())).await;
                     }
                     readed = 0;
                     len = None;
@@ -160,7 +167,7 @@ async fn decode_ws_frame(stream: &mut RecvStream,sender:Sender<Bytes>) -> Result
                 println!("{:x}", p);
                 if p & 0x80 == 0x80 {
                     msg_finished = true;
-                }else {
+                } else {
                     msg_finished = false;
                 }
 

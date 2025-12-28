@@ -13,6 +13,7 @@ use http::{
     },
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
@@ -20,7 +21,7 @@ use crate::{
     handler::HandlerTire,
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
-    server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
+    server::{HandlerModifier, Server, http1::H1Server, http2::H2Server}, websocket::data::WebSocketDataPayLoad,
 };
 
 pub(crate) struct TlsConfig {
@@ -109,6 +110,15 @@ impl HttpServerBuilder {
         });
         self
     }
+
+    pub fn websocket<F,R>(self,route:&str,ws_handler:F) -> Self
+   where
+       F:Fn(Receiver<WebSocketDataPayLoad>,Sender<WebSocketDataPayLoad>,HttpRequest) -> R + Send + 'static,
+       R:Future<Output = ()>
+   {
+       self
+    }
+
     pub fn build(self) -> Server {
         if self.h2 {
             Server::H2Server(H2Server {

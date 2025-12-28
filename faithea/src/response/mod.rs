@@ -1,16 +1,16 @@
 pub mod cookie;
 pub mod cors;
-use bytes::{Bytes, BytesMut};
+use bytes::{ Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode, header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName}
 };
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt}, sync::mpsc::Receiver,
 };
 
-use crate::handler::FuError;
+use crate::{handler::FuError, websocket::data::WebSocketDataPayLoad};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -105,7 +105,7 @@ pub enum ResponseBody {
     /// No body content.
     #[default]
     Empty,
-    // _WsBody
+    WsBody(Receiver<WebSocketDataPayLoad>)
 }
 
 impl ResponseBody {
@@ -138,7 +138,14 @@ impl ResponseBody {
                     body_stream.send_data(buf.split_to(n).freeze(), false)?;
                 }
             }
-            Empty => {}
+            Empty => {},
+            WsBody(mut receiver) => {
+                tokio::spawn(async move {
+                    while let Some(b) = receiver.recv().await {
+                        let _ = b.serialize_to_stream(&mut body_stream).await;
+                    }
+                });
+            }
         }
 
         Ok(())
@@ -157,6 +164,9 @@ impl ResponseBody {
             }
             Empty => {
                 // No body to write
+            }
+            WsBody(_) => {
+                unimplemented!()
             }
         }
         socket.flush().await?;

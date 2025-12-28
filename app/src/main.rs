@@ -17,10 +17,11 @@ use faithea::{
     request::HttpRequest,
     res_modifiers,
     response::cors::CORS,
-    server::HttpServer,
+    server::HttpServer, websocket::data::WebSocketDataPayLoad,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlPoolOptions;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
@@ -151,6 +152,12 @@ async fn main() {
         .guard("/**", async |e| {
             // println!("{e:?}",);
             Ok(e)
+        })
+        .websocket("/abc",async |mut rx:Receiver<WebSocketDataPayLoad>,tx:Sender<WebSocketDataPayLoad>,req:HttpRequest| {
+            while let Some(msg) = rx.recv().await {
+                let _ = tx.send(msg).await;
+            }
+            ()
         })
         .tls(
             "/Users/dadigua/Desktop/graduation/key.pem",

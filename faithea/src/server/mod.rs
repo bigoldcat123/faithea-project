@@ -159,6 +159,9 @@ impl HttpServer {
                         crate::response::ResponseBody::Empty => {
                             let _ = x.send_data(Bytes::new(), true);
                         }
+                        crate::response::ResponseBody::WsBody(_receiver) => {
+                            unimplemented!()
+                        }
                     }
                 }
             });
