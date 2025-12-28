@@ -35,6 +35,17 @@ impl<'a, T: Deserialize<'a>> TryFrom<&'a mut HttpRequest> for Json<T> {
         im_ref.try_into()
     }
 }
+impl<T> std::ops::Deref for Json<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<T> std::ops::DerefMut for Json<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 #[cfg(test)]
 mod tests {
     use http::{HeaderMap, StatusCode};

@@ -38,6 +38,11 @@
 -  http2 ✅
 -  WebSocket Support 💼
 
+- impl `deref` for `Json`
+- add comment for `static_map`
+- static_map need urldecode!
+- improve `handlers` macro
+
 
 # Example
 1. Hello World
