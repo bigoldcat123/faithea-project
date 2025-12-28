@@ -41,7 +41,7 @@
 - impl `deref` for `Json` ✅
 - add comment for `static_map` ✅
 - static_map need urldecode! ✅
-- improve `handlers` macro
+- improve `handlers` macro ✅ now support `path` param 
 
 
 # Example
