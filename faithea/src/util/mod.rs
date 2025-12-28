@@ -1,5 +1,14 @@
 use crate::{data::outbound::StaticFile, request::HttpRequest, res_modifiers, response::HttpResponseModifier};
 
+/// # how to use
+/// ``` rust
+/// use faithea::{get, util::static_map};
+///
+/// #[get("/**")]
+/// pub async fn file_map() {
+///     static_map(_req,"path/to/static/directory").await;
+/// }
+/// ```
 pub async fn static_map<P: AsRef<str>>(
     _req: &HttpRequest,
     path: P,
