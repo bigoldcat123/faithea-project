@@ -3,19 +3,21 @@ pub mod cookie;
 // pub mod method;
 pub mod path_param;
 pub mod search_param;
-use std::{path::PathBuf, str::FromStr};
+use std::{fmt::Debug, path::PathBuf, str::FromStr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
 use http::{
-    HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, header::{AsHeaderName, CONTENT_LENGTH}
+    HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version,
+    header::{AsHeaderName, CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     TryConvertFrom,
-    data::{
-        inbound::multipart::{ MultipartDataMap, parser::{h1::MultiPartBodyParser, h2::H2MultiPartBodyParser}},
+    data::inbound::multipart::{
+        MultipartDataMap,
+        parser::{h1::MultiPartBodyParser, h2::H2MultiPartBodyParser},
     },
     handler::HttpHandlerError,
     map_str,
@@ -25,12 +27,25 @@ use crate::{
     route::{Route, RouteComponent},
 };
 
-#[derive(Debug)]
 pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
-    WebSocketStreamBody(RecvStream)
+    WebSocketStreamBody(RecvStream),
+    WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
+
+}
+impl Debug for RequestBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Simple(_) => write!(f, "Simple(Bytes)")?,
+            Self::MultiPart(_) => write!(f, "MultiPart(MultipartDataMap)")?,
+            Self::Stream(_) => write!(f, "Stream(PathBuf)")?,
+            Self::WebSocketStreamBody(_) => write!(f, "WebSocketStreamBody(RecvStream)")?,
+            Self::WebSocketStreamBodyHttp1(_) => write!(f, "WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static>)")?,
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -41,8 +56,6 @@ pub struct HttpRequest {
     pub(crate) multi_seg_param: Option<String>,
     // pub(crate) cookie:Option<Cookie<'a>>
 }
-
-
 
 impl HttpRequest {
     pub fn new(parts: http::request::Parts, body: Option<RequestBody>) -> Self {
@@ -143,34 +156,33 @@ impl HttpRequest {
     ) -> Result<HttpRequest, String> {
         parse_http_frame(r, buf).await
     }
-    pub(crate) async fn parse_h2(
-        stream_req:Request<RecvStream>
-    ) -> Result<HttpRequest, String> {
-
+    pub(crate) async fn parse_h2(stream_req: Request<RecvStream>) -> Result<HttpRequest, String> {
         use ContentType::*;
-        let (p,body_stream) = stream_req.into_parts();
+        let (p, body_stream) = stream_req.into_parts();
         if p.method == Method::CONNECT {
-            return Ok(HttpRequest::new(p,Some(RequestBody::WebSocketStreamBody(body_stream))))
+            return Ok(HttpRequest::new(
+                p,
+                Some(RequestBody::WebSocketStreamBody(body_stream)),
+            ));
         }
         let content_type = ContentType::try_from(&p.headers)?;
-        let body =  match content_type {
-            MultipartFormData(boundary) =>{
+        let body = match content_type {
+            MultipartFormData(boundary) => {
                 H2MultiPartBodyParser::parse_h2(body_stream, boundary.as_bytes()).await?
-            },
-            _ => {
-                parse_simple_h2_body(body_stream).await?
             }
+            _ => parse_simple_h2_body(body_stream).await?,
         };
         let req = HttpRequest::new(p, Some(body));
 
         Ok(req)
     }
 }
-async fn parse_simple_h2_body(mut body_stream:RecvStream) -> Result<RequestBody,String> {
+async fn parse_simple_h2_body(mut body_stream: RecvStream) -> Result<RequestBody, String> {
     let mut buf = BytesMut::with_capacity(1024);
-    while let Some(chunk)  = body_stream.data().await {
+    while let Some(chunk) = body_stream.data().await {
         let chunk = chunk.map_err(map_str!())?;
-        let s = chunk.chunk()
+        let s = chunk
+            .chunk()
             .iter()
             .map(|b| format!("0x{:02x}", b))
             .collect::<Vec<_>>()
@@ -180,19 +192,28 @@ async fn parse_simple_h2_body(mut body_stream:RecvStream) -> Result<RequestBody,
 
         let len = chunk.len();
         buf.put(chunk);
-        body_stream.flow_control().release_capacity(len).map_err(map_str!())?;
+        body_stream
+            .flow_control()
+            .release_capacity(len)
+            .map_err(map_str!())?;
     }
     Ok(RequestBody::Simple(buf.freeze()))
 }
 
+pub fn is_websocket_upgrade(req: &HttpRequest) -> bool {
+    req.get_header(UPGRADE).is_some()
+        && req.get_header(CONNECTION).is_some()
+        && req.get_header(SEC_WEBSOCKET_KEY).is_some()
+        && req.get_header(SEC_WEBSOCKET_VERSION).is_some()
+}
+
 async fn parse_http_frame<R: AsyncRead + Unpin>(
-    r: &mut R,
+    r:&mut R,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
     let mut builder = http::Request::builder();
     builder = parse_line_header_frame(r, buf, builder).await?;
     let mut req = HttpRequest::from_req(builder.body(None).map_err(map_str!())?);
-
     if let Some(len) = req.get_header(CONTENT_LENGTH) {
         let len = len
             .to_str()
@@ -204,6 +225,7 @@ async fn parse_http_frame<R: AsyncRead + Unpin>(
         // let body = buf.split_to(len).freeze();
         *req._inner.body_mut() = Some(body);
     }
+    println!("{:?}", req);
     Ok(req)
 }
 

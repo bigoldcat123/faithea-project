@@ -1,16 +1,25 @@
 pub mod cookie;
 pub mod cors;
-use bytes::{ Bytes, BytesMut};
+use base64::{Engine, prelude::BASE64_STANDARD};
+use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
-    HeaderMap, HeaderValue, Response, StatusCode, header::{CONNECTION, CONTENT_LENGTH, IntoHeaderName}
+    HeaderMap, HeaderValue, Response, StatusCode,
+    header::{
+        CONNECTION, CONTENT_LENGTH, IntoHeaderName, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY,
+        UPGRADE,
+    },
 };
+use sha1::{Digest, Sha1};
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt}, sync::mpsc::Receiver,
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    sync::mpsc::Receiver,
 };
 
-use crate::{handler::HttpHandlerError, websocket::data::WebSocketDataPayLoad};
+use crate::{
+    handler::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
+};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -26,6 +35,28 @@ impl HttpResponse {
             .body(ResponseBody::Empty)
             .expect("impossible!!");
         Self { _innser }
+    }
+    pub fn websocket_response(req: &HttpRequest) -> Self {
+        let mut res = Self::new();
+        *res._innser.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+        let upgrade = req.get_header(UPGRADE).unwrap();
+        res._innser.headers_mut().insert(UPGRADE, upgrade.clone());
+        res._innser
+            .headers_mut()
+            .insert(CONNECTION, "Upgrade".parse().unwrap());
+        let key = req.get_header(SEC_WEBSOCKET_KEY).unwrap().to_str().unwrap();
+        let accept = Self::cal_sec_websocket_accept(key);
+        res._innser
+            .headers_mut()
+            .insert(SEC_WEBSOCKET_ACCEPT, accept.parse().unwrap());
+        res
+    }
+    fn cal_sec_websocket_accept(key: &str) -> String {
+        let mut hasher = Sha1::new();
+        let accept = format!("{}258EAFA5-E914-47DA-95CA-C5AB0DC85B11", key);
+        hasher.update(accept.as_bytes());
+        let result = hasher.finalize();
+        BASE64_STANDARD.encode(result)
     }
 
     pub fn not_found() -> Self {
@@ -90,8 +121,7 @@ impl HttpResponse {
         let (mut h, b) = self._innser.into_parts();
         h.headers.remove(CONTENT_LENGTH);
         h.headers.remove(CONNECTION);
-        let body_stream =
-            respond.send_response(Response::from_parts(h, ()), false)?;
+        let body_stream = respond.send_response(Response::from_parts(h, ()), false)?;
         b.seriliaze_to_h2_stream(body_stream).await
     }
 }
@@ -105,7 +135,7 @@ pub enum ResponseBody {
     /// No body content.
     #[default]
     Empty,
-    WsBody(Receiver<WebSocketDataPayLoad>)
+    WsBody(Receiver<WebSocketDataPayLoad>),
 }
 
 impl ResponseBody {
@@ -138,7 +168,7 @@ impl ResponseBody {
                     body_stream.send_data(buf.split_to(n).freeze(), false)?;
                 }
             }
-            Empty => {},
+            Empty => {}
             WsBody(mut receiver) => {
                 tokio::spawn(async move {
                     while let Some(b) = receiver.recv().await {
@@ -165,8 +195,10 @@ impl ResponseBody {
             Empty => {
                 // No body to write
             }
-            WsBody(_) => {
-                unimplemented!()
+            WsBody(receiver) => {
+                while let Some(_payload) = receiver.recv().await {
+                    _payload.serialize_to_socket(socket).await?;
+                }
             }
         }
         socket.flush().await?;
@@ -193,7 +225,8 @@ impl HttpResponseModifier for HeaderMap {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             for (k, v) in self.drain() {
                 if let Some(k) = k {
@@ -213,7 +246,8 @@ impl HttpResponseModifier for StatusCode {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             *res._innser.status_mut() = *self;
             Ok(())
@@ -224,11 +258,13 @@ impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Ve
     fn modify<'a>(
         &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             for m in self {
-                let m: std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + Send + Sync>> =
-                    m.modify(res);
+                let m: std::pin::Pin<
+                    Box<dyn Future<Output = Result<(), HttpHandlerError>> + Send + Sync>,
+                > = m.modify(res);
                 m.await?;
             }
             Ok(())

@@ -283,6 +283,7 @@ dependencies = [
 name = "faithea"
 version = "0.1.2"
 dependencies = [
+ "base64",
  "bytes",
  "faithea-macro",
  "h2",
@@ -291,6 +292,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sha1",
  "tokio",
  "tokio-rustls",
  "urlencoding",

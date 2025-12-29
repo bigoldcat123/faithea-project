@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire, handler::HandlerTire, request::HttpRequest, response::HttpResponse, server::{builder::TlsConfig, process_request}
+    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{builder::TlsConfig, handle_upgrade_to_websocket, process_request}
 };
 
 pub struct H1Server {
@@ -79,7 +79,13 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
         let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
-        println!("{:?}", req._inner.uri());
-        process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
+        println!("{:#?}", req._inner.uri());
+        if is_websocket_upgrade(&req) {
+            handle_upgrade_to_websocket(guards, handlers, req, tx, reader).await;
+            break ;
+        }else {
+            process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
+        }
     }
+    Ok(())
 }

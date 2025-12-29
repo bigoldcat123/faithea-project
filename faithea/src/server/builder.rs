@@ -112,10 +112,11 @@ impl HttpServerBuilder {
 
     pub fn websocket<F,R>(mut self,route:&str,ws_handler:F) -> Self
    where
-       F:Fn(WebSocket,HttpRequest) -> R + Send + Sync + 'static,
+       F:Fn(WebSocket,HttpRequest) -> R + Send + Sync + 'static + Copy,
        R:Future<Output = ()> + 'static + Send
    {
        self.handlers.websoekct_h2(route, ws_handler);
+       self.handlers.websoekct_h1(route, ws_handler);
        self
     }
 

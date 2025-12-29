@@ -1,14 +1,12 @@
 pub mod builder;
 mod http1;
 mod http2;
-use std::{error::Error, net::SocketAddr, sync::Arc};
+use std::{error::Error, sync::Arc};
 
-use bytes::{BufMut, Bytes, BytesMut};
-use http::{Response, header::CONNECTION};
+use bytes::BytesMut;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, split},
-    net::TcpListener,
-    sync::mpsc::{self, Sender},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadHalf},
+    sync::mpsc::Sender,
 };
 
 use crate::{
@@ -18,7 +16,7 @@ use crate::{
     response::{HttpResponse, ResponseBody},
     route::Route,
     server::{
-        builder::{HttpServerBuilder, TlsConfig},
+        builder::{HttpServerBuilder},
         http1::H1Server,
         http2::H2Server,
     },
@@ -44,14 +42,14 @@ impl Server {
 }
 
 pub struct HttpServer {
-    /// Socket address the server is bound to
-    addr: SocketAddr,
-    /// Shared reference to handler routing trie
-    handlers: Arc<HandlerTire>,
-    /// Shared reference to guard middleware trie
-    guards: Arc<GuardTire>,
-    tls: Option<TlsConfig>,
-    h2: bool,
+    // Socket address the server is bound to
+    // addr: SocketAddr,
+    // /// Shared reference to handler routing trie
+    // handlers: Arc<HandlerTire>,
+    // /// Shared reference to guard middleware trie
+    // guards: Arc<GuardTire>,
+    // tls: Option<TlsConfig>,
+    // h2: bool,
 }
 
 impl HttpServer {
@@ -59,166 +57,183 @@ impl HttpServer {
         Default::default()
     }
 
-    pub async fn start_h1(self) -> Result<(), Box<dyn Error>> {
-        println!("HTTP server starting on http://{}", self.addr);
-        println!("Press Ctrl+C to stop the server");
-        let server = TcpListener::bind(self.addr).await?;
-        match self.tls {
-            Some(ref cfg) => {
-                let acceptor = cfg.tls_acceptor()?;
-                loop {
-                    let (socket, addr) = server.accept().await?;
-                    let socket = acceptor.clone().accept(socket).await?;
-                    self.process_h1(socket, addr).await;
-                }
-            }
-            None => loop {
-                let (socket, addr) = server.accept().await.unwrap();
-                self.process_h1(socket, addr).await;
-            },
-        }
-    }
-    async fn start_h2(self) -> Result<(), Box<dyn Error>> {
-        println!(
-            "HTTP{} server starting on http{}://{}",
-            if self.h2 { "S" } else { "" },
-            if self.h2 { "s" } else { "" },
-            self.addr,
-        );
-        println!("Press Ctrl+C to stop the server");
-        let listener = TcpListener::bind(self.addr).await?;
-        match self.tls {
-            Some(ref cfg) => {
-                let acceptor = cfg.tls_acceptor()?;
-                loop {
-                    if let Ok((socket, _addr)) = listener.accept().await
-                        && let Ok(socket) = acceptor.clone().accept(socket).await
-                    {
-                        if let Err(e) = self.process_h2(socket).await {
-                            println!("{:?}", e);
-                        }
-                    } else {
-                        println!("搞事情?");
-                    }
-                }
-            }
-            None => loop {
-                if let Ok((socket, _addr)) = listener.accept().await
-                    && let Err(e) = self.process_h2(socket).await
-                {
-                    println!("{:?}", e);
-                }
-            },
-        }
-    }
-    async fn process_h2<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-        &self,
-        socket: IO,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut h2 = h2::server::handshake(socket).await?;
+    // pub async fn start_h1(self) -> Result<(), Box<dyn Error>> {
+    //     println!("HTTP server starting on http://{}", self.addr);
+    //     println!("Press Ctrl+C to stop the server");
+    //     let server = TcpListener::bind(self.addr).await?;
+    //     match self.tls {
+    //         Some(ref cfg) => {
+    //             let acceptor = cfg.tls_acceptor()?;
+    //             loop {
+    //                 let (socket, addr) = server.accept().await?;
+    //                 let socket = acceptor.clone().accept(socket).await?;
+    //                 self.process_h1(socket, addr).await;
+    //             }
+    //         }
+    //         None => loop {
+    //             let (socket, addr) = server.accept().await.unwrap();
+    //             self.process_h1(socket, addr).await;
+    //         },
+    //     }
+    // }
+    // async fn start_h2(self) -> Result<(), Box<dyn Error>> {
+    //     println!(
+    //         "HTTP{} server starting on http{}://{}",
+    //         if self.h2 { "S" } else { "" },
+    //         if self.h2 { "s" } else { "" },
+    //         self.addr,
+    //     );
+    //     println!("Press Ctrl+C to stop the server");
+    //     let listener = TcpListener::bind(self.addr).await?;
+    //     match self.tls {
+    //         Some(ref cfg) => {
+    //             let acceptor = cfg.tls_acceptor()?;
+    //             loop {
+    //                 if let Ok((socket, _addr)) = listener.accept().await
+    //                     && let Ok(socket) = acceptor.clone().accept(socket).await
+    //                 {
+    //                     if let Err(e) = self.process_h2(socket).await {
+    //                         println!("{:?}", e);
+    //                     }
+    //                 } else {
+    //                     println!("搞事情?");
+    //                 }
+    //             }
+    //         }
+    //         None => loop {
+    //             if let Ok((socket, _addr)) = listener.accept().await
+    //                 && let Err(e) = self.process_h2(socket).await
+    //             {
+    //                 println!("{:?}", e);
+    //             }
+    //         },
+    //     }
+    // }
+    // async fn process_h2<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+    //     &self,
+    //     socket: IO,
+    // ) -> Result<(), Box<dyn Error>> {
+    //     let mut h2 = h2::server::handshake(socket).await?;
 
-        while let Some(Ok(request)) = h2.accept().await {
-            let (request, mut respond) = request;
-            let (p, mut b) = request.into_parts();
-            let mut buf = BytesMut::new();
-            while let Some(Ok(e)) = b.data().await {
-                buf.put(e);
-                if b.is_end_stream() {
-                    break;
-                }
-            }
-            let b = RequestBody::Simple(buf.freeze());
+    //     while let Some(Ok(request)) = h2.accept().await {
+    //         let (request, mut respond) = request;
+    //         let (p, mut b) = request.into_parts();
+    //         let mut buf = BytesMut::new();
+    //         while let Some(Ok(e)) = b.data().await {
+    //             buf.put(e);
+    //             if b.is_end_stream() {
+    //                 break;
+    //             }
+    //         }
+    //         let b = RequestBody::Simple(buf.freeze());
 
-            let req = HttpRequest::new(p, Some(b));
+    //         let req = HttpRequest::new(p, Some(b));
 
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(64);
+    //         let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(64);
 
-            tokio::spawn(async move {
-                while let Some(r) = rx.recv().await {
-                    let (mut p, b) = r._innser.into_parts();
-                    // Send the response back to the client
-                    // p.headers.remove(CONTENT_LENGTH);
-                    p.headers.remove(CONNECTION);
-                    println!("{:?}", p.headers);
+    //         tokio::spawn(async move {
+    //             while let Some(r) = rx.recv().await {
+    //                 let (mut p, b) = r._innser.into_parts();
+    //                 // Send the response back to the client
+    //                 // p.headers.remove(CONTENT_LENGTH);
+    //                 p.headers.remove(CONNECTION);
+    //                 println!("{:?}", p.headers);
 
-                    let mut x = respond
-                        .send_response(Response::from_parts(p, ()), false)
-                        .unwrap();
-                    let mut buf = BytesMut::with_capacity(4096);
-                    match b {
-                        crate::response::ResponseBody::File(mut f) => {
-                            while let Ok(size) = f.read_buf(&mut buf).await {
-                                let _ = x.send_data(buf.split_to(size).freeze(), size == 0);
-                                if size == 0 {
-                                    break;
-                                }
-                            }
-                        }
-                        crate::response::ResponseBody::Simple(b) => {
-                            let _ = x.send_data(b, true);
-                        }
-                        crate::response::ResponseBody::Empty => {
-                            let _ = x.send_data(Bytes::new(), true);
-                        }
-                        crate::response::ResponseBody::WsBody(_receiver) => {
-                            unimplemented!()
-                        }
-                    }
-                }
-            });
+    //                 let mut x = respond
+    //                     .send_response(Response::from_parts(p, ()), false)
+    //                     .unwrap();
+    //                 let mut buf = BytesMut::with_capacity(4096);
+    //                 match b {
+    //                     crate::response::ResponseBody::File(mut f) => {
+    //                         while let Ok(size) = f.read_buf(&mut buf).await {
+    //                             let _ = x.send_data(buf.split_to(size).freeze(), size == 0);
+    //                             if size == 0 {
+    //                                 break;
+    //                             }
+    //                         }
+    //                     }
+    //                     crate::response::ResponseBody::Simple(b) => {
+    //                         let _ = x.send_data(b, true);
+    //                     }
+    //                     crate::response::ResponseBody::Empty => {
+    //                         let _ = x.send_data(Bytes::new(), true);
+    //                     }
+    //                     crate::response::ResponseBody::WsBody(_receiver) => {
+    //                         unimplemented!()
+    //                     }
+    //                 }
+    //             }
+    //         });
 
-            process_request(self.guards.clone(), self.handlers.clone(), req, tx).await;
-        }
-        Ok(())
-    }
-    async fn process_h1<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-        &self,
-        socket: IO,
-        addr: SocketAddr,
-    ) {
-        println!("new client -> {}", addr);
-        let handlers = Arc::clone(&self.handlers);
-        let guards = Arc::clone(&self.guards);
-        tokio::spawn(async move {
-            let e = process(socket, handlers, guards).await;
-            println!("{:?}", e);
-            println!(" client left -> {}", addr);
-        });
-    }
+    //         process_request(self.guards.clone(), self.handlers.clone(), req, tx).await;
+    //     }
+    //     Ok(())
+    // }
+    // async fn process_h1<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+    //     &self,
+    //     socket: IO,
+    //     addr: SocketAddr,
+    // ) {
+    //     println!("new client -> {}", addr);
+    //     let handlers = Arc::clone(&self.handlers);
+    //     let guards = Arc::clone(&self.guards);
+    //     tokio::spawn(async move {
+    //         let e = process(socket, handlers, guards).await;
+    //         println!("{:?}", e);
+    //         println!(" client left -> {}", addr);
+    //     });
+    // }
 
-    pub async fn run(self) -> Result<(), Box<dyn Error>> {
-        if self.h2 {
-            self.start_h2().await?;
-        } else {
-            self.start_h1().await?;
-        }
-        Ok(())
-    }
+    // pub async fn run(self) -> Result<(), Box<dyn Error>> {
+    //     if self.h2 {
+    //         self.start_h2().await?;
+    //     } else {
+    //         self.start_h1().await?;
+    //     }
+    //     Ok(())
+    // }
 }
 
-async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-    socket: IO,
-    handlers: Arc<HandlerTire>,
+// async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+//     socket: IO,
+//     handlers: Arc<HandlerTire>,
+//     guards: Arc<GuardTire>,
+// ) -> Result<(), String> {
+//     let (mut reader, mut writer) = split(socket);
+//     let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
+
+//     // Spawn writer task that consumes responses from the channel and writes them to the socket
+//     tokio::spawn(async move {
+//         while let Some(response) = rx.recv().await {
+//             if response.serialize_to_socket_h1(&mut writer).await.is_err() {
+//                 println!("sending response error!");
+//             }
+//         }
+//     });
+
+//     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
+//     loop {
+//         let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
+//         // println!("{:?}", req);
+//         if is_websocket_upgrade(&req) {
+//             handle_upgrade_to_websocket(guards.clone(), handlers.clone(), req, tx.clone(),reader).await;
+//             break ;
+//         } else {
+//             process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
+//         }
+//     }
+//     Ok(())
+// }
+
+pub async fn handle_upgrade_to_websocket<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     guards: Arc<GuardTire>,
-) -> Result<(), String> {
-    let (mut reader, mut writer) = split(socket);
-    let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
-
-    // Spawn writer task that consumes responses from the channel and writes them to the socket
-    tokio::spawn(async move {
-        while let Some(response) = rx.recv().await {
-            if response.serialize_to_socket_h1(&mut writer).await.is_err() {
-                println!("sending response error!");
-            }
-        }
-    });
-
-    let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
-    loop {
-        let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
-        // println!("{:?}", req);
-        process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
-    }
+    handlers: Arc<HandlerTire>,
+    mut req: HttpRequest,
+    tx: Sender<HttpResponse>,
+    reader:ReadHalf<IO>
+) {
+    *req._inner.body_mut() = Some(RequestBody::WebSocketStreamBodyHttp1(Box::new(reader)));
+    process_request(guards, handlers, req, tx).await;
 }
 
 async fn process_request(
@@ -276,18 +291,40 @@ async fn handle_request(
                 // before_open();
 
                 if let Some(body) = req._inner.body_mut().take()
-                    && let RequestBody::WebSocketStreamBody(stream_body) = body
+                    // && let RequestBody::WebSocketStreamBody(stream_body) = body
                 {
-                    let mut r = HttpResponse::new();
-                    let (outcomming_message_sender, outcomming_message_receiver) =
-                        tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(128);
-                    r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
-                    tx.send(r).await.unwrap();
-                    let (parser, incomming_message_receiver) =
-                        WebSocketIncommingMessageParser::new(stream_body);
-                    parser.start();
-                    let websocket = WebSocket::new(outcomming_message_sender, incomming_message_receiver);
-                    ws_handler(websocket, req).await;
+                    match body {
+                        RequestBody::WebSocketStreamBody(stream_body) => {
+                            let mut r = HttpResponse::new();
+                            let (outcomming_message_sender, outcomming_message_receiver) =
+                                tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(128);
+                            r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
+                            tx.send(r).await.unwrap();
+                            let (parser, incomming_message_receiver) =
+                                WebSocketIncommingMessageParser::new(stream_body);
+                            parser.start();
+                            let websocket =
+                                WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+                            ws_handler(websocket, req).await;
+                        }
+                        RequestBody::WebSocketStreamBodyHttp1(mut reader) => {
+                            let mut r = HttpResponse::websocket_response(&req);
+                            let (outcommint_tx,outcommint_rx) = tokio::sync::mpsc::channel(12);
+                            *r._innser.body_mut() = ResponseBody::WsBody(outcommint_rx);
+                            println!("{}","YES");
+
+                            let _ = tx.send(r).await;
+                            let mut buf = BytesMut::with_capacity(256);
+                            while let Ok(len) = reader.read_buf(&mut buf).await {
+                                println!("{:?}",buf);
+                                buf.split_off(0);
+                            }
+                        }
+                        _  => {
+                            unreachable!()
+                        }
+                    }
+
                 }
             }
         }

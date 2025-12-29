@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 
 
 #[test]
+fn base64() {
+
+}
+
+#[test]
 fn u() {
 
     let mask = [ 0x8d, 0x20, 0xe3, 0xdf];
