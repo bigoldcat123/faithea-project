@@ -5,6 +5,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::websocket::data::WebSocketDataPayLoad;
 
 pub mod data;
+pub mod socket;
 
 #[derive(Debug)]
 enum WebSocketActorState {
