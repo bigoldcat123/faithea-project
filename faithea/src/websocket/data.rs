@@ -10,6 +10,9 @@ impl WebSocketDataPayLoad {
     pub fn new(payload:Bytes) -> Self {
         Self { _inner: payload }
     }
+    pub fn as_bytes(&self) -> &[u8] {
+        &self._inner
+    }
     async fn send_head(&self,body_stream:&mut SendStream<Bytes>) -> Result<(), h2::Error> {
         let b = &self._inner;
         let mut buf = BytesMut::new();

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 聊天应用</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.2);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            overflow: hidden;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .connection-section {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .input-group {
+            display: flex;
+            margin-bottom: 15px;
+            gap: 10px;
+        }
+
+        input, button {
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 16px;
+            color: #343a40;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        input:focus {
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            border-color: #0d6efd;
+        }
+
+        button {
+            cursor: pointer;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #0b5ed7;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            text-align: center;
+            font-size: 20px;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        .status.connected {
+            color: #198754;
+            background: rgba(25, 135, 84, 0.1);
+        }
+
+        .status.disconnected {
+            color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+        }
+
+        .chat-section {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+        }
+
+        .chat-header {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.own {
+            background: rgba(13, 110, 253, 0.1);
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.other {
+            background: rgba(0, 0, 0, 0.05);
+            margin-right: auto;
+        }
+
+        .message-header {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #6c757d;
+        }
+
+        .message-content {
+            font-size: 16px;
+            color: #343a40;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+        }
+
+        .send-btn {
+            background: #198754;
+        }
+
+        .send-btn:hover {
+            background: #157347;
+        }
+
+        .disconnected .send-btn {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .disconnected .send-btn:hover {
+            background: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>WebSocket 聊天室</h1>
+        </div>
+
+        <div class="connection-section">
+            <div class="input-group">
+                <input type="text" id="usernameInput" placeholder="输入您的用户名">
+                <button id="connectBtn">连接</button>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="targetUserInput" placeholder="输入对方用户名">
+                <button id="setTargetBtn">设置聊天对象</button>
+            </div>
+
+            <div id="status" class="status disconnected">未连接</div>
+        </div>
+
+        <div class="chat-section">
+            <div class="chat-header">
+                <input type="text" id="targetUserDisplay" placeholder="聊天对象" readonly style="flex: 1;">
+            </div>
+
+            <div id="chatHistory" class="chat-history">
+                <div class="message other">
+                    <div class="message-header">系统消息</div>
+                    <div class="message-content">请先连接并设置聊天对象</div>
+                </div>
+            </div>
+
+            <div class="input-section">
+                <input type="text" id="messageInput" class="message-input" placeholder="输入消息..." disabled>
+                <button id="sendBtn" class="send-btn" disabled>发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let ws = null;
+        let currentUsername = '';
+        let targetUser = '';
+
+        // DOM 元素
+        const usernameInput = document.getElementById('usernameInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const targetUserInput = document.getElementById('targetUserInput');
+        const setTargetBtn = document.getElementById('setTargetBtn');
+        const statusDiv = document.getElementById('status');
+        const targetUserDisplay = document.getElementById('targetUserDisplay');
+        const chatHistory = document.getElementById('chatHistory');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        // 连接 WebSocket
+        connectBtn.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            if (!username) {
+                alert('请输入用户名');
+                return;
+            }
+
+            currentUsername = username;
+
+            // 尝试连接 WebSocket
+            try {
+                // 在实际部署时，这里应该是你的 WebSocket 服务器地址
+                // 例如: ws://localhost:8080/ws/{username}
+                // 为了演示，我们使用一个模拟的连接
+                ws = new WebSocket(`/ws/${username}`);
+
+                ws.onopen = () => {
+                    statusDiv.textContent = `已连接为: ${username}`;
+                    statusDiv.className = 'status connected';
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    connectBtn.disabled = true;
+                    usernameInput.disabled = true;
+
+                    addMessage('系统消息', '连接成功！', 'other');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'message') {
+                            addMessage(data.from, data.content, 'other');
+                        } else if (data.type === 'system') {
+                            addMessage('系统消息', data.content, 'other');
+                        }
+                    } catch (e) {
+                        addMessage('系统消息', event.data, 'other');
+                    }
+                };
+
+                ws.onclose = () => {
+                    statusDiv.textContent = '连接已断开';
+                    statusDiv.className = 'status disconnected';
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    connectBtn.disabled = false;
+                    usernameInput.disabled = false;
+
+                    addMessage('系统消息', '连接已断开', 'other');
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket 错误:', error);
+                    statusDiv.textContent = '连接错误';
+                    statusDiv.className = 'status disconnected';
+                };
+            } catch (e) {
+                console.error('连接错误:', e);
+                statusDiv.textContent = '连接失败';
+                statusDiv.className = 'status disconnected';
+            }
+        });
+
+        // 设置聊天对象
+        setTargetBtn.addEventListener('click', () => {
+            const target = targetUserInput.value.trim();
+            if (!target) {
+                alert('请输入对方用户名');
+                return;
+            }
+
+            targetUser = target;
+            targetUserDisplay.value = target;
+
+            addMessage('系统消息', `聊天对象已设置为: ${target}`, 'other');
+        });
+
+        // 发送消息
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            if (!targetUser) {
+                alert('请先设置聊天对象');
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const messageData = {
+                    type: 'message',
+                    to: targetUser,
+                    from: currentUsername,
+                    content: message
+                };
+
+                ws.send(JSON.stringify(messageData));
+                addMessage(currentUsername, message, 'own');
+                messageInput.value = '';
+            } else {
+                alert('WebSocket 未连接');
+            }
+        }
+
+        // 添加消息到聊天历史
+        function addMessage(sender, content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+            headerDiv.textContent = sender;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+
+            messageDiv.appendChild(headerDiv);
+            messageDiv.appendChild(contentDiv);
+
+            chatHistory.appendChild(messageDiv);
+
+            // 滚动到底部
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // 模拟 WebSocket 连接（在实际部署时应移除这部分）
+        // 这里我们创建一个模拟的 WebSocket 对象用于演示
+        window.addEventListener('load', () => {
+            // 提示用户需要实际的 WebSocket 服务器
+            setTimeout(() => {
+                if (!ws) {
+                    addMessage('系统消息', '提示：需要实际的 WebSocket 服务器才能正常工作。当前为演示模式。', 'other');
+                }
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

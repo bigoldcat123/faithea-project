@@ -8,8 +8,7 @@ use std::{path::PathBuf, str::FromStr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
 use http::{
-    HeaderMap, HeaderName, HeaderValue, Request, Uri, Version,
-    header::{AsHeaderName, CONTENT_LENGTH},
+    HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, header::{AsHeaderName, CONTENT_LENGTH}
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -31,6 +30,7 @@ pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
+    WebSocketStreamBody(RecvStream)
 }
 
 #[derive(Debug)]
@@ -146,8 +146,12 @@ impl HttpRequest {
     pub(crate) async fn parse_h2(
         stream_req:Request<RecvStream>
     ) -> Result<HttpRequest, String> {
+
         use ContentType::*;
         let (p,body_stream) = stream_req.into_parts();
+        if p.method == Method::CONNECT {
+            return Ok(HttpRequest::new(p,Some(RequestBody::WebSocketStreamBody(body_stream))))
+        }
         let content_type = ContentType::try_from(&p.headers)?;
         let body =  match content_type {
             MultipartFormData(boundary) =>{

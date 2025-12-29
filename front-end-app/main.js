@@ -3,7 +3,7 @@ console.log("hello")
 f()
 
 // ,["abc"]
-const ws = new WebSocket("/ws")
+const ws = new WebSocket("/ws/dadigua")
 ws.onopen = () => {
 
 }

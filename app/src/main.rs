@@ -1,5 +1,5 @@
 // #![allow(unused)]
-use chenzhonghai_app::json;
+use chenzhonghai_app::{json, ws::ws};
 use chenzhonghai_app::static_file_map::file_map;
 use faithea::{
     MultipartData, TryConvertFrom,
@@ -144,12 +144,7 @@ async fn main() {
             // println!("{e:?}",);
             Ok(e)
         })
-        .websocket("/abc",async |mut rx:Receiver<WebSocketDataPayLoad>,tx:Sender<WebSocketDataPayLoad>,req:HttpRequest| {
-            while let Some(msg) = rx.recv().await {
-                let _ = tx.send(msg).await;
-            }
-            ()
-        })
+        .websocket("/ws/{name}",ws)
         .tls(
             "/Users/dadigua/Desktop/graduation/key.pem",
             "/Users/dadigua/Desktop/graduation/cert.pem",
