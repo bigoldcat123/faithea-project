@@ -20,9 +20,9 @@ use crate::{
     server::{
         builder::{HttpServerBuilder, TlsConfig},
         http1::H1Server,
-        http2::{H2Server},
+        http2::H2Server,
     },
-    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad},
+    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -286,7 +286,8 @@ async fn handle_request(
                     let (parser, incomming_message_receiver) =
                         WebSocketIncommingMessageParser::new(stream_body);
                     parser.start();
-                    ws_handler(incomming_message_receiver, outcomming_message_sender, req).await;
+                    let websocket = WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+                    ws_handler(websocket, req).await;
                 }
             }
         }

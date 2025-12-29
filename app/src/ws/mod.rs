@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::LazyLock};
 
 use bytes::Bytes;
-use faithea::{request::HttpRequest, websocket::data::WebSocketDataPayLoad};
+use faithea::{request::HttpRequest, websocket::{data::WebSocketDataPayLoad, socket::WebSocket}};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{
     Mutex,
-    mpsc::{Receiver, Sender},
+    mpsc::Sender,
 };
 
 static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
@@ -20,10 +20,10 @@ struct WsDataMessage {
 }
 
 pub async fn ws(
-    mut r: Receiver<WebSocketDataPayLoad>,
-    s: Sender<WebSocketDataPayLoad>,
+    websocket: WebSocket,
     req: HttpRequest,
 ) {
+    let  (mut r,s) = websocket.split();
     let name = req.get_pathparam("name").unwrap();
     {
         let mut map = WS_SENDERS.lock().await;

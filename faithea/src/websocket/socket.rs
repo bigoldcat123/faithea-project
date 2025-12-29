@@ -15,7 +15,7 @@ impl WebSocket {
             reciver
         }
     }
-    pub fn split(self) -> (Sender<WebSocketDataPayLoad>, Receiver<WebSocketDataPayLoad>) {
-        (self.sender, self.reciver)
+    pub fn split(self) -> ( Receiver<WebSocketDataPayLoad>,Sender<WebSocketDataPayLoad>) {
+        ( self.reciver,self.sender)
     }
 }

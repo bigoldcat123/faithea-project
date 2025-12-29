@@ -1,7 +1,6 @@
 use std::{collections::HashMap, future::Future, pin::Pin};
 
 use http::Method;
-use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{
     regulate_url_path,
@@ -9,7 +8,7 @@ use crate::{
     response::{HttpResponse, HttpResponseModifier},
     route::{Route, RouteComponent},
     server::HandlerModifier,
-    websocket::data::WebSocketDataPayLoad,
+    websocket::{ socket::WebSocket},
 };
 pub type HttpHandlerError = Box<dyn HttpResponseModifier + Send + Sync>;
 pub type HttpHandler = Box<
@@ -22,8 +21,7 @@ pub type HttpHandler = Box<
 >;
 pub type WebSocketHandler = Box<
     dyn Fn(
-            Receiver<WebSocketDataPayLoad>,
-            Sender<WebSocketDataPayLoad>,
+            WebSocket,
             HttpRequest,
         ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
         + Send
@@ -109,27 +107,27 @@ impl HandlerTire {
     //         HttpRequest,
     //     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
     pub fn websoekct_h1<P:AsRef<str>,F,R>(&mut self,url:P,ws_handler:F)
-    where F: Fn(Receiver<WebSocketDataPayLoad>,Sender<WebSocketDataPayLoad>,HttpRequest,) -> R + Send + Sync + 'static,
+    where F: Fn(WebSocket,HttpRequest,) -> R + Send + Sync + 'static,
         R:Future<Output = ()> + Send + 'static
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
         route.r.reverse();
-        self.add_route(route.r, Handler::WbeSocket(Box::new(move |r,s,req| {
-            Box::pin(ws_handler(r,s,req))
+        self.add_route(route.r, Handler::WbeSocket(Box::new(move |ws,req| {
+            Box::pin(ws_handler(ws,req))
         })
         ), Method::GET);
     }
 
     pub fn websoekct_h2<P:AsRef<str>,F,R>(&mut self,url:P,ws_handler:F)
-    where F: Fn(Receiver<WebSocketDataPayLoad>,Sender<WebSocketDataPayLoad>,HttpRequest,) -> R + Send + Sync + 'static,
+    where F: Fn(WebSocket,HttpRequest,) -> R + Send + Sync + 'static,
         R:Future<Output = ()> + Send + 'static
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
         route.r.reverse();
-        self.add_route(route.r, Handler::WbeSocket(Box::new(move |r,s,req| {
-            Box::pin(ws_handler(r,s,req))
+        self.add_route(route.r, Handler::WbeSocket(Box::new(move |ws,req| {
+            Box::pin(ws_handler(ws,req))
         })
         ), Method::CONNECT);
     }
