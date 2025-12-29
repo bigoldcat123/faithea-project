@@ -250,25 +250,34 @@ async fn handle_request(
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
 ) {
+    use crate::handler::Handler;
     if let Some((_matched_url, handler)) =
         handlers.get_handler(req._inner.uri().path(), req._inner.method().clone())
     {
         req.process_routes(&_matched_url, &Route::from(req._inner.uri().path()));
 
         req.process_search_param();
-        match handler(req).await {
-            Ok(res) => {
-                let _ = tx.send(res).await;
-            }
-            Err(mut err) => {
-                let mut response = HttpResponse::new();
-                if err.modify(&mut response).await.is_ok() {
-                    let _ = tx.send(response).await;
-                } else {
-                    let _ = tx.send(HttpResponse::not_found()).await;
+        match handler {
+            Handler::Http(http_handler) => {
+                match http_handler(req).await {
+                    Ok(res) => {
+                        let _ = tx.send(res).await;
+                    }
+                    Err(mut err) => {
+                        let mut response = HttpResponse::new();
+                        if err.modify(&mut response).await.is_ok() {
+                            let _ = tx.send(response).await;
+                        } else {
+                            let _ = tx.send(HttpResponse::not_found()).await;
+                        }
+                    }
                 }
             }
+            Handler::WbeSocket(_) => {
+
+            }
         }
+
     } else {
         let _ = tx.send(HttpResponse::not_found()).await;
     }

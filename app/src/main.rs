@@ -111,18 +111,9 @@ async fn pathParam(name: String, age: MyAge) {
 
 #[get("/searchParam")]
 async fn search_param(#[search_param] name: &String, #[search_param] age: Option<MyAge>) {
-    let a = hell().await.unwrap();
-    // let a = tokio::spawn(async {
-    //     a
-    // }).await.unwrap();
     format!("name is {} and age is {:?}", name, age)
 }
 
-#[derive(Debug)]
-struct Ae{}
-async fn hell() -> Result<String,Ae>{
-    Err(Ae{})
-}
 
 #[post("/fromRequest")]
 async fn fromRequest(stu: FromRequest<Stu>) {
