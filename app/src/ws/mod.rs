@@ -30,7 +30,6 @@ pub async fn ws(
         map.insert(name.clone(), s.clone());
     }
     while let Some(msg) = r.recv().await {
-
         let data = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()).unwrap();
         let map = WS_SENDERS.lock().await;
         if let Some(sender) = map.get(&data.to) {

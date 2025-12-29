@@ -17,11 +17,9 @@ use faithea::{
     request::HttpRequest,
     res_modifiers,
     response::cors::CORS,
-    server::HttpServer, websocket::data::WebSocketDataPayLoad,
+    server::HttpServer,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::mysql::MySqlPoolOptions;
-use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Stu {
@@ -30,7 +28,7 @@ struct Stu {
 }
 impl TryFrom<&mut HttpRequest> for Stu {
     type Error = HttpHandlerError;
-    fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
+    fn try_from(_value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
@@ -38,8 +36,8 @@ impl TryFrom<&mut HttpRequest> for Stu {
     }
 }
 #[derive(Debug)]
-struct A {
-    value: String,
+pub struct A {
+    pub value: String,
 }
 impl TryFrom<Part> for A {
     type Error = HttpHandlerError;
@@ -89,8 +87,8 @@ async fn cookie() {
     format!("{:?}", _req.cookies())
 }
 #[derive(Debug)]
-struct MyAge {
-    age: i32,
+pub struct MyAge {
+    pub age: i32,
 }
 impl TryConvertFrom<Option<&String>> for MyAge {
     fn try_convert_from(value: Option<&String>) -> Result<Self, HttpHandlerError> {
