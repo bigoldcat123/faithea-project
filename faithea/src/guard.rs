@@ -6,16 +6,24 @@ use crate::{
     response::HttpResponse,
     route::{Route, RouteComponent},
 };
+type GuardResultOutput = Result<HttpRequest, HttpResponse>;
+pub trait GuardResultTrait: Future<Output = GuardResultOutput> + Send + 'static {}
+impl<T: Future<Output = GuardResultOutput> + Send + 'static> GuardResultTrait for T {}
+pub trait GuardTrait:
+    Fn(HttpRequest) -> Pin<Box<dyn GuardResultTrait>> + Send + Sync + 'static
+{
+}
+impl<T: Fn(HttpRequest) -> Pin<Box<dyn GuardResultTrait>> + Send + Sync + 'static> GuardTrait
+    for T
+{
+}
+pub trait RawGuardTrait<R:GuardResultTrait>:Fn(HttpRequest) -> R + Send + Sync + 'static {
 
-pub type Guard = Box<
-    dyn Fn(
-            HttpRequest,
-        ) -> Pin<
-            Box<dyn Future<Output = Result<HttpRequest, HttpResponse>> + Send + Sync + 'static>,
-        > + Send
-        + Sync
-        + 'static,
->;
+}
+impl<T: Fn(HttpRequest) -> R + Send + Sync + 'static, R:GuardResultTrait> RawGuardTrait<R> for T {
+
+}
+pub type Guard = Box<dyn GuardTrait>;
 
 #[derive(Default)]
 pub struct GuardTire {
@@ -26,10 +34,10 @@ pub struct GuardTire {
 }
 
 impl GuardTire {
-    pub fn add<F, O, P>(&mut self, url: P, f: F)
+    pub fn add<F, R, P>(&mut self, url: P, f: F)
     where
-        F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
+        F: RawGuardTrait<R>,
+        R: GuardResultTrait,
         P: AsRef<str>,
     {
         let url = regulate_url_path(url);
@@ -38,10 +46,10 @@ impl GuardTire {
         self.add_with_route_components(url_route, f);
     }
 
-    fn add_with_route_components<F, O>(&mut self, mut url: Route, f: F)
+    fn add_with_route_components<F, R>(&mut self, mut url: Route, f: F)
     where
-        F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
+        F: RawGuardTrait<R>,
+        R: GuardResultTrait
     {
         if let Some(next) = url.r.pop() {
             if !self.path.contains_key(&next) {
@@ -54,7 +62,10 @@ impl GuardTire {
                     .f
                     .push(Box::new(move |r: HttpRequest| Box::pin(f(r))))
             } else {
-                self.path.get_mut(&next).unwrap().add_with_route_components(url, f);
+                self.path
+                    .get_mut(&next)
+                    .unwrap()
+                    .add_with_route_components(url, f);
             }
         }
     }
@@ -160,8 +171,6 @@ mod test {
         let chain = guards.get_guard_chain("/url/abc/efg");
         let routes: Vec<_> = chain.iter().map(|x| &x.0).collect();
 
-        assert_eq!(
-            routes.len(),4
-        );
+        assert_eq!(routes.len(), 4);
     }
 }
