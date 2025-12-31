@@ -19,7 +19,7 @@ use crate::{
         MultipartDataMap,
         parser::{h1::MultiPartBodyParser, h2::H2MultiPartBodyParser},
     },
-    handler::HttpHandlerError,
+    handler::types::HttpHandlerError,
     map_str,
     request::{
         content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
@@ -374,8 +374,8 @@ macro_rules! impl_convert_from_ref_string2 {
     ($($t:ty),*) => {
         $(
             impl $crate::request::TryConvertFrom<&String> for  $t {
-                fn try_convert_from(value:&String) -> Result<Self,$crate::handler::HttpHandlerError> {
-                    value.parse::<$t>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::HttpHandlerError)
+                fn try_convert_from(value:&String) -> Result<Self,$crate::handler::types::HttpHandlerError> {
+                    value.parse::<$t>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::types::HttpHandlerError)
                 }
             }
 
@@ -387,11 +387,11 @@ macro_rules! impl_convert_from_option_ref_string {
     ($($t:ty),*) => {
         $(
             impl $crate::TryConvertFrom<Option<&String>> for  $t {
-                fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::HttpHandlerError> {
+                fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::types::HttpHandlerError> {
                     if let Some(value) = value {
-                        value.parse::<Self>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::HttpHandlerError)
+                        value.parse::<Self>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::types::HttpHandlerError)
                     }else {
-                        Err(Box::new("value is missing") as $crate::handler::HttpHandlerError)
+                        Err(Box::new("value is missing") as $crate::handler::types::HttpHandlerError)
                     }
                 }
             }
@@ -472,7 +472,7 @@ impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String
 
 #[cfg(test)]
 mod tests {
-    use crate::{TryConvertInto, handler::HttpHandlerError, request::ConvertFromRefString};
+    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::ConvertFromRefString};
     #[test]
     fn number_test() {
         let s = &"11".to_string();

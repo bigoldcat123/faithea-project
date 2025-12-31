@@ -34,7 +34,7 @@ pub mod header;
 pub mod util;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
-use crate::handler::HttpHandlerError;
+use crate::handler::types::HttpHandlerError;
 pub mod websocket;
 
 

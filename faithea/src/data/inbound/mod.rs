@@ -1,7 +1,7 @@
 pub mod multipart;
 use std::{ops::{Deref, DerefMut}, sync::Arc};
 
-use crate::{handler::HttpHandlerError, request::HttpRequest};
+use crate::{handler::types::HttpHandlerError, request::HttpRequest};
 pub type Shared<T> = Arc<T>;
 
 

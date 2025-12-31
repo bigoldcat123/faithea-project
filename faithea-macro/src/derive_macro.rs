@@ -53,7 +53,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             quote! {
                 #field_ident: data
                     .remove(#field_name)
-                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as faithea::handler::HttpHandlerError)?
+                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as faithea::handler::types::HttpHandlerError)?
                     .try_convert_into()?
             }
         }
@@ -66,7 +66,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
                     String,
                     Vec<faithea::data::inbound::multipart::Part>,
                 >,
-            ) -> Result<Self, faithea::handler::HttpHandlerError> {
+            ) -> Result<Self, faithea::handler::types::HttpHandlerError> {
                 use faithea::TryConvertInto;
                 Ok(Self {
                     #(#assigns,)*

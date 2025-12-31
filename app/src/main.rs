@@ -11,7 +11,7 @@ use faithea::{
         },
     },
     get,
-    handler::HttpHandlerError,
+    handler::types::HttpHandlerError,
     handlers,
     post,
     request::HttpRequest,

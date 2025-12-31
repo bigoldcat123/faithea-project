@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::{
     data::Json,
-    handler::HttpHandlerError,
+    handler::types::HttpHandlerError,
     map_fu, res_modifiers,
     response::{HttpResponseModifier, ResponseBody},
 };

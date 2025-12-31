@@ -2,7 +2,7 @@ use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    handler::HttpHandlerError,
+    handler::types::HttpHandlerError,
     request::{HttpRequest, RequestBody},
 };
 

@@ -265,7 +265,7 @@ async fn handle_request(
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
 ) {
-    use crate::handler::Handler;
+    use crate::handler::types::Handler;
     if let Some((_matched_url, handler)) =
         handlers.get_handler(req._inner.uri().path(), req._inner.method().clone())
     {

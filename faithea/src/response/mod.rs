@@ -18,7 +18,7 @@ use tokio::{
 };
 
 use crate::{
-    handler::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
+    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
 };
 
 #[derive(Default, Debug)]

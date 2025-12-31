@@ -5,7 +5,7 @@ use std::{
 
 use http::{HeaderValue, header::SET_COOKIE};
 
-use crate::{handler::HttpHandlerError, response::HttpResponseModifier};
+use crate::{handler::types::HttpHandlerError, response::HttpResponseModifier};
 
 pub enum CookieType {
     KeyValue(String, String),

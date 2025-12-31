@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     TryConvertFrom,
-    handler::HttpHandlerError,
+    handler::types::HttpHandlerError,
     request::{HttpRequest, RequestBody},
 };
 
@@ -26,7 +26,7 @@ macro_rules! impl_try_from_part_for_parse_from_str {
     ($($t:ty),*) => {
         $(
             impl TryFrom<Part> for $t {
-                type Error = $crate::handler::HttpHandlerError;
+                type Error = $crate::handler::types::HttpHandlerError;
                 fn try_from(value: Part) -> Result<Self, Self::Error> {
                     if let Part::Lit(l) = value {
                         Ok(l.parse::<Self>().map_err(|x| Box::new(x.to_string()) as Self::Error)?)
