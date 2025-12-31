@@ -22,7 +22,7 @@ enum WebSocketActorState {
     Finished,
     ConnectionClose,
 }
-#[derive(Debug, Eq, PartialEq,Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 enum WebSocketMessageType {
     Continuation, // %x0
     Text,         // %x1
@@ -69,6 +69,17 @@ struct ParserInnserState {
     machine_state: WebSocketActorState,
 }
 impl ParserInnserState {
+    async fn send_incomming_message(&mut self) {
+        let _ = self
+            .incomming_message_sender
+            .send(WebSocketDataPayLoad::text(
+                self.message.split_off(0).freeze(),
+            ))
+            .await;
+        self.machine_state = WebSocketActorState::Head;
+    }
+
+    /// return false to indicate that the connection should be closed
     async fn process(&mut self) -> bool {
         loop {
             match self.machine_state {
@@ -91,32 +102,28 @@ impl ParserInnserState {
                     use WebSocketMessageType::*;
                     match self.current_message_type {
                         Text => {
-                            let _ = self
-                                .incomming_message_sender
-                                .send(WebSocketDataPayLoad::text(
-                                    self.message.split_off(0).freeze(),
-                                ))
-                                .await;
-                            self.machine_state = WebSocketActorState::Head;
+                            self.send_incomming_message().await;
                         }
                         Binary => {
-                            let _ = self
-                                .incomming_message_sender
-                                .send(WebSocketDataPayLoad::text(
-                                    self.message.split_off(0).freeze(),
-                                ))
-                                .await;
-                            self.machine_state = WebSocketActorState::Head;
+                            self.send_incomming_message().await;
                         }
                         Ping => {
-                            let _ = self.outcomming_message_sender.send(WebSocketDataPayLoad::text(b"pong"[..].into())).await;
+                            let _ = self
+                                .outcomming_message_sender
+                                .send(WebSocketDataPayLoad::text(b"pong"[..].into()))
+                                .await;
                         }
                         _ => {}
                     }
 
                     break;
                 }
-                WebSocketActorState::ConnectionClose => return false,
+                WebSocketActorState::ConnectionClose => {
+                    let _ = self.outcomming_message_sender
+                        .send(WebSocketDataPayLoad::close(b"close"[..].into()))
+                        .await;
+                    return false;
+                }
             }
         }
         true
