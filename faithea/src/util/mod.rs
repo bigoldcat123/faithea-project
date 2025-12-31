@@ -1,7 +1,7 @@
 use crate::{data::outbound::StaticFile, request::HttpRequest, res_modifiers, response::HttpResponseModifier};
 
 /// # how to use
-/// ``` rust
+/// ``` ignore
 /// use faithea::{get, util::static_map};
 ///
 /// #[get("/**")]
