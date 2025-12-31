@@ -14,12 +14,11 @@ use crate::{
     request::{HttpRequest, RequestBody},
     response::{HttpResponse, ResponseBody},
     route::Route,
-    server::{
-        builder::HttpServerBuilder,
-        http1::H1Server,
-        http2::H2Server,
+    server::{builder::HttpServerBuilder, http1::H1Server, http2::H2Server},
+    websocket::{
+        Http1WebSocketIncommingMessageParser, WebSocketIncommingMessageParser,
+        data::WebSocketDataPayLoad, socket::WebSocket,
     },
-    websocket::{Http1WebSocketIncommingMessageParser, WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -224,12 +223,14 @@ impl HttpServer {
 //     Ok(())
 // }
 
-pub async fn handle_upgrade_to_websocket<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+pub async fn handle_upgrade_to_websocket<
+    IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+>(
     guards: Arc<GuardTire>,
     handlers: Arc<HandlerTire>,
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
-    reader:ReadHalf<IO>
+    reader: ReadHalf<IO>,
 ) {
     *req._inner.body_mut() = Some(RequestBody::WebSocketStreamBodyHttp1(Box::new(reader)));
     process_request(guards, handlers, req, tx).await;
@@ -287,42 +288,42 @@ async fn handle_request(
                 }
             },
             Handler::WbeSocket(ws_handler) => {
-                // before_open();
+                use RequestBody::*;
 
                 if let Some(body) = req._inner.body_mut().take()
-                    // && let RequestBody::WebSocketStreamBody(stream_body) = body
+                // && let RequestBody::WebSocketStreamBody(stream_body) = body
                 {
-                    match body {
-                        RequestBody::WebSocketStreamBody(stream_body) => {
-                            let mut r = HttpResponse::new();
-                            let (outcomming_message_sender, outcomming_message_receiver) =
-                                tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(128);
-                            r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
-                            tx.send(r).await.unwrap();
+                    let mut r = match &body {
+                        WebSocketStreamBody(_) => HttpResponse::new(),
+                        WebSocketStreamBodyHttp1(_) => {
+                            HttpResponse::websocket_response(&req)
+                        }
+                        _ => unreachable!(),
+                    };
+                    let (outcomming_message_sender, outcomming_message_receiver) =
+                        tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
+                    r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
+                    tx.send(r).await.unwrap();
+                    let incomming_message_receiver = match body {
+                        WebSocketStreamBody(stream_body) => {
                             let (parser, incomming_message_receiver) =
                                 WebSocketIncommingMessageParser::new(stream_body);
                             parser.start();
-                            let websocket =
-                                WebSocket::new(outcomming_message_sender, incomming_message_receiver);
-                            ws_handler(websocket, req).await;
+                            incomming_message_receiver
                         }
-                        RequestBody::WebSocketStreamBodyHttp1(reader) => {
-                            let mut r = HttpResponse::websocket_response(&req);
-                            let (outcomming_message_sender,outcommint_receiver) = tokio::sync::mpsc::channel(12);
-                            *r._innser.body_mut() = ResponseBody::WsBody(outcommint_receiver);
-                            let _ = tx.send(r).await;
-
-                            let (parser, incomming_message_receiver) = Http1WebSocketIncommingMessageParser::new(reader);
+                        WebSocketStreamBodyHttp1(reader) => {
+                            let (parser, incomming_message_receiver) =
+                                Http1WebSocketIncommingMessageParser::new(reader);
                             parser.start();
-                            let websocket =
-                                WebSocket::new(outcomming_message_sender, incomming_message_receiver);
-                            ws_handler(websocket, req).await;
+                            incomming_message_receiver
                         }
-                        _  => {
+                        _ => {
                             unreachable!()
                         }
-                    }
-
+                    };
+                    let websocket =
+                        WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+                    ws_handler(websocket, req).await;
                 }
             }
         }
