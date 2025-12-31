@@ -16,7 +16,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
-    guard::GuardTire,
+    guard::{GuardResultTrait, GuardTire, RawGuardTrait},
     handler::HandlerTire,
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
@@ -56,8 +56,8 @@ pub struct HttpServerBuilder {
 impl HttpServerBuilder {
     pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self
     where
-        F: Fn(HttpRequest) -> O + 'static + Send + Sync,
-        O: Future<Output = Result<HttpRequest, HttpResponse>> + 'static + Send + Sync,
+        F: RawGuardTrait<O>,
+        O: GuardResultTrait,
         P: AsRef<str>,
     {
         self.guards.add(route, f);

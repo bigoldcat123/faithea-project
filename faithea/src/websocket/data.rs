@@ -2,21 +2,39 @@ use bytes::{BufMut, Bytes, BytesMut};
 use h2::SendStream;
 use tokio::io::{self, AsyncWrite, AsyncWriteExt};
 
+use crate::websocket::WebSocketMessageType;
+
 pub struct WebSocketDataPayLoad {
+    r#type:WebSocketMessageType,
     _inner: Bytes,
 }
 
 impl WebSocketDataPayLoad {
-    pub fn new(payload: Bytes) -> Self {
-        Self { _inner: payload }
+    pub fn text(payload: Bytes) -> Self {
+        Self { _inner: payload ,r#type:WebSocketMessageType::Text}
     }
+    pub fn ping(payload: Bytes) -> Self{
+        Self { _inner: payload ,r#type:WebSocketMessageType::Ping}
+    }
+    pub fn pong(payload: Bytes) -> Self{
+        Self { _inner: payload ,r#type:WebSocketMessageType::Pong}
+    }
+    pub fn close(payload: Bytes) -> Self{
+        Self { _inner: payload ,r#type:WebSocketMessageType::Close}
+    }
+    pub fn binary(payload: Bytes) -> Self{
+        Self { _inner: payload ,r#type:WebSocketMessageType::Binary}
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self._inner
     }
     fn generate_head_frame(&self) -> Bytes {
         let b = &self._inner;
         let mut buf = BytesMut::new();
-        buf.put_u8(0x81); // fin + text
+        let op:u8 = self.r#type.into();
+        buf.put_u8(0x80 | op); // fin + text
+
         if b.len() < 126 {
             buf.put_u8(b.len() as u8);
         } else if b.len() < (u16::MAX - 1) as usize {

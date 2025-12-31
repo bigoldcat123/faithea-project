@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -20,27 +20,106 @@ enum WebSocketActorState {
         readed: usize,
     },
     Finished,
+    ConnectionClose,
 }
-pub struct WebSocketIncommingMessageParser {
-    incomming_message_stream: RecvStream,
+#[derive(Debug, Eq, PartialEq,Clone, Copy)]
+enum WebSocketMessageType {
+    Continuation, // %x0
+    Text,         // %x1
+    Binary,       // %x2
+    // %x3-7 are reserved for further non-control frames
+    Close, // %x8
+    Ping,  // %x9
+    Pong,  // %xA
+           // %xB-F are reserved for further control frames
+}
+impl From<u8> for WebSocketMessageType {
+    fn from(value: u8) -> Self {
+        match value & 0x0F {
+            // 取最后4位（操作码）
+            0x0 => WebSocketMessageType::Continuation,
+            0x1 => WebSocketMessageType::Text,
+            0x2 => WebSocketMessageType::Binary,
+            0x8 => WebSocketMessageType::Close,
+            0x9 => WebSocketMessageType::Ping,
+            0xA => WebSocketMessageType::Pong,
+            _ => panic!("Invalid WebSocket opcode: 0x{:02X}", value),
+        }
+    }
+}
+impl From<WebSocketMessageType> for u8 {
+    fn from(value: WebSocketMessageType) -> Self {
+        use WebSocketMessageType::*;
+        match value {
+            Continuation => 0x0,
+            Text => 0x1,
+            Binary => 0x2,
+            Close => 0x8,
+            Ping => 0x9,
+            Pong => 0xA,
+        }
+    }
+}
+struct ParserInnserState {
     incomming_message_sender: Sender<WebSocketDataPayLoad>,
+    outcomming_message_sender: Sender<WebSocketDataPayLoad>,
     buf: BytesMut,
     message: BytesMut,
-    state: WebSocketActorState,
+    current_message_type: WebSocketMessageType,
+    machine_state: WebSocketActorState,
 }
-impl WebSocketIncommingMessageParser {
-    pub fn new(incomming_message_stream: RecvStream) -> (Self, Receiver<WebSocketDataPayLoad>) {
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
-        (
-            Self {
-                incomming_message_sender: tx,
-                incomming_message_stream,
-                state: WebSocketActorState::Head,
-                buf: BytesMut::with_capacity(2048),
-                message: BytesMut::with_capacity(2048),
-            },
-            rx,
-        )
+impl ParserInnserState {
+    async fn process(&mut self) -> bool {
+        loop {
+            match self.machine_state {
+                WebSocketActorState::Head => {
+                    if !self.parse_head() {
+                        break;
+                    }
+                }
+                WebSocketActorState::Body {
+                    len,
+                    mask,
+                    msg_finished,
+                    readed,
+                } => {
+                    if !self.parse_body(readed, len, mask, msg_finished) {
+                        break;
+                    }
+                }
+                WebSocketActorState::Finished => {
+                    use WebSocketMessageType::*;
+                    match self.current_message_type {
+                        Text => {
+                            let _ = self
+                                .incomming_message_sender
+                                .send(WebSocketDataPayLoad::text(
+                                    self.message.split_off(0).freeze(),
+                                ))
+                                .await;
+                            self.machine_state = WebSocketActorState::Head;
+                        }
+                        Binary => {
+                            let _ = self
+                                .incomming_message_sender
+                                .send(WebSocketDataPayLoad::text(
+                                    self.message.split_off(0).freeze(),
+                                ))
+                                .await;
+                            self.machine_state = WebSocketActorState::Head;
+                        }
+                        Ping => {
+                            let _ = self.outcomming_message_sender.send(WebSocketDataPayLoad::text(b"pong"[..].into())).await;
+                        }
+                        _ => {}
+                    }
+
+                    break;
+                }
+                WebSocketActorState::ConnectionClose => return false,
+            }
+        }
+        true
     }
     fn parse_head(&mut self) -> bool {
         if self.buf.remaining() < 2 {
@@ -48,7 +127,14 @@ impl WebSocketIncommingMessageParser {
         }
 
         let p = self.buf.get_u8();
+
+        self.current_message_type = WebSocketMessageType::from(p);
         let msg_finished = p & 0x80 == 0x80;
+
+        if self.current_message_type == WebSocketMessageType::Close {
+            self.machine_state = WebSocketActorState::ConnectionClose;
+            return true;
+        }
 
         let mut len = (self.buf.get_u8() & 0x7f) as usize;
         if len == 126 {
@@ -71,7 +157,7 @@ impl WebSocketIncommingMessageParser {
             self.buf.get_u8(),
             self.buf.get_u8(),
         ];
-        self.state = WebSocketActorState::Body {
+        self.machine_state = WebSocketActorState::Body {
             readed: 0,
             len,
             mask,
@@ -96,13 +182,13 @@ impl WebSocketIncommingMessageParser {
         readed += new_msg_len;
         let _ = self.buf.split_to(new_msg_len);
         if readed == len {
-            if msg_finished {
-                self.state = WebSocketActorState::Finished;
+            if self.current_message_type == WebSocketMessageType::Continuation {
+                self.machine_state = WebSocketActorState::Head;
             } else {
-                self.state = WebSocketActorState::Head;
+                self.machine_state = WebSocketActorState::Finished;
             }
         } else {
-            self.state = WebSocketActorState::Body {
+            self.machine_state = WebSocketActorState::Body {
                 readed,
                 len,
                 mask,
@@ -112,42 +198,50 @@ impl WebSocketIncommingMessageParser {
         }
         true
     }
+    fn put(&mut self, data: Bytes) {
+        self.buf.put(data);
+    }
+    fn new(
+        incomming_message_sender: Sender<WebSocketDataPayLoad>,
+        outcomming_message_sender: Sender<WebSocketDataPayLoad>,
+    ) -> Self {
+        Self {
+            incomming_message_sender,
+            buf: BytesMut::with_capacity(1024),
+            message: BytesMut::with_capacity(1024),
+            machine_state: WebSocketActorState::Head,
+            outcomming_message_sender,
+            current_message_type: WebSocketMessageType::Text,
+        }
+    }
+}
+pub struct WebSocketIncommingMessageParser {
+    incomming_message_stream: RecvStream,
+    state: ParserInnserState,
+}
+impl WebSocketIncommingMessageParser {
+    pub fn new(
+        incomming_message_stream: RecvStream,
+        outcommint_message_sender: Sender<WebSocketDataPayLoad>,
+    ) -> (Self, Receiver<WebSocketDataPayLoad>) {
+        let (incomming_message_sender, rx) = tokio::sync::mpsc::channel(100);
+        (
+            Self {
+                incomming_message_stream,
+                state: ParserInnserState::new(incomming_message_sender, outcommint_message_sender),
+            },
+            rx,
+        )
+    }
     pub fn start(mut self) {
         tokio::spawn(async move {
             while let Some(d) = self.incomming_message_stream.data().await {
                 let d = d.expect("other side closed");
                 let chunk_len = d.len();
-                self.buf.put(d);
-                loop {
-                    match self.state {
-                        WebSocketActorState::Head => {
-                            if !self.parse_head() {
-                                break;
-                            }
-                        }
-                        WebSocketActorState::Body {
-                            len,
-                            mask,
-                            msg_finished,
-                            readed,
-                        } => {
-                            if !self.parse_body(readed, len, mask, msg_finished) {
-                                break;
-                            }
-                        }
-                        WebSocketActorState::Finished => {
-                            let _ = self
-                                .incomming_message_sender
-                                .send(WebSocketDataPayLoad::new(
-                                    self.message.split_off(0).freeze(),
-                                ))
-                                .await;
-                            self.state = WebSocketActorState::Head;
-                            break;
-                        }
-                    }
+                self.state.put(d);
+                if !self.state.process().await {
+                    break;
                 }
-
                 self.incomming_message_stream
                     .flow_control()
                     .release_capacity(chunk_len)
@@ -159,220 +253,37 @@ impl WebSocketIncommingMessageParser {
 
 pub struct Http1WebSocketIncommingMessageParser {
     incomming_message_stream: Box<dyn AsyncRead + Send + Sync + Unpin + 'static>,
-    incomming_message_sender: Sender<WebSocketDataPayLoad>,
-    buf: BytesMut,
-    message: BytesMut,
-    state: WebSocketActorState,
+    state: ParserInnserState,
 }
 impl Http1WebSocketIncommingMessageParser {
     pub fn new<R: AsyncRead + Send + Sync + Unpin + 'static>(
         incomming_message_stream: R,
+        outcomming_message_sender: Sender<WebSocketDataPayLoad>,
     ) -> (Self, Receiver<WebSocketDataPayLoad>) {
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let (incomming_message_sender, rx) = tokio::sync::mpsc::channel(100);
         (
             Self {
-                incomming_message_sender: tx,
                 incomming_message_stream: Box::new(incomming_message_stream),
-                state: WebSocketActorState::Head,
-                buf: BytesMut::with_capacity(2048),
-                message: BytesMut::with_capacity(2048),
+                state: ParserInnserState::new(incomming_message_sender, outcomming_message_sender),
             },
             rx,
         )
     }
-    fn parse_head(&mut self) -> bool {
-        if self.buf.remaining() < 2 {
-            return false;
-        }
-
-        let p = self.buf.get_u8();
-        let msg_finished = p & 0x80 == 0x80;
-
-        let mut len = (self.buf.get_u8() & 0x7f) as usize;
-        if len == 126 {
-            if self.buf.remaining() < 2 {
-                return false;
-            }
-            len = self.buf.get_u16() as usize;
-        } else if len == 127 {
-            if self.buf.remaining() < 8 {
-                return false;
-            }
-            len = self.buf.get_u64() as usize;
-        }
-        if self.buf.remaining() < 4 {
-            return false;
-        }
-        let mask = [
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-        ];
-        self.state = WebSocketActorState::Body {
-            readed: 0,
-            len,
-            mask,
-            msg_finished,
-        };
-        true
-    }
-    fn parse_body(
-        &mut self,
-        mut readed: usize,
-        len: usize,
-        mask: [u8; 4],
-        msg_finished: bool,
-    ) -> bool {
-        let remain = len - readed;
-        let mut real = vec![];
-        let new_msg_len = self.buf.len().min(remain);
-        for (i, &d) in self.buf[..new_msg_len].iter().enumerate() {
-            real.push(d ^ mask[(i + self.message.len()) % 4]);
-        }
-        self.message.put(&real[..]);
-        readed += new_msg_len;
-        let _ = self.buf.split_to(new_msg_len);
-        if readed == len {
-            if msg_finished {
-                self.state = WebSocketActorState::Finished;
-            } else {
-                self.state = WebSocketActorState::Head;
-            }
-        } else {
-            self.state = WebSocketActorState::Body {
-                readed,
-                len,
-                mask,
-                msg_finished,
-            };
-            return false;
-        }
-        true
-    }
     pub fn start(mut self) {
         tokio::spawn(async move {
-            while let Ok(d) = self.incomming_message_stream.read_buf(&mut self.buf).await {
+            while let Ok(d) = self
+                .incomming_message_stream
+                .read_buf(&mut self.state.buf)
+                .await
+            {
                 if d == 0 {
-                    println!("{}","other side close!");
-                    return
+                    println!("{}", "other side close!");
+                    return;
                 }
-                loop {
-                    match self.state {
-                        WebSocketActorState::Head => {
-                            if !self.parse_head() {
-                                break;
-                            }
-                        }
-                        WebSocketActorState::Body {
-                            len,
-                            mask,
-                            msg_finished,
-                            readed,
-                        } => {
-                            if !self.parse_body(readed, len, mask, msg_finished) {
-                                break;
-                            }
-                        }
-                        WebSocketActorState::Finished => {
-                            let _ = self
-                                .incomming_message_sender
-                                .send(WebSocketDataPayLoad::new(
-                                    self.message.split_off(0).freeze(),
-                                ))
-                                .await;
-                            self.state = WebSocketActorState::Head;
-                            break;
-                        }
-                    }
+                if !self.state.process().await {
+                    break;
                 }
             }
         });
     }
 }
-
-// pub async fn decode_ws_frame(
-//     stream: &mut RecvStream,
-//     sender: Sender<WebSocketDataPayLoad>,
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     let mut buf = BytesMut::with_capacity(2048);
-//     let mut len: Option<usize> = None;
-//     let mut mask: Option<[u8; 4]> = None;
-//     let mut readed = 0;
-//     let mut msg = BytesMut::with_capacity(2048);
-//     let mut msg_finished = false;
-//     while let Some(chunk) = stream.data().await {
-//         let chunk = chunk?;
-//         let chunk_len = chunk.len();
-
-//         buf.put(chunk);
-
-//         while buf.has_remaining() {
-//             if let Some(len_) = len
-//                 && let Some(mask_) = mask
-//             {
-//                 let remain = len_ - readed;
-//                 let mut real = vec![];
-//                 let new_msg_len = buf.len().min(remain as usize);
-//                 for (i, &d) in buf[..new_msg_len].iter().enumerate() {
-//                     real.push(d ^ mask_[(i + msg.len()) % 4]);
-//                 }
-//                 msg.put(&real[..]);
-//                 readed += new_msg_len;
-//                 let _ = buf.split_to(new_msg_len);
-//                 println!("readed {readed}",);
-
-//                 if readed == len_ {
-//                     if msg_finished {
-//                         // println!("{:?} -> {}", msg, msg.len());
-//                         let _ = sender
-//                             .send(WebSocketDataPayLoad::new(msg.split_off(0).freeze()))
-//                             .await;
-//                     }
-//                     readed = 0;
-//                     len = None;
-//                     mask = None;
-//                     break;
-//                 }
-//             } else {
-//                 if buf.remaining() < 2 {
-//                     break;
-//                 }
-//                 let p = buf.get_u8();
-//                 println!("{:x}", p);
-//                 if p & 0x80 == 0x80 {
-//                     msg_finished = true;
-//                 } else {
-//                     msg_finished = false;
-//                 }
-
-//                 let mut len_ = (buf.get_u8() & 0x7f) as usize;
-//                 if len_ == 126 {
-//                     if buf.remaining() < 2 {
-//                         break;
-//                     }
-//                     len_ = buf.get_u16() as usize;
-//                 } else if len_ == 127 {
-//                     if buf.remaining() < 8 {
-//                         break;
-//                     }
-//                     len_ = buf.get_u64() as usize;
-//                 }
-//                 len = Some(len_);
-
-//                 println!("len : {len_}",);
-
-//                 if buf.remaining() < 4 {
-//                     break;
-//                 }
-//                 mask = Some([buf.get_u8(), buf.get_u8(), buf.get_u8(), buf.get_u8()]);
-//             }
-//         }
-//         stream.flow_control().release_capacity(chunk_len).unwrap();
-//     }
-//     Ok(())
-// }
-
-// struct H2ResponseActor {
-//     rx: Receiver<HttpResponse>,
-// }

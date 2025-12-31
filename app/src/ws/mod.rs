@@ -34,7 +34,7 @@ pub async fn ws(
         let map = WS_SENDERS.lock().await;
         if let Some(sender) = map.get(&data.to) {
             let a:Bytes = serde_json::to_vec(&data).unwrap().into();
-            sender.send(WebSocketDataPayLoad::new(a)).await.unwrap();
+            sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
         }
     }
 }
