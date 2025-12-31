@@ -3,9 +3,8 @@ mod http1;
 mod http2;
 use std::{error::Error, sync::Arc};
 
-use bytes::BytesMut;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadHalf},
+    io::{AsyncRead, AsyncWrite, ReadHalf},
     sync::mpsc::Sender,
 };
 
@@ -16,11 +15,11 @@ use crate::{
     response::{HttpResponse, ResponseBody},
     route::Route,
     server::{
-        builder::{HttpServerBuilder},
+        builder::HttpServerBuilder,
         http1::H1Server,
         http2::H2Server,
     },
-    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
+    websocket::{Http1WebSocketIncommingMessageParser, WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -307,18 +306,17 @@ async fn handle_request(
                                 WebSocket::new(outcomming_message_sender, incomming_message_receiver);
                             ws_handler(websocket, req).await;
                         }
-                        RequestBody::WebSocketStreamBodyHttp1(mut reader) => {
+                        RequestBody::WebSocketStreamBodyHttp1(reader) => {
                             let mut r = HttpResponse::websocket_response(&req);
-                            let (outcommint_tx,outcommint_rx) = tokio::sync::mpsc::channel(12);
-                            *r._innser.body_mut() = ResponseBody::WsBody(outcommint_rx);
-                            println!("{}","YES");
-
+                            let (outcomming_message_sender,outcommint_receiver) = tokio::sync::mpsc::channel(12);
+                            *r._innser.body_mut() = ResponseBody::WsBody(outcommint_receiver);
                             let _ = tx.send(r).await;
-                            let mut buf = BytesMut::with_capacity(256);
-                            while let Ok(len) = reader.read_buf(&mut buf).await {
-                                println!("{:?}",buf);
-                                buf.split_off(0);
-                            }
+
+                            let (parser, incomming_message_receiver) = Http1WebSocketIncommingMessageParser::new(reader);
+                            parser.start();
+                            let websocket =
+                                WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+                            ws_handler(websocket, req).await;
                         }
                         _  => {
                             unreachable!()
