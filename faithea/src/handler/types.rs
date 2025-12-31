@@ -1,7 +1,10 @@
 use std::pin::Pin;
 
-use crate::{request::HttpRequest, response::{HttpResponse, HttpResponseModifier}, websocket::socket::WebSocket};
-
+use crate::{
+    request::HttpRequest,
+    response::{HttpResponse, HttpResponseModifier},
+    websocket::socket::WebSocket,
+};
 
 pub trait HttphandlerErrorTrait: HttpResponseModifier + Send + Sync {}
 impl<T: HttpResponseModifier + Send + Sync> HttphandlerErrorTrait for T {}
@@ -29,12 +32,32 @@ impl<R: HttpHandlerResultTrait, T: Fn(HttpRequest) -> R + Send + Sync + 'static>
 }
 pub type HttpHandler = Box<dyn HttpHandlerTrait>;
 
-pub type WebSocketHandler = Box<
-    dyn Fn(WebSocket, HttpRequest) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
-        + Send
-        + Sync
-        + 'static,
->;
+//####### WS HANDLER
+//
+pub trait WebSocketHandlerResultTrait: Future<Output = ()> + Send + 'static {}
+impl<T: Future<Output = ()> + Send + 'static> WebSocketHandlerResultTrait for T {}
+
+pub trait WebSocketHandlerTarit:
+    Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerResultTrait>> + Send + Sync + 'static
+{
+}
+impl<
+    T: Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerResultTrait>> + Send + Sync + 'static,
+> WebSocketHandlerTarit for T
+{
+}
+
+pub trait RawWebSocketHandlerTarit<R: WebSocketHandlerResultTrait>:
+    Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static
+{
+}
+
+impl<R: WebSocketHandlerResultTrait, T: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static>
+    RawWebSocketHandlerTarit<R> for T
+{
+}
+
+pub type WebSocketHandler = Box<dyn WebSocketHandlerTarit>;
 pub enum Handler {
     Http(HttpHandler),
     WbeSocket(WebSocketHandler),

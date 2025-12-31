@@ -1,9 +1,9 @@
-use std::{collections::HashMap, future::Future};
+use std::collections::HashMap;
 
 use http::Method;
 
 use crate::{
-    handler::types::{Handler, HttpHandlerResultTrait, RawHttpHandlerTrait}, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier, websocket::socket::WebSocket
+    handler::types::{Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit, WebSocketHandlerResultTrait}, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier
 };
 pub mod types;
 #[derive(Default)]
@@ -82,8 +82,8 @@ impl HandlerTire {
     //     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
     pub fn websoekct_h1<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
-        F: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static,
-        R: Future<Output = ()> + Send + 'static,
+        F: RawWebSocketHandlerTarit<R>,
+        R: WebSocketHandlerResultTrait,
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
@@ -97,8 +97,8 @@ impl HandlerTire {
 
     pub fn websoekct_h2<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
-        F: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static,
-        R: Future<Output = ()> + Send + 'static,
+        F: RawWebSocketHandlerTarit<R>,
+        R: WebSocketHandlerResultTrait
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
