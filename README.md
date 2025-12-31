@@ -4,7 +4,7 @@
 -  handler shoule be `(req) => Resule(res,err)` ✅
 -  clear all unwrap!
 -  add method route support! ✅
--  shared values
+-  shared values( no need ) ✅
 -  using Builder to create server ✅
 -  File Transfor ✅
 -  static mapping~ ✅
@@ -37,7 +37,8 @@
 -  Tls ✅
 -  http2 ✅
 -  WebSocket Support for h2 and http1.1 ✅
--  Further improve the implementation of WS 💼
+-  Further improve the implementation of WS ✅
+-  add type abstraction for handler and guard ✅
 
 - impl `deref` for `Json` ✅
 - add comment for `static_map` ✅
