@@ -10,7 +10,7 @@ use crate::websocket::data::WebSocketDataPayLoad;
 pub mod data;
 pub mod socket;
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq, Eq)]
 enum WebSocketActorState {
     Head,
     Body {
@@ -292,5 +292,274 @@ impl Http1WebSocketIncommingMessageParser {
                 }
             }
         });
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+    use bytes::BytesMut;
+
+    #[tokio::test]
+    async fn test_parse_head_basic_text_frame() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(1);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(2);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Create a simple text frame: FIN bit set, text type, 5 bytes, with mask
+        // 0x81 = 10000001 (FIN bit + text opcode)
+        // 0x85 = 10000101 (masked + payload length 5)
+        // Mask: [0x01, 0x02, 0x03, 0x04]
+        let mut data = BytesMut::new();
+        data.put_u8(0x81); // FIN bit set, text frame
+        data.put_u8(0x85); // Masked, payload length 5
+        data.put_slice(&[0x01, 0x02, 0x03, 0x04]); // Mask key
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(result);
+        assert_eq!(state.current_message_type, WebSocketMessageType::Text);
+        assert_eq!(state.machine_state, WebSocketActorState::Body {
+            len: 5,
+            mask: [0x01, 0x02, 0x03, 0x04],
+            msg_finished: true,
+            readed: 0,
+        });
+    }
+
+    #[tokio::test]
+    async fn test_parse_head_connection_close() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Create a close frame: 0x88 (FIN bit + close opcode)
+        let mut data = BytesMut::new();
+        data.put_u8(0x88); // FIN bit set, close frame
+        data.put_u8(0x00); // Not masked, payload length 0
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(result);
+        assert_eq!(state.current_message_type, WebSocketMessageType::Close);
+        assert_eq!(state.machine_state, WebSocketActorState::ConnectionClose);
+    }
+
+    #[tokio::test]
+    async fn test_parse_head_insufficient_data() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Only 1 byte, need at least 2 for basic header
+        let mut data = BytesMut::new();
+        data.put_u8(0x81);
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(!result);
+        // State should remain unchanged since we don't have enough data
+        assert_eq!(state.machine_state, WebSocketActorState::Head);
+    }
+
+    #[tokio::test]
+    async fn test_parse_head_extended_length_126() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Create frame with 126 length (extended 16-bit)
+        let mut data = BytesMut::new();
+        data.put_u8(0x81); // FIN bit set, text frame
+        data.put_u8(0x7E); // Length 126 indicator
+        data.put_u16(0x0100); // Extended payload length: 256 bytes
+        data.put_slice(&[0x01, 0x02, 0x03, 0x04]); // Mask key
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(result);
+        assert_eq!(state.machine_state, WebSocketActorState::Body {
+            len: 256,
+            mask: [0x01, 0x02, 0x03, 0x04],
+            msg_finished: true,
+            readed: 0,
+        });
+    }
+
+    #[tokio::test]
+    async fn test_parse_head_extended_length_127() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Create frame with 127 length (extended 64-bit)
+        let mut data = BytesMut::new();
+        data.put_u8(0x81); // FIN bit set, text frame
+        data.put_u8(0x7F); // Length 127 indicator
+        data.put_u64(0x0000000000000100); // Extended payload length: 256 bytes
+        data.put_slice(&[0x01, 0x02, 0x03, 0x04]); // Mask key
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(result);
+        assert_eq!(state.machine_state, WebSocketActorState::Body {
+            len: 256,
+            mask: [0x01, 0x02, 0x03, 0x04],
+            msg_finished: true,
+            readed: 0,
+        });
+    }
+
+    #[tokio::test]
+    async fn test_parse_head_insufficient_mask() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Frame header but no mask (only 2 bytes when we need 6 for mask)
+        let mut data = BytesMut::new();
+        data.put_u8(0x81); // FIN bit set, text frame
+        data.put_u8(0x85); // Masked, payload length 5
+        state.buf = data;
+
+        let result = state.parse_head();
+        assert!(!result); // Should fail due to insufficient mask data
+    }
+
+    #[tokio::test]
+    async fn test_parse_body_complete() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Setup: Text message type
+        state.current_message_type = WebSocketMessageType::Text;
+
+        // Put masked payload data in buffer (unmasked: "hello" = [104, 101, 108, 108, 111])
+        // Mask: [0x01, 0x02, 0x03, 0x04]
+        // Masked: [104^0x01, 101^0x02, 108^0x03, 108^0x04, 111^0x01] = [105, 103, 111, 104, 110]
+        let mut data = BytesMut::new();
+        data.put_slice(&[105, 103, 111, 104, 110]); // Masked "hello"
+        state.buf = data;
+
+        let mask = [0x01, 0x02, 0x03, 0x04];
+        let result = state.parse_body(0, 5, mask, true); // Complete 5-byte payload
+
+        assert!(result);
+        assert_eq!(state.machine_state, WebSocketActorState::Finished);
+        // The unmasked message should be "hello"
+        assert_eq!(state.message.as_ref(), b"hello");
+    }
+
+    #[tokio::test]
+    async fn test_parse_body_partial() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Setup: Text message type
+        state.current_message_type = WebSocketMessageType::Text;
+
+        // Put partial masked payload data in buffer (only 2 of 5 bytes)
+        // Mask: [0x01, 0x02, 0x03, 0x04]
+        let mut data = BytesMut::new();
+        data.put_slice(&[105, 103]); // First 2 bytes of masked "hello"
+        state.buf = data;
+
+        let mask = [0x01, 0x02, 0x03, 0x04];
+        let result = state.parse_body(0, 5, mask, true); // 5-byte payload, only 2 bytes available
+
+        assert!(!result); // Should return false since not complete
+        assert_eq!(state.machine_state, WebSocketActorState::Body {
+            readed: 2,
+            len: 5,
+            mask,
+            msg_finished: true,
+        });
+        assert_eq!(state.message.as_ref(), b"he"); // First 2 unmasked bytes
+    }
+
+    #[tokio::test]
+    async fn test_parse_body_with_existing_message() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Setup: Text message type and existing partial message
+        state.current_message_type = WebSocketMessageType::Text;
+        state.message.put_slice(b"hel");
+
+        // Put remaining masked payload data in buffer
+        // Mask: [0x01, 0x02, 0x03, 0x04]
+        let mut data = BytesMut::new();
+        data.put_slice(&[104]); // Last byte of masked "hello"
+        state.buf = data;
+
+        let mask = [0x01, 0x02, 0x03, 0x04];
+        let result = state.parse_body(3, 5, mask, true); // 5-byte payload, 3 already read, 1 more available
+
+        assert!(!result); // Should return false since not complete (only 4/5 bytes total)
+        assert_eq!(state.machine_state, WebSocketActorState::Body {
+            readed: 4,
+            len: 5,
+            mask,
+            msg_finished: true,
+        });
+        assert_eq!(state.message.as_ref(), b"hell"); // Should have "hel" + "l"
+    }
+
+    #[tokio::test]
+    async fn test_parse_body_continuation_frame() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Setup: Continuation message type
+        state.current_message_type = WebSocketMessageType::Continuation;
+
+        // Put masked payload data in buffer
+        let mut data = BytesMut::new();
+        data.put_slice(&[105, 103, 111, 104, 110]); // Masked "hello"
+        state.buf = data;
+
+        let mask = [0x01, 0x02, 0x03, 0x04];
+        let result = state.parse_body(0, 5, mask, true); // Complete 5-byte payload
+
+        assert!(result);
+        assert_eq!(state.machine_state, WebSocketActorState::Head); // Should return to Head for continuation
+        assert_eq!(state.message.as_ref(), b"hello");
+    }
+
+    #[tokio::test]
+    async fn test_parse_body_empty_payload() {
+        let (incoming_tx, _incoming_rx) = mpsc::channel(10);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel(10);
+
+        let mut state = ParserInnserState::new(incoming_tx, outgoing_tx);
+
+        // Setup: Text message type
+        state.current_message_type = WebSocketMessageType::Text;
+
+        // Empty buffer
+        state.buf = BytesMut::new();
+
+        let mask = [0x01, 0x02, 0x03, 0x04];
+        let result = state.parse_body(0, 0, mask, true); // 0-byte payload
+
+        assert!(result);
+        assert_eq!(state.machine_state, WebSocketActorState::Finished);
+        assert_eq!(state.message.len(), 0);
     }
 }
