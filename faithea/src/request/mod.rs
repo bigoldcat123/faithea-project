@@ -296,7 +296,7 @@ fn parse_line(builder: http::request::Builder, s: &str) -> Result<http::request:
 
     let version = head_line
         .next()
-        .ok_or("version parsing error".to_string())?;
+        .ok_or("version parsing error no headline".to_string())?;
     let v = match version {
         "HTTP/1.1" => Version::HTTP_11,
         "HTTP/1.0" => Version::HTTP_10,
@@ -321,16 +321,15 @@ fn parse_line_header(
 
     for h in raw_header {
         if !h.is_empty() {
-            let mut k_v = h.split(":");
-            let k = k_v.next().ok_or("no header key")?.trim();
-            let v = k_v.next().ok_or("no header value")?.trim();
-            // let value = HeaderValue::from_maybe_shared(v.to_string()).map_err(map_str!())?;
-            let value = v.parse().map_err(map_str!())?;
-            let name = HeaderName::from_str(k).unwrap();
-            header_map.insert(name, value);
+            if let Some((k,v)) = h.split_once(":") {
+                let value = v.parse().map_err(map_str!())?;
+                let name = HeaderName::from_str(k).unwrap();
+                header_map.insert(name, value);
+            }else {
+                Err("header parsing error".to_string())?
+            }
         }
     }
-
     Ok(builder)
 }
 
@@ -472,7 +471,19 @@ impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String
 
 #[cfg(test)]
 mod tests {
-    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::ConvertFromRefString};
+    use http::Request;
+
+    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::{ConvertFromRefString, parse_line_header}};
+
+    #[test]
+    fn parse_http1_line() {
+        let  b = Request::builder();
+        let a = parse_line_header(b"GET /hello HTTP/1.1\r\nhello:abc:caonima\r\n\r\n", b).unwrap();
+        let r = a.body(()).unwrap();
+        let a = r.headers().get("hello").unwrap();
+        assert_eq!(a, "abc:caonima");
+    }
+
     #[test]
     fn number_test() {
         let s = &"11".to_string();
