@@ -322,8 +322,8 @@ fn parse_line_header(
     for h in raw_header {
         if !h.is_empty() {
             if let Some((k,v)) = h.split_once(":") {
-                let value = v.parse().map_err(map_str!())?;
-                let name = HeaderName::from_str(k).unwrap();
+                let value = v.trim().parse().map_err(map_str!())?;
+                let name = HeaderName::from_str(k.trim()).unwrap();
                 header_map.insert(name, value);
             }else {
                 Err("header parsing error".to_string())?
@@ -478,10 +478,12 @@ mod tests {
     #[test]
     fn parse_http1_line() {
         let  b = Request::builder();
-        let a = parse_line_header(b"GET /hello HTTP/1.1\r\nhello:abc:caonima\r\n\r\n", b).unwrap();
+        let a = parse_line_header(b"GET /hello HTTP/1.1\r\nauth:abc:caonima\r\nlen:123\r\n\r\n", b).unwrap();
         let r = a.body(()).unwrap();
-        let a = r.headers().get("hello").unwrap();
+        let a = r.headers().get("auth").unwrap();
         assert_eq!(a, "abc:caonima");
+        let a =r.headers().get("len").unwrap();
+        assert_eq!(a, "123");
     }
 
     #[test]
@@ -515,52 +517,4 @@ mod tests {
         fn a2(_: Option<bool>) {}
         a2(s.try_convert_into().map_err(|_| "").unwrap());
     }
-
-    // #[test]
-    // fn url_encoded_special_chars() {
-    //     // key 里带 = & 空格，value 里带 & =
-    //     let url = "https://example.com/?key%3D%26=v%26a%3Dl%20ue";
-    //     let s = SearchParam::from_url(url);
-    //     assert_eq!(s._inner, map! { "key=&" => "v&al ue" });
-    // }
-
-    // #[test]
-    // fn fragment_should_be_ignored() {
-    //     let url = "https://example.com/?a=1&b=2#fragment";
-    //     let s = SearchParam::from_url(url);
-    //     assert_eq!(s._inner, map! { "a" => "1", "b" => "2" });
-    // }
-
-    // #[test]
-    // fn plus_sign() {
-    //     // 加号在 query-string 中被解释为空格（application/x-www-form-urlencoded）
-    //     let url = "https://example.com/?msg=hello+world";
-    //     let s = SearchParam::from_url(url);
-    //     assert_eq!(s._inner, map! { "msg" => "hello world" });
-    // }
-
-    // #[test]
-    // fn non_utf8_percent() {
-    //     // 非法 UTF-8 百分号序列，应不 panic，能跳过或给出空值
-    //     let url = "https://example.com/?key=%FF%FE";
-    //     let s = SearchParam::from_url(url);
-    //     // 这里只是断言不 panic，具体行为取决于你用的 urldecode 库
-    //     // 如果解码失败返回 ""，则：
-    //     assert_eq!(s._inner.get("key").map(|v| v.as_str()), Some(""));
-    // }
-
-    // #[test]
-    // fn key_without_equal() {
-    //     // 没有等号时，value 视为空字符串
-    //     let url = "https://example.com/?flag";
-    //     let s = SearchParam::from_url(url);
-    //     assert_eq!(s._inner, map! { "flag" => "" });
-    // }
-
-    // #[test]
-    // fn multibyte_unicode() {
-    //     let url = "https://example.com/?name=测试&emoji=%F0%9F%98%82";
-    //     let s = SearchParam::from_url(url);
-    //     assert_eq!(s._inner, map! { "name" => "测试", "emoji" => "😂" });
-    // }
 }
