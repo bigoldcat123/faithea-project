@@ -21,8 +21,8 @@ pub struct H1Server {
 }
 impl H1Server {
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
-        println!("HTTP{} server starting on http{}://{}",if self.tls.is_some() {"S"} else {""},if self.tls.is_some() {"s"} else {""}, self.addr);
-        println!("Press Ctrl+C to stop the server");
+        log::info!("HTTP{} server starting on http{}://{}",if self.tls.is_some() {"S"} else {""},if self.tls.is_some() {"s"} else {""}, self.addr);
+        log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
         match self.tls {
             Some(ref cfg) => {

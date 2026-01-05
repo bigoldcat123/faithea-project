@@ -25,13 +25,13 @@ pub struct H2Server {
 
 impl H2Server {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        println!(
+        log::info!(
             "HTTP{} server starting on http{}://{} using http2",
             if self.tls.is_some() { "S" } else { "" },
             if self.tls.is_some() { "s" } else { "" },
             self.addr,
         );
-        println!("Press Ctrl+C to stop the server");
+        log::info!("Press Ctrl+C to stop the server");
         let listener = TcpListener::bind(self.addr).await?;
         match self.tls {
             Some(ref cfg) => {
@@ -59,14 +59,14 @@ impl H2Server {
         _addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("client {} enter", _addr);
+        log::info!("client {} enter", _addr);
 
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
             let e = process(socket, guards, handlers,error_handler).await;
-            println!("{:?}", e);
-            println!("client {} left", _addr);
+            log::error!("{:?}", e);
+            log::info!("client {} left", _addr);
         });
 
         Ok(())
