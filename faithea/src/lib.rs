@@ -22,22 +22,20 @@
 //! - `guard`: Guard middleware for request validation
 //! - `route`: Route pattern matching components
 
-
 pub mod data;
 pub mod guard;
 pub mod handler;
+pub mod header;
 pub mod request;
 pub mod response;
 pub mod route;
 pub mod server;
-pub mod header;
 pub mod util;
+use crate::handler::types::HttpHandlerError;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
-use crate::handler::types::HttpHandlerError;
-pub mod websocket;
 pub mod error;
-
+pub mod websocket;
 
 #[macro_export]
 macro_rules! map_str {
@@ -72,9 +70,6 @@ macro_rules! map_fu {
 //     };
 // }
 
-
-
-
 // impl From<&HttpHeader> for Bytes {
 //     fn from(value: &HttpHeader) -> Self {
 //         let mut b = BytesMut::with_capacity(256);
@@ -103,8 +98,6 @@ pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
 mod test {
     // use http::{HeaderMap, header::{ACCEPT, CONNECTION, HOST, USER_AGENT}};
 
-
-
     // #[test]
     // fn into_bytes_test() {
     //     let mut header = HeaderMap::new();
@@ -113,8 +106,6 @@ mod test {
     //     header.insert(USER_AGENT, "rust-test/0.1".parse().unwrap());
     //     header.insert(ACCEPT, "*/*".parse().unwrap());
     //     header.insert(CONNECTION, "close".parse().unwrap());
-
-
 
     //     let bytes: Bytes = (&header).into();
     //     let s = std::str::from_utf8(bytes.chunk()).unwrap();
@@ -134,17 +125,17 @@ mod test {
     // }
 }
 
+pub type ResponseModifier = Vec<Box<dyn crate::response::HttpResponseModifier + Send + Sync>>;
 
 #[macro_export]
 macro_rules! res_modifiers {
     ($($e:expr),*) => {
         {
-            let a:Vec<Box<dyn $crate::response::HttpResponseModifier + Send + Sync>> = vec![
+            let a:$crate::ResponseModifier = vec![
                $( Box::new($e),)*
             ];
             a
         }
-
     };
 }
 
@@ -162,7 +153,6 @@ impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use http::{HeaderMap, StatusCode};
@@ -170,6 +160,6 @@ mod tests {
     fn macro_test() {
         let s = StatusCode::OK;
         let h = HeaderMap::new();
-        let _ = res_modifiers!(s,h);
+        let _ = res_modifiers!(s, h);
     }
 }

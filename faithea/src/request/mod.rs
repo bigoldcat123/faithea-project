@@ -181,15 +181,12 @@ async fn parse_simple_h2_body(mut body_stream: RecvStream) -> Result<RequestBody
     let mut buf = BytesMut::with_capacity(1024);
     while let Some(chunk) = body_stream.data().await {
         let chunk = chunk.map_err(map_str!())?;
-        let s = chunk
-            .chunk()
-            .iter()
-            .map(|b| format!("0x{:02x}", b))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        println!("[{s}]");
-
+        // let s = chunk
+        //     .chunk()
+        //     .iter()
+        //     .map(|b| format!("0x{:02x}", b))
+        //     .collect::<Vec<_>>()
+        //     .join(", ");
         let len = chunk.len();
         buf.put(chunk);
         body_stream

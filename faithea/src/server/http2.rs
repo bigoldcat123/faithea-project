@@ -10,8 +10,8 @@ use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     request::HttpRequest,
-    response::{HttpResponse},
-    server::{builder::TlsConfig, process_request},
+    response::HttpResponse,
+    server::{builder::{GlobalErrorHandler, TlsConfig}, process_request},
 };
 
 pub struct H2Server {
@@ -20,6 +20,7 @@ pub struct H2Server {
     pub(crate) handlers: Arc<HandlerTire>,
     /// Shared reference to guard middleware trie
     pub(crate) guards: Arc<GuardTire>,
+    pub(crate) error_handler:Option<Arc<GlobalErrorHandler>>
 }
 
 impl H2Server {
@@ -40,13 +41,13 @@ impl H2Server {
                     if let Ok((socket, addr)) = listener.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
-                        let _ = self.deal_with(socket, addr).await;
+                        let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
                     }
                 }
             }
             None => loop {
                 if let Ok((socket, addr)) = listener.accept().await {
-                    let _ = self.deal_with(socket, addr).await;
+                    let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
                 }
             },
         }
@@ -56,13 +57,14 @@ impl H2Server {
         &self,
         socket: IO,
         _addr: SocketAddr,
+        error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         println!("client {} enter", _addr);
 
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
-            let e = process(socket, guards, handlers).await;
+            let e = process(socket, guards, handlers,error_handler).await;
             println!("{:?}", e);
             println!("client {} left", _addr);
         });
@@ -75,6 +77,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     socket: IO,
     guards: Arc<GuardTire>,
     handlers: Arc<HandlerTire>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut h2 = Builder::new()
         .enable_connect_protocol()
@@ -86,6 +89,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         let (request, respond) = req?;
         let guards = guards.clone();
         let handlers = handlers.clone();
+        let error_handler = error_handler.clone();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
 
         tokio::spawn(async move {
@@ -96,7 +100,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         });
         tokio::spawn(async move {
             let request = HttpRequest::parse_h2(request).await.unwrap();
-            process_request(guards, handlers, request, tx).await;
+            process_request(guards, handlers, request, tx,error_handler).await;
         });
     }
 

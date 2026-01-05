@@ -12,9 +12,13 @@ use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     request::{HttpRequest, RequestBody},
-    response::{HttpResponse, ResponseBody,HttpResponseModifier},
+    response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
-    server::{builder::HttpServerBuilder, http1::H1Server, http2::H2Server},
+    server::{
+        builder::{GlobalErrorHandler, HttpServerBuilder},
+        http1::H1Server,
+        http2::H2Server,
+    },
     websocket::{
         Http1WebSocketIncommingMessageParser, WebSocketIncommingMessageParser,
         data::WebSocketDataPayLoad, socket::WebSocket,
@@ -54,9 +58,10 @@ pub async fn handle_upgrade_to_websocket<
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
     reader: ReadHalf<IO>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
 ) {
     *req._inner.body_mut() = Some(RequestBody::WebSocketStreamBodyHttp1(Box::new(reader)));
-    process_request(guards, handlers, req, tx).await;
+    process_request(guards, handlers, req, tx, error_handler).await;
 }
 
 async fn process_request(
@@ -64,10 +69,11 @@ async fn process_request(
     handlers: Arc<HandlerTire>,
     req: HttpRequest,
     tx: Sender<HttpResponse>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
 ) {
     match guard_request(guards, req).await {
         Ok(req) => {
-            handle_request(handlers, req, tx.clone()).await;
+            handle_request(handlers, req, tx.clone(),error_handler).await;
         }
         Err(res) => {
             let _ = tx.send(res).await;
@@ -88,6 +94,7 @@ async fn handle_request(
     handlers: Arc<HandlerTire>,
     mut req: HttpRequest,
     tx: Sender<HttpResponse>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
 ) {
     use crate::handler::types::Handler;
     if let Some((_matched_url, handler)) =
@@ -103,10 +110,19 @@ async fn handle_request(
                 }
                 Err(mut err) => {
                     let mut response = HttpResponse::new();
-                    if err.modify(&mut response).await.is_ok() {
-                        let _ = tx.send(response).await;
+                    if let Some(x) = error_handler {
+                        let mut m = x(err).await;
+                        if m.modify(&mut response).await.is_ok() {
+                            let _ = tx.send(response).await;
+                        } else {
+                            let _ = tx.send(HttpResponse::not_found()).await;
+                        }
                     } else {
-                        let _ = tx.send(HttpResponse::not_found()).await;
+                        if err.modify(&mut response).await.is_ok() {
+                            let _ = tx.send(response).await;
+                        } else {
+                            let _ = tx.send(HttpResponse::not_found()).await;
+                        }
                     }
                 }
             },
@@ -118,9 +134,7 @@ async fn handle_request(
                 {
                     let mut r = match &body {
                         WebSocketStreamBody(_) => HttpResponse::new(),
-                        WebSocketStreamBodyHttp1(_) => {
-                            HttpResponse::websocket_response(&req)
-                        }
+                        WebSocketStreamBodyHttp1(_) => HttpResponse::websocket_response(&req),
                         _ => unreachable!(),
                     };
                     let (outcomming_message_sender, outcomming_message_receiver) =
@@ -130,13 +144,19 @@ async fn handle_request(
                     let incomming_message_receiver = match body {
                         WebSocketStreamBody(stream_body) => {
                             let (parser, incomming_message_receiver) =
-                                WebSocketIncommingMessageParser::new(stream_body,outcomming_message_sender.clone());
+                                WebSocketIncommingMessageParser::new(
+                                    stream_body,
+                                    outcomming_message_sender.clone(),
+                                );
                             parser.start();
                             incomming_message_receiver
                         }
                         WebSocketStreamBodyHttp1(reader) => {
                             let (parser, incomming_message_receiver) =
-                                Http1WebSocketIncommingMessageParser::new(reader,outcomming_message_sender.clone());
+                                Http1WebSocketIncommingMessageParser::new(
+                                    reader,
+                                    outcomming_message_sender.clone(),
+                                );
                             parser.start();
                             incomming_message_receiver
                         }

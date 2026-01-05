@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{builder::TlsConfig, handle_upgrade_to_websocket, process_request}
+    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{builder::{GlobalErrorHandler, TlsConfig}, handle_upgrade_to_websocket, process_request}
 };
 
 pub struct H1Server {
@@ -17,6 +17,7 @@ pub struct H1Server {
     pub(crate) handlers: Arc<HandlerTire>,
     /// Shared reference to guard middleware trie
     pub(crate) guards: Arc<GuardTire>,
+    pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 impl H1Server {
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
@@ -30,13 +31,13 @@ impl H1Server {
                     if let Ok((socket, addr)) = server.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
-                        let _ = self.deal_with(socket, addr).await;
+                        let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
                     }
                 }
             }
             None => loop {
                 if let Ok((socket, addr)) = server.accept().await {
-                    let _ = self.deal_with(socket, addr).await;
+                    let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
                 }
             },
         }
@@ -46,12 +47,13 @@ impl H1Server {
         &self,
         socket: IO,
         addr: SocketAddr,
+        error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn Error>> {
         println!("new client -> {}", addr);
         let handlers = Arc::clone(&self.handlers);
         let guards = Arc::clone(&self.guards);
         tokio::spawn(async move {
-            let e = process(socket, handlers, guards).await;
+            let e = process(socket, handlers, guards,error_handler).await;
             println!("{:?}", e);
             println!(" client left -> {}", addr);
         });
@@ -63,6 +65,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     socket: IO,
     handlers: Arc<HandlerTire>,
     guards: Arc<GuardTire>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
 ) -> Result<(), String> {
     let (mut reader, mut writer) = split(socket);
     let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
@@ -81,10 +84,10 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
         println!("{:#?}", req._inner.uri());
         if is_websocket_upgrade(&req) {
-            handle_upgrade_to_websocket(guards, handlers, req, tx, reader).await;
+            handle_upgrade_to_websocket(guards, handlers, req, tx, reader,error_handler).await;
             break ;
         }else {
-            process_request(guards.clone(), handlers.clone(), req, tx.clone()).await;
+            process_request(guards.clone(), handlers.clone(), req, tx.clone(),error_handler.clone()).await;
         }
     }
     Ok(())

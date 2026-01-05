@@ -2,6 +2,7 @@ use std::{
     error::Error,
     net::{SocketAddr, ToSocketAddrs},
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
 };
 
@@ -16,12 +17,28 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
+    ResponseModifier,
     guard::{GuardResultTrait, GuardTire, RawGuardTrait},
     handler::HandlerTire,
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
-    server::{HandlerModifier, Server, http1::H1Server, http2::H2Server}, websocket::socket::WebSocket,
+    server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
+    websocket::socket::WebSocket,
 };
+pub trait GlobaleHandlerResponseRaw: Future<Output = ResponseModifier> + Send + 'static {}
+impl<T: Future<Output = ResponseModifier> + Send + 'static> GlobaleHandlerResponseRaw for T {}
+pub trait GlobaleHandlerRaw<R: GlobaleHandlerResponseRaw>:
+    Fn(crate::error::Error) -> R + Send + Sync + 'static
+{
+}
+impl<R: GlobaleHandlerResponseRaw, T: Fn(crate::error::Error) -> R + Send + Sync + 'static>
+    GlobaleHandlerRaw<R> for T
+{
+}
+
+pub(crate) type GlobalErrorHandler = Box<
+    dyn Fn(crate::error::Error) -> Pin<Box<dyn GlobaleHandlerResponseRaw>> + Send + Sync + 'static,
+>;
 
 pub(crate) struct TlsConfig {
     pub(crate) key: PathBuf,
@@ -39,7 +56,7 @@ impl TlsConfig {
             .with_no_client_auth()
             .with_single_cert(certs, key)?;
         if self.h2 {
-            config.alpn_protocols = vec![b"h2".to_vec(),b"http1.1".to_vec()];
+            config.alpn_protocols = vec![b"h2".to_vec(), b"http1.1".to_vec()];
         }
         let acceptor = TlsAcceptor::from(Arc::new(config));
         Ok(acceptor)
@@ -52,8 +69,17 @@ pub struct HttpServerBuilder {
     addr: SocketAddr,
     tls: Option<TlsConfig>,
     h2: bool,
+    error_handler: Option<GlobalErrorHandler>,
 }
 impl HttpServerBuilder {
+    pub fn globale_error_handler<H, R>(mut self, handler: H) -> Self
+    where
+        H: GlobaleHandlerRaw<R>,
+        R: GlobaleHandlerResponseRaw,
+    {
+        self.error_handler = Some(Box::new(move |err| Box::pin(handler(err))));
+        self
+    }
     pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self
     where
         F: RawGuardTrait<O>,
@@ -110,14 +136,14 @@ impl HttpServerBuilder {
         self
     }
 
-    pub fn websocket<F,R>(mut self,route:&str,ws_handler:F) -> Self
-   where
-       F:Fn(WebSocket,HttpRequest) -> R + Send + Sync + 'static + Copy,
-       R:Future<Output = ()> + 'static + Send
-   {
-       self.handlers.websoekct_h2(route, ws_handler);
-       self.handlers.websoekct_h1(route, ws_handler);
-       self
+    pub fn websocket<F, R>(mut self, route: &str, ws_handler: F) -> Self
+    where
+        F: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static + Copy,
+        R: Future<Output = ()> + 'static + Send,
+    {
+        self.handlers.websoekct_h2(route, ws_handler);
+        self.handlers.websoekct_h1(route, ws_handler);
+        self
     }
 
     pub fn build(self) -> Server {
@@ -127,6 +153,7 @@ impl HttpServerBuilder {
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
                 tls: self.tls,
+                error_handler: self.error_handler.map(|x| Arc::new(x)),
             })
         } else {
             Server::H1Server(H1Server {
@@ -134,6 +161,7 @@ impl HttpServerBuilder {
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
                 tls: self.tls,
+                error_handler: self.error_handler.map(|x| Arc::new(x)),
             })
         }
     }
@@ -146,6 +174,7 @@ impl Default for HttpServerBuilder {
             addr: "127.0.0.1:8899".to_socket_addrs().unwrap().next().unwrap(),
             tls: None,
             h2: false,
+            error_handler: None,
         }
     }
 }

@@ -44,6 +44,7 @@
 - add comment for `static_map` ✅
 - static_map need urldecode! ✅
 - improve `handlers` macro ✅ now support `path` param 
+- global error handler!✅
 
 
 # Example
@@ -232,6 +233,12 @@ pub async fn ws(
         .websocket("/ws/{name}",ws)
 ```
 
+2. global error handler
+```rust
+        .globale_error_handler(async |e:faithea::error::Error|
+            res_modifiers!(format!("some error~~ {:?}",e))
+        )
+```
 
 # Tips
 1. make your type **compatible** with searchParam and **pathParam**
