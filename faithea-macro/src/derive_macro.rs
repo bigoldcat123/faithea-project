@@ -53,7 +53,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
             quote! {
                 #field_ident: data
                     .remove(#field_name)
-                    .ok_or_else(|| Box::new(format!("missing field `{}`", #field_name)) as faithea::handler::types::HttpHandlerError)?
+                    .ok_or_else(|| faithea::handler::types::HttpHandlerError::before_handler_invalid_param(format!("missing field `{}`", #field_name)))?
                     .try_convert_into()?
             }
         }

@@ -9,7 +9,7 @@ use crate::{
 pub trait HttphandlerErrorTrait: HttpResponseModifier + Send + Sync {}
 impl<T: HttpResponseModifier + Send + Sync> HttphandlerErrorTrait for T {}
 
-pub type HttpHandlerError = Box<dyn HttphandlerErrorTrait>;
+pub type HttpHandlerError = crate::error::Error;
 
 pub type HttpHandlerResultOutput = Result<HttpResponse, HttpHandlerError>;
 pub trait HttpHandlerResultTrait:

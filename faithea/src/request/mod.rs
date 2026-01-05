@@ -368,13 +368,13 @@ impl<'a> ConvertFromRefString<'a, String> for &'a String {
         Ok(self.to_string())
     }
 }
-
+//format!("can not convert String \"{}\" to type {}",value,stringify!($t))
 macro_rules! impl_convert_from_ref_string2 {
     ($($t:ty),*) => {
         $(
             impl $crate::request::TryConvertFrom<&String> for  $t {
                 fn try_convert_from(value:&String) -> Result<Self,$crate::handler::types::HttpHandlerError> {
-                    value.parse::<$t>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::types::HttpHandlerError)
+                    value.parse::<$t>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
                 }
             }
 
@@ -388,9 +388,9 @@ macro_rules! impl_convert_from_option_ref_string {
             impl $crate::TryConvertFrom<Option<&String>> for  $t {
                 fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::types::HttpHandlerError> {
                     if let Some(value) = value {
-                        value.parse::<Self>().map_err(|_| Box::new(format!("can not convert String \"{}\" to type {}",value,stringify!($t))) as $crate::handler::types::HttpHandlerError)
+                        value.parse::<Self>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
                     }else {
-                        Err(Box::new("value is missing") as $crate::handler::types::HttpHandlerError)
+                        Err($crate::error::Error::before_handler_invalid_param("value is missing"))
                     }
                 }
             }
@@ -417,7 +417,7 @@ impl<'a> TryConvertFrom<Option<&'a String>> for &'a String {
         if let Some(value) = value {
             Ok(value)
         } else {
-            Err(Box::new("missing value"))
+            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
         }
     }
 }
@@ -432,7 +432,7 @@ impl<'a> TryConvertFrom<Option<&'a String>> for &'a str {
         if let Some(value) = value {
             Ok(value)
         } else {
-            Err(Box::new("missing value") as HttpHandlerError)
+            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
         }
     }
 }
@@ -447,7 +447,7 @@ impl TryConvertFrom<Option<&String>> for String {
         if let Some(value) = value {
             Ok(value.to_string())
         } else {
-            Err(Box::new("missing value") as HttpHandlerError)
+            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
         }
     }
 }

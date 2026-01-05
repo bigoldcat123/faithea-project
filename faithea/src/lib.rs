@@ -49,7 +49,7 @@ macro_rules! map_str {
 #[macro_export]
 macro_rules! map_fu {
     () => {
-        |x| Box::new(format!("{}", x)) as HttpHandlerError
+        |_| crate::error::Error::Unknown
     };
 }
 // impl ConvertFromRefString<i32> for  &String {

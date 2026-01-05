@@ -12,7 +12,7 @@ use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     request::{HttpRequest, RequestBody},
-    response::{HttpResponse, ResponseBody},
+    response::{HttpResponse, ResponseBody,HttpResponseModifier},
     route::Route,
     server::{builder::HttpServerBuilder, http1::H1Server, http2::H2Server},
     websocket::{

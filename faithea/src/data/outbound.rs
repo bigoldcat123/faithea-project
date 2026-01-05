@@ -10,16 +10,12 @@ use serde::Serialize;
 use crate::{
     data::Json,
     handler::types::HttpHandlerError,
-    map_fu, res_modifiers,
-    response::{HttpResponseModifier, ResponseBody},
+    map_fu, response::{HttpResponseModifier, ResponseBody},
 };
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = HttpHandlerError;
     fn try_from(value: &Json<T>) -> Result<Self, Self::Error> {
-        let res = serde_json::to_vec(value).map_err(|x| {
-            let err: Self::Error = Box::new(x.to_string());
-            err
-        })?;
+        let res = serde_json::to_vec(value)?;
         Ok(Self::Simple(Bytes::from(res)))
     }
 }
@@ -35,23 +31,22 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             use ResponseBody::*;
-            // res.add_header(("content-type".to_string(), "application/json".to_string()));
             res.add_header(
                 CONTENT_TYPE,
                 HeaderValue::from_maybe_shared("application/json").map_err(map_fu!())?,
             );
             let body = self.try_into()?;
             if let Simple(ref b) = body {
-                // res.add_header(("content-length".to_string(), b.len().to_string()));
                 res.add_header(
                     CONTENT_LENGTH,
-                    HeaderValue::from_maybe_shared(b.len().to_string()).map_err(map_fu!())?,
+                    HeaderValue::from_maybe_shared(b.len().to_string())?,
                 );
             } else {
-                return Err(Box::new("Invalid response body") as HttpHandlerError);
+                return Err(HttpHandlerError::after_handler_incompatible_body_type());
             }
             res.set_body(body);
             Ok(())
@@ -63,7 +58,8 @@ impl HttpResponseModifier for &str {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(
@@ -85,7 +81,8 @@ impl HttpResponseModifier for String {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(
@@ -110,36 +107,21 @@ impl<T: AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
+    {
         Box::pin(async move {
-            let f = tokio::fs::File::open(self.0.as_ref()).await.map_err(|x| {
-                let err: HttpHandlerError = Box::new(res_modifiers!(x.to_string()));
-                err
-            })?;
-            let meta = f.metadata().await.map_err(|x| {
-                let err: HttpHandlerError = Box::new(res_modifiers!(x.to_string()));
-                err
-            })?;
+            let f = tokio::fs::File::open(self.0.as_ref()).await?;
+            let meta = f.metadata().await?;
             if !meta.is_file() {
-                let err: HttpHandlerError = Box::new(res_modifiers!(format!(
-                    "{:?} is not a File!!",
-                    self.0.as_ref()
-                )));
-                return Err(err);
+                let err_msg = format!("{:?} is not a File!!", self.0.as_ref());
+                return Err(HttpHandlerError::after_handler_file_not_exists(err_msg));
             }
 
             let len = meta.len();
-            // res.add_header(("content-length".to_string(), len.to_string()));
             res.add_header(
                 CONTENT_LENGTH,
                 HeaderValue::from_maybe_shared(len.to_string()).map_err(map_fu!())?,
             );
-
-
-            // res.add_header((
-            //     "content-type".to_string(),
-            //     mime_type(self.0.as_ref()).to_string(),
-            // ));
             res.add_header(
                 CONTENT_TYPE,
                 HeaderValue::from_static(mime_type(self.0.as_ref())),

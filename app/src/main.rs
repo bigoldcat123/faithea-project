@@ -45,7 +45,7 @@ impl TryFrom<Part> for A {
         if let Part::Lit(s) = value {
             Ok(Self { value: s })
         } else {
-            Err(Box::new("ggg") as HttpHandlerError)
+            Err(HttpHandlerError::before_handler_incompatible_request_body_type())
         }
     }
 }
@@ -95,10 +95,10 @@ impl TryConvertFrom<Option<&String>> for MyAge {
         if let Some(value) = value {
             let a = value
                 .parse::<i32>()
-                .map_err(|e| Box::new(e.to_string()) as HttpHandlerError)?;
+                .map_err(|e| HttpHandlerError::before_handler_invalid_param("cause"))?;
             Ok(Self { age: a })
         } else {
-            Err(Box::new("e") as HttpHandlerError)
+            Err(HttpHandlerError::Unknown)
         }
     }
 }

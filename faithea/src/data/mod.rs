@@ -16,15 +16,9 @@ impl<'a, T: Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
     type Error = HttpHandlerError;
     fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
         if let Some(RequestBody::Simple(body)) = value._inner.body() {
-            Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(
-                |x| {
-                    let a: Self::Error = Box::new(x.to_string());
-                    a
-                },
-            )?))
+            Ok(Self(serde_json::from_slice::<T>(body.chunk())?))
         } else {
-            let err = Box::new("Json parsing error!");
-            Err(err)
+            Err(crate::error::Error::before_handler_empty_request_body())
         }
     }
 }

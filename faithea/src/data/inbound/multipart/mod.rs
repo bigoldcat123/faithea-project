@@ -29,9 +29,10 @@ macro_rules! impl_try_from_part_for_parse_from_str {
                 type Error = $crate::handler::types::HttpHandlerError;
                 fn try_from(value: Part) -> Result<Self, Self::Error> {
                     if let Part::Lit(l) = value {
-                        Ok(l.parse::<Self>().map_err(|x| Box::new(x.to_string()) as Self::Error)?)
+                        Ok(l.parse::<Self>().map_err(|x| Self::Error::before_handler_multipart_can_not_parse_from_part(x.to_string()))?)
                     }else {
-                        Err(Box::new(format!("{} not compatiable to transform part to MultiPartFile",stringify!($t))) as Self::Error)
+                        let e = Self::Error::before_handler_multipart_incompatible_type(format!("{} not compatiable to transform part to MultiPartFile",stringify!($t)));
+                        Err(e)
                     }
                 }
             }
@@ -48,7 +49,7 @@ impl<T: TryFrom<Part, Error = HttpHandlerError>> TryConvertFrom<Vec<Part>> for T
         if let Some(value) = value.pop() {
             value.try_into()
         } else {
-            Err(Box::new("there is no data in multipart map") as HttpHandlerError)
+            Err(HttpHandlerError::before_handler_multipart_field_not_exist())
         }
     }
 }
@@ -81,7 +82,7 @@ impl TryFrom<Part> for MultiPartFile {
         if let Part::File(f) = value {
             Ok(f)
         } else {
-            Err(Box::new("not compatiable to transform part to MultiPartFile") as HttpHandlerError)
+            Err(HttpHandlerError::before_handler_multipart_incompatible_type("this is not a file"))
         }
     }
 }
@@ -114,7 +115,7 @@ impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
             Some(RequestBody::MultiPart(body)) => {
                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
             }
-            _ => Err(Box::new("no boundary") as HttpHandlerError),
+            _ => Err(HttpHandlerError::before_handler_incompatible_request_body_type()),
         }
     }
 }

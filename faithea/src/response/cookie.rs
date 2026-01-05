@@ -57,8 +57,7 @@ impl HttpResponseModifier for Cookie {
         Box::pin(async move {
             res._innser.headers_mut().insert(
                 SET_COOKIE,
-                HeaderValue::from_maybe_shared(format!("{:?}", self))
-                    .map_err(|e| Box::new(e.to_string()) as HttpHandlerError)?,
+                HeaderValue::from_maybe_shared(format!("{:?}", self))?,
             );
             Ok(())
         })
