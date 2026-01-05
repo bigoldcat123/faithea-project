@@ -36,6 +36,7 @@ pub use faithea_macro::*;
 pub use http::HeaderMap;
 use crate::handler::types::HttpHandlerError;
 pub mod websocket;
+pub mod error;
 
 
 #[macro_export]
