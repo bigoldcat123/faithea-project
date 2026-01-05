@@ -1,6 +1,6 @@
 // #![allow(unused)]
-use chenzhonghai_app::{json, ws::ws};
 use chenzhonghai_app::static_file_map::file_map;
+use chenzhonghai_app::{json, ws::ws};
 use faithea::{
     MultipartData, TryConvertFrom,
     data::{
@@ -12,8 +12,7 @@ use faithea::{
     },
     get,
     handler::types::HttpHandlerError,
-    handlers,
-    post,
+    handlers, post,
     request::HttpRequest,
     res_modifiers,
     response::cors::CORS,
@@ -79,7 +78,6 @@ async fn multipart(data: Multipart<StuInfo>) {
 
 #[get("/")]
 async fn hello_world() {
-
     res_modifiers!("Hello,World", CORS)
 }
 #[get("/cookie")]
@@ -95,7 +93,7 @@ impl TryConvertFrom<Option<&String>> for MyAge {
         if let Some(value) = value {
             let a = value
                 .parse::<i32>()
-                .map_err(|e| HttpHandlerError::before_handler_invalid_param("cause"))?;
+                .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
             Ok(Self { age: a })
         } else {
             Err(HttpHandlerError::Unknown)
@@ -112,15 +110,15 @@ async fn search_param(#[search_param] name: &String, #[search_param] age: Option
     format!("name is {} and age is {:?}", name, age)
 }
 
-
 #[post("/fromRequest")]
 async fn fromRequest(stu: FromRequest<Stu>) {
     Json(stu.into_inner())
 }
+
 //(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-
+    env_logger::init();
     let r = HttpServer::builder()
         .mount(
             "/",
@@ -142,14 +140,17 @@ async fn main() {
             // println!("{e:?}",);
             Ok(e)
         })
-        .websocket("/ws/{name}",ws)
-        // .tls(
-        //     "/Users/dadigua/Desktop/graduation/key.pem",
-        //     "/Users/dadigua/Desktop/graduation/cert.pem",
-        // )
-        // .h2()
-        // .host("0.0.0.0")
-        // .port(443)
+        .websocket("/ws/{name}", ws)
+        .globale_error_handler(async |e:faithea::error::Error|
+            res_modifiers!(format!("some error~~ {:?}",e))
+        )
+        .tls(
+            "/Users/dadigua/Desktop/graduation/key.pem",
+            "/Users/dadigua/Desktop/graduation/cert.pem",
+        )
+        .h2()
+        .host("0.0.0.0")
+        .port(443)
         .build()
         .run()
         .await;
