@@ -38,8 +38,10 @@ impl WebSocketDataPayLoad {
         if b.len() < 126 {
             buf.put_u8(b.len() as u8);
         } else if b.len() < (u16::MAX - 1) as usize {
+            buf.put_u8(126);
             buf.put_u16(b.len() as u16);
         } else {
+            buf.put_u8(127);
             buf.put_u64(b.len() as u64);
         }
         buf.freeze()
