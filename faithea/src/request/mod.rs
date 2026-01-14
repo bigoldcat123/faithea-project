@@ -379,21 +379,22 @@ macro_rules! impl_convert_from_ref_string2 {
     };
 }
 
-macro_rules! impl_convert_from_option_ref_string {
-    ($($t:ty),*) => {
-        $(
-            impl $crate::TryConvertFrom<Option<&String>> for  $t {
-                fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::types::HttpHandlerError> {
-                    if let Some(value) = value {
-                        value.parse::<Self>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
-                    }else {
-                        Err($crate::error::Error::before_handler_invalid_param("value is missing"))
-                    }
-                }
-            }
-        )*
-    };
-}
+// #[deprecated]
+// macro_rules! impl_convert_from_option_ref_string {
+//     ($($t:ty),*) => {
+//         $(
+//             impl $crate::TryConvertFrom<Option<&String>> for  $t {
+//                 fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::types::HttpHandlerError> {
+//                     if let Some(value) = value {
+//                         value.parse::<Self>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
+//                     }else {
+//                         Err($crate::error::Error::before_handler_invalid_param("value is missing 1"))
+//                     }
+//                 }
+//             }
+//         )*
+//     };
+// }
 
 impl_convert_from_ref_string2!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
@@ -401,36 +402,19 @@ impl_convert_from_ref_string2!(
 // impl_convert_from_ref_string!(
 //     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 // );
-impl_convert_from_option_ref_string!(
-    i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
-);
+// impl_convert_from_option_ref_string!(
+//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
+// );
 impl<'a> TryConvertFrom<&'a String> for &'a String {
     fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
         Ok(value)
     }
 }
-impl<'a> TryConvertFrom<Option<&'a String>> for &'a String {
-    fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
-        if let Some(value) = value {
-            Ok(value)
-        } else {
-            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
-        }
-    }
-}
+
 
 impl<'a> TryConvertFrom<&'a String> for &'a str {
     fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
         Ok(value.as_str())
-    }
-}
-impl<'a> TryConvertFrom<Option<&'a String>> for &'a str {
-    fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
-        if let Some(value) = value {
-            Ok(value)
-        } else {
-            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
-        }
     }
 }
 
@@ -439,29 +423,26 @@ impl TryConvertFrom<&String> for String {
         Ok(value.to_string())
     }
 }
-impl TryConvertFrom<Option<&String>> for String {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, HttpHandlerError> {
+
+impl <'a,O:TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for O {
+    fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
-            Ok(value.to_string())
+            Ok(O::try_convert_from(value)?)
         } else {
             Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
         }
     }
 }
 
-impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<&'a String> for Option<O> {
-    fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
-        match O::try_convert_from(value) {
-            Ok(r) => Ok(Some(r)),
-            Err(_) => Ok(None),
-        }
-    }
-}
-impl<'a, O: TryConvertFrom<Option<&'a String>>> TryConvertFrom<Option<&'a String>> for Option<O> {
+impl<'a, O:TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Option<O> {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
-        match O::try_convert_from(value) {
-            Ok(r) => Ok(Some(r)),
-            Err(_) => Ok(None),
+        if let Some(value) = value {
+            match O::try_convert_from(value) {
+                Ok(r) => Ok(Some(r)),
+                Err(_) => Err(crate::error::Error::before_handler_invalid_param("before_handler_invalid_param")),
+            }
+        }else {
+            Ok(None)
         }
     }
 }
@@ -508,10 +489,10 @@ mod tests {
     }
     #[test]
     fn option_test() {
-        let s = &"true".to_string();
-        let a: Result<Option<i32>, HttpHandlerError> = s.try_convert_into();
+        let s = Some(&"true".to_string());
+        let a: Result<i32, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), true);
-        fn a2(_: Option<bool>) {}
+        fn a2(_: bool) {}
         a2(s.try_convert_into().map_err(|_| "").unwrap());
     }
 }

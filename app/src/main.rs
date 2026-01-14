@@ -88,16 +88,12 @@ async fn cookie() {
 pub struct MyAge {
     pub age: i32,
 }
-impl TryConvertFrom<Option<&String>> for MyAge {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, HttpHandlerError> {
-        if let Some(value) = value {
-            let a = value
-                .parse::<i32>()
-                .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
-            Ok(Self { age: a })
-        } else {
-            Err(HttpHandlerError::Unknown)
-        }
+impl TryConvertFrom<&String> for MyAge {
+    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+        let a = value
+            .parse::<i32>()
+            .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
+        Ok(Self { age: a })
     }
 }
 #[get("/pathParam/{name}/{age}")]
@@ -106,7 +102,7 @@ async fn pathParam(name: String, age: MyAge) {
 }
 
 #[get("/searchParam")]
-async fn search_param(#[search_param] name: &String, #[search_param] age: Option<MyAge>) {
+async fn search_param(#[search_param] name: &String, #[search_param] age: Option<String>) {
     format!("name is {} and age is {:?}", name, age)
 }
 
@@ -141,16 +137,16 @@ async fn main() {
             Ok(e)
         })
         .websocket("/ws/{name}", ws)
-        .globale_error_handler(async |e:faithea::error::Error|
-            res_modifiers!(format!("some error~~ {:?}",e))
-        )
-        .tls(
-            "/Users/dadigua/Desktop/graduation/key.pem",
-            "/Users/dadigua/Desktop/graduation/cert.pem",
-        )
-        .h2()
-        .host("0.0.0.0")
-        .port(443)
+        .globale_error_handler(async |e: faithea::error::Error| {
+            res_modifiers!(format!("some error~~ {:?}", e))
+        })
+        // .tls(
+        //     "/Users/dadigua/Desktop/graduation/key.pem",
+        //     "/Users/dadigua/Desktop/graduation/cert.pem",
+        // )
+        // .h2()
+        // .host("0.0.0.0")
+        // .port(443)
         .build()
         .run()
         .await;

@@ -45,6 +45,7 @@
 - static_map need urldecode! ✅
 - improve `handlers` macro ✅ now support `path` param 
 - global error handler!✅
+- add a `TryFromHttpRequest` to replace TryFrom<&mut HttpRequset>
 
 
 # Example
@@ -172,7 +173,7 @@ struct Stu {
     age: i32,
 }
 impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = String;
+    type Error = HttpHandlerError;
     fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
         Ok(Stu {
             name: "from req".into(),
@@ -243,13 +244,17 @@ pub async fn ws(
 # Tips
 1. make your type **compatible** with searchParam and **pathParam**
 ```rust
-impl TryConvertFrom<Option<&String>> for String {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, FuError> {
-        if let Some(value) = value {
-            Ok(value.to_string())
-        } else {
-            Err("missing value".into())
-        }
+
+#[derive(Debug)]
+pub struct MyAge {
+    pub age: i32,
+}
+impl TryConvertFrom<&String> for MyAge {
+    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+        let a = value
+            .parse::<i32>()
+            .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
+        Ok(Self { age: a })
     }
 }
 ```
