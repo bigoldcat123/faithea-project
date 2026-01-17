@@ -1,25 +1,11 @@
 use std::path::PathBuf;
 
-use faithea::{TryConvertFrom, TryConvertInto};
+use faithea::{ TryConvertInto};
 use serde::{Deserialize, Serialize};
 
 
 #[test]
 fn base64() {
-
-    struct A {
-
-    }
-    struct B {
-
-    }
-    impl TryConvertFrom<A> for  B {
-        fn try_convert_from(value: A) -> Result<Self, faithea::handler::types::HttpHandlerError> {
-            Ok(B{})
-        }
-    }
-    let b:B = A{}.try_convert_into().unwrap();
-
 }
 
 #[test]

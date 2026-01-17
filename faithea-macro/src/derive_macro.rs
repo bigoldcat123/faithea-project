@@ -1,15 +1,15 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, Fields, Type};
+use syn::{Data, DeriveInput, Error, Fields};
 
-fn is_option(ty: &Type) -> bool {
-    if let Type::Path(p) = ty
-        && let Some(seg) = p.path.segments.last()
-    {
-        return seg.ident == "Option";
-    }
-    false
-}
+// fn is_option(ty: &Type) -> bool {
+//     if let Type::Path(p) = ty
+//         && let Some(seg) = p.path.segments.last()
+//     {
+//         return seg.ident == "Option";
+//     }
+//     false
+// }
 
 pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
     let struct_name = &input.ident;
@@ -37,25 +37,11 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
     let assigns = named_fields.iter().map(|f| {
         let field_ident = f.ident.as_ref().unwrap();
         let field_name = field_ident.to_string();
-        let ty = &f.ty;
 
-        if is_option(ty) {
-            quote! {
-                #field_ident: match data.remove(#field_name) {
-                    Some(s) => match s.try_convert_into() {
-                        Ok(s) => Some(s),
-                        Err(_) => None,
-                    },
-                    None => None,
-                }
-            }
-        } else {
-            quote! {
-                #field_ident: data
-                    .remove(#field_name)
-                    .ok_or_else(|| faithea::handler::types::HttpHandlerError::before_handler_invalid_param(format!("missing field `{}`", #field_name)))?
-                    .try_convert_into()?
-            }
+        quote! {
+            #field_ident: data
+                .remove(#field_name)
+                .try_convert_into()?
         }
     });
 
