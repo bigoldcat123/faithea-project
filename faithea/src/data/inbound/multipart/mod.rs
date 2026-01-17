@@ -4,7 +4,6 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-
 use crate::{
     TryConvertFrom,
     handler::types::HttpHandlerError,
@@ -22,16 +21,18 @@ pub enum Part {
     Lit(String),
     File(MultiPartFile),
 }
+pub trait TryFromPart: Sized {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError>;
+}
 macro_rules! impl_try_from_part_for_parse_from_str {
     ($($t:ty),*) => {
         $(
-            impl TryFrom<Part> for $t {
-                type Error = $crate::handler::types::HttpHandlerError;
-                fn try_from(value: Part) -> Result<Self, Self::Error> {
+            impl TryFromPart for $t {
+                fn try_from_part(value: Part) -> Result<Self, $crate::handler::types::HttpHandlerError>{
                     if let Part::Lit(l) = value {
-                        Ok(l.parse::<Self>().map_err(|x| Self::Error::before_handler_multipart_can_not_parse_from_part(x.to_string()))?)
+                        Ok(l.parse::<Self>().map_err(|x| $crate::handler::types::HttpHandlerError::before_handler_multipart_can_not_parse_from_part(x.to_string()))?)
                     }else {
-                        let e = Self::Error::before_handler_multipart_incompatible_type(format!("{} not compatiable to transform part to MultiPartFile",stringify!($t)));
+                        let e = $crate::handler::types::HttpHandlerError::before_handler_multipart_incompatible_type(format!("{} not compatiable to transform part to MultiPartFile",stringify!($t)));
                         Err(e)
                     }
                 }
@@ -44,21 +45,31 @@ impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
 
-impl<T: TryFrom<Part, Error = HttpHandlerError>> TryConvertFrom<Vec<Part>> for T {
+// impl<T: TryFrom<Part, Error = HttpHandlerError>> TryConvertFrom<Vec<Part>> for T {
+//     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, HttpHandlerError> {
+//         if let Some(value) = value.pop() {
+//             value.try_into()
+//         } else {
+//             Err(HttpHandlerError::before_handler_multipart_field_not_exist())
+//         }
+//     }
+// }
+
+impl<T: TryFromPart> TryConvertFrom<Vec<Part>> for T {
     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value.pop() {
-            value.try_into()
+            T::try_from_part(value)
         } else {
             Err(HttpHandlerError::before_handler_multipart_field_not_exist())
         }
     }
 }
 
-impl<T: TryFrom<Part>> TryConvertFrom<Vec<Part>> for Vec<T> {
+impl<T: TryFromPart> TryConvertFrom<Vec<Part>> for Vec<T> {
     fn try_convert_from(value: Vec<Part>) -> Result<Self, HttpHandlerError> {
         Ok(value
             .into_iter()
-            .filter_map(|x| T::try_from(x).ok())
+            .filter_map(|x| T::try_from_part(x).ok())
             .collect())
     }
 }
@@ -76,9 +87,8 @@ impl Drop for MultiPartFile {
     }
 }
 
-impl TryFrom<Part> for MultiPartFile {
-    type Error = HttpHandlerError;
-    fn try_from(value: Part) -> Result<Self, Self::Error> {
+impl TryFromPart for MultiPartFile {
+    fn try_from_part(value: Part) -> Result<Self, HttpHandlerError> {
         if let Part::File(f) = value {
             Ok(f)
         } else {

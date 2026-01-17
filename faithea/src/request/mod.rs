@@ -47,6 +47,14 @@ impl Debug for RequestBody {
         Ok(())
     }
 }
+pub trait TryFromParam:Sized {
+    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError>;
+}
+impl <T:TryFromParam> TryConvertFrom<&String> for T {
+    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+        Self::try_from_param(value)
+    }
+}
 
 #[derive(Debug)]
 pub struct HttpRequest {

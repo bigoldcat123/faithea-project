@@ -1,9 +1,10 @@
 // #![allow(unused)]
 use chenzhonghai_app::static_file_map::file_map;
 use chenzhonghai_app::{json, ws::ws};
+use faithea::data::inbound::multipart::TryFromPart;
+use faithea::request::TryFromParam;
 use faithea::{
-    MultipartData, TryConvertFrom,
-    data::{
+    MultipartData, data::{
         Json,
         inbound::{
             FromRequest,
@@ -38,10 +39,9 @@ impl TryFrom<&mut HttpRequest> for Stu {
 pub struct A {
     pub value: String,
 }
-impl TryFrom<Part> for A {
-    type Error = HttpHandlerError;
-    fn try_from(value: Part) -> Result<Self, Self::Error> {
-        if let Part::Lit(s) = value {
+impl TryFromPart for A {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError> {
+        if let Part::Lit(s) = part {
             Ok(Self { value: s })
         } else {
             Err(HttpHandlerError::before_handler_incompatible_request_body_type())
@@ -88,14 +88,22 @@ async fn cookie() {
 pub struct MyAge {
     pub age: i32,
 }
-impl TryConvertFrom<&String> for MyAge {
-    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+impl TryFromParam for MyAge {
+    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError> {
         let a = value
             .parse::<i32>()
             .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
         Ok(Self { age: a })
     }
 }
+// impl TryConvertFrom<&String> for MyAge {
+//     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+//         let a = value
+//             .parse::<i32>()
+//             .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
+//         Ok(Self { age: a })
+//     }
+// }
 #[get("/pathParam/{name}/{age}")]
 async fn pathParam(name: String, age: MyAge) {
     format!("name is {}, age is {:?}", name, age)
