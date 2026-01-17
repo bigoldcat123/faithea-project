@@ -70,7 +70,7 @@ async fn search_params_and_path_params_and_json(
 
  derive from `MultipartData`
  
-> the type of field shoule impl `TryFrom<Part>`
+> the type of field shoule impl `TryFromPart`
 
 ```rust
 #[derive(MultipartData, Debug)]

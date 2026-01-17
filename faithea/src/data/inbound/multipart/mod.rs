@@ -45,15 +45,6 @@ impl_try_from_part_for_parse_from_str!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool, String
 );
 
-// impl<T: TryFrom<Part, Error = HttpHandlerError>> TryConvertFrom<Vec<Part>> for T {
-//     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, HttpHandlerError> {
-//         if let Some(value) = value.pop() {
-//             value.try_into()
-//         } else {
-//             Err(HttpHandlerError::before_handler_multipart_field_not_exist())
-//         }
-//     }
-// }
 
 impl<T: TryFromPart> TryConvertFrom<Vec<Part>> for T {
     fn try_convert_from(mut value: Vec<Part>) -> Result<Self, HttpHandlerError> {
@@ -127,14 +118,3 @@ impl <'a,T:TryFromMultipartDataMap> TryFromRequest<'a> for Multipart<T> {
         }
     }
 }
-// impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
-//     type Error = HttpHandlerError;
-//     fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
-//         match req._inner.body_mut() {
-//             Some(RequestBody::MultiPart(body)) => {
-//                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
-//             }
-//             _ => Err(HttpHandlerError::before_handler_incompatible_request_body_type()),
-//         }
-//     }
-// }
