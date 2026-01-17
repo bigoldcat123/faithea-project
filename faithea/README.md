@@ -1,4 +1,3 @@
-
 # Example
 1. Hello World
 ```rust
@@ -123,9 +122,8 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = String;
-    fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
+impl <'a> TryFromRequest<'a> for Stu {
+    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
@@ -139,19 +137,73 @@ async fn fromRequest(stu:FromRequest<Stu>) {
 }
 ```
 
+2. websocket
+```rust
+use std::{collections::HashMap, sync::LazyLock};
 
+use bytes::Bytes;
+use faithea::{request::HttpRequest, websocket::{data::WebSocketDataPayLoad, socket::WebSocket}};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{
+    Mutex,
+    mpsc::Sender,
+};
 
+static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Serialize, Deserialize)]
+struct WsDataMessage {
+    r#type: String,
+    to: String,
+    from: String,
+    content: String,
+}
+
+pub async fn ws(
+    websocket: WebSocket,
+    req: HttpRequest,
+) {
+    let  (mut r,s) = websocket.split();
+    let name = req.get_pathparam("name").unwrap();
+    {
+        let mut map = WS_SENDERS.lock().await;
+        map.insert(name.clone(), s.clone());
+    }
+    while let Some(msg) = r.recv().await {
+        let data = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()).unwrap();
+        let map = WS_SENDERS.lock().await;
+        if let Some(sender) = map.get(&data.to) {
+            let a:Bytes = serde_json::to_vec(&data).unwrap().into();
+            sender.send(WebSocketDataPayLoad::new(a)).await.unwrap();
+        }
+    }
+}
+// main builder
+        .websocket("/ws/{name}",ws)
+```
+
+2. global error handler
+```rust
+        .globale_error_handler(async |e:faithea::error::Error|
+            res_modifiers!(format!("some error~~ {:?}",e))
+        )
+```
 
 # Tips
 1. make your type **compatible** with searchParam and **pathParam**
 ```rust
-impl TryConvertFrom<Option<&String>> for String {
-    fn try_convert_from(value: Option<&String>) -> Result<Self, FuError> {
-        if let Some(value) = value {
-            Ok(value.to_string())
-        } else {
-            Err("missing value".into())
-        }
+
+#[derive(Debug)]
+pub struct MyAge {
+    pub age: i32,
+}
+impl TryFromParam for MyAge {
+    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError> {
+        let a = value
+            .parse::<i32>()
+            .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
+        Ok(Self { age: a })
     }
 }
 ```
@@ -189,10 +241,13 @@ just impl the std TryFrom<Part> with error = String
 struct A{
 
 }
-impl TryFrom<Part> for A {
-    type Error = FuError;
-    fn try_from(value: Part) -> Result<Self, Self::Error> {
-        Ok(Self{})
+impl TryFromPart for A {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError> {
+        if let Part::Lit(s) = part {
+            Ok(Self { value: s })
+        } else {
+            Err(HttpHandlerError::before_handler_incompatible_request_body_type())
+        }
     }
 }
 

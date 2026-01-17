@@ -1,7 +1,7 @@
 pub mod multipart;
 use std::{ops::{Deref, DerefMut}, sync::Arc};
 
-use crate::{handler::types::HttpHandlerError, request::HttpRequest};
+use crate::{handler::types::HttpHandlerError, request::{HttpRequest, TryFromRequest}};
 pub type Shared<T> = Arc<T>;
 
 
@@ -23,19 +23,10 @@ impl <T> DerefMut for FromRequest<T> {
         &mut self.0
     }
 }
-// deprecate
-impl <'a,T:TryFrom<&'a HttpRequest,Error = HttpHandlerError> + 'a> TryFrom<&'a HttpRequest> for FromRequest<T> {
-    type Error = HttpHandlerError;
-    fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
-        let a:T = value.try_into()?;
-        Ok(Self(a))
-    }
-}
 
-impl <'a,T:TryFrom::<&'a mut HttpRequest,Error = HttpHandlerError> + 'a> TryFrom<&'a mut HttpRequest> for FromRequest<T> {
-    type Error = HttpHandlerError;
-    fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
-        let a:T = value.try_into()?;
+impl <'a,T:TryFromRequest<'a>> TryFromRequest<'a> for FromRequest<T> {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+        let a:T = T::try_from_request(req)?;
         Ok(Self(a))
     }
 }

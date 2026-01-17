@@ -1,32 +1,20 @@
 use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    handler::types::HttpHandlerError,
-    request::{HttpRequest, RequestBody},
-};
+use crate::{handler::types::HttpHandlerError, request::{HttpRequest, RequestBody, TryFromRequest}};
 
 pub mod inbound;
 pub mod outbound;
 
 #[derive(Serialize, Debug)]
 pub struct Json<T>(pub T);
-
-impl<'a, T: Deserialize<'a>> TryFrom<&'a HttpRequest> for Json<T> {
-    type Error = HttpHandlerError;
-    fn try_from(value: &'a HttpRequest) -> Result<Self, Self::Error> {
-        if let Some(RequestBody::Simple(body)) = value._inner.body() {
+impl <'a,T:Deserialize<'a>> TryFromRequest<'a> for Json<T> {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+        if let Some(RequestBody::Simple(body)) = req._inner.body() {
             Ok(Self(serde_json::from_slice::<T>(body.chunk())?))
         } else {
             Err(crate::error::Error::before_handler_empty_request_body())
         }
-    }
-}
-impl<'a, T: Deserialize<'a>> TryFrom<&'a mut HttpRequest> for Json<T> {
-    type Error = HttpHandlerError;
-    fn try_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
-        let im_ref = &(*value);
-        im_ref.try_into()
     }
 }
 impl<T> std::ops::Deref for Json<T> {
@@ -46,9 +34,7 @@ mod tests {
     use serde::Deserialize;
 
     use crate::{
-        request::HttpRequest,
-        res_modifiers,
-        response::{HttpResponse, HttpResponseModifier, ResponseBody},
+        TryConvertFrom, request::HttpRequest, res_modifiers, response::{HttpResponse, HttpResponseModifier, ResponseBody}
     };
 
     use super::*;
@@ -73,7 +59,7 @@ mod tests {
         })
         .unwrap();
         *req._inner.body_mut() = Some(RequestBody::Simple(body.into()));
-        if let Ok(j) = Json::<Stu>::try_from(&req) {
+        if let Ok(j) = Json::<Stu>::try_convert_from(&mut req) {
             println!("{:?}", j);
         }
     }

@@ -7,7 +7,7 @@ use std::{
 use crate::{
     TryConvertFrom,
     handler::types::HttpHandlerError,
-    request::{HttpRequest, RequestBody},
+    request::{HttpRequest, RequestBody, TryFromRequest},
 };
 
 pub type MultipartDataMap = HashMap<String, Vec<Part>>;
@@ -117,10 +117,8 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
         &mut self.0
     }
 }
-
-impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
-    type Error = HttpHandlerError;
-    fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
+impl <'a,T:TryFromMultipartDataMap> TryFromRequest<'a> for Multipart<T> {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
         match req._inner.body_mut() {
             Some(RequestBody::MultiPart(body)) => {
                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
@@ -129,3 +127,14 @@ impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
         }
     }
 }
+// impl<T: TryFromMultipartDataMap> TryFrom<&mut HttpRequest> for Multipart<T> {
+//     type Error = HttpHandlerError;
+//     fn try_from(req: &mut HttpRequest) -> Result<Self, Self::Error> {
+//         match req._inner.body_mut() {
+//             Some(RequestBody::MultiPart(body)) => {
+//                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
+//             }
+//             _ => Err(HttpHandlerError::before_handler_incompatible_request_body_type()),
+//         }
+//     }
+// }

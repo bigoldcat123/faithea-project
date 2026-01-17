@@ -172,9 +172,8 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = HttpHandlerError;
-    fn try_from(value: &mut HttpRequest) -> Result<Self, Self::Error> {
+impl <'a> TryFromRequest<'a> for Stu {
+    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
@@ -249,8 +248,8 @@ pub async fn ws(
 pub struct MyAge {
     pub age: i32,
 }
-impl TryConvertFrom<&String> for MyAge {
-    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+impl TryFromParam for MyAge {
+    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError> {
         let a = value
             .parse::<i32>()
             .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
@@ -292,10 +291,13 @@ just impl the std TryFrom<Part> with error = String
 struct A{
 
 }
-impl TryFrom<Part> for A {
-    type Error = FuError;
-    fn try_from(value: Part) -> Result<Self, Self::Error> {
-        Ok(Self{})
+impl TryFromPart for A {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError> {
+        if let Part::Lit(s) = part {
+            Ok(Self { value: s })
+        } else {
+            Err(HttpHandlerError::before_handler_incompatible_request_body_type())
+        }
     }
 }
 

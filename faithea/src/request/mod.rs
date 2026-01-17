@@ -9,7 +9,9 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use h2::RecvStream;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version,
-    header::{AsHeaderName, CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
+    header::{
+        AsHeaderName, CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE,
+    },
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -33,7 +35,6 @@ pub enum RequestBody {
     Stream(PathBuf), // the path to a file saved on the disk
     WebSocketStreamBody(RecvStream),
     WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
-
 }
 impl Debug for RequestBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -42,17 +43,28 @@ impl Debug for RequestBody {
             Self::MultiPart(_) => write!(f, "MultiPart(MultipartDataMap)")?,
             Self::Stream(_) => write!(f, "Stream(PathBuf)")?,
             Self::WebSocketStreamBody(_) => write!(f, "WebSocketStreamBody(RecvStream)")?,
-            Self::WebSocketStreamBodyHttp1(_) => write!(f, "WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static>)")?,
+            Self::WebSocketStreamBodyHttp1(_) => write!(
+                f,
+                "WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static>)"
+            )?,
         }
         Ok(())
     }
 }
-pub trait TryFromParam:Sized {
+pub trait TryFromParam: Sized {
     fn try_from_param(value: &String) -> Result<Self, HttpHandlerError>;
 }
-impl <T:TryFromParam> TryConvertFrom<&String> for T {
+impl<T: TryFromParam> TryConvertFrom<&String> for T {
     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
         Self::try_from_param(value)
+    }
+}
+pub trait TryFromRequest<'a>: Sized {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError>;
+}
+impl<'a,T: TryFromRequest<'a>> TryConvertFrom<&'a mut HttpRequest> for T {
+    fn try_convert_from(value: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+        Self::try_from_request(value)
     }
 }
 
@@ -213,7 +225,7 @@ pub fn is_websocket_upgrade(req: &HttpRequest) -> bool {
 }
 
 async fn parse_http_frame<R: AsyncRead + Unpin>(
-    r:&mut R,
+    r: &mut R,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
     let mut builder = http::Request::builder();
@@ -326,11 +338,11 @@ fn parse_line_header(
 
     for h in raw_header {
         if !h.is_empty() {
-            if let Some((k,v)) = h.split_once(":") {
+            if let Some((k, v)) = h.split_once(":") {
                 let value = v.trim().parse().map_err(map_str!())?;
                 let name = HeaderName::from_str(k.trim()).unwrap();
                 header_map.insert(name, value);
-            }else {
+            } else {
                 Err("header parsing error".to_string())?
             }
         }
@@ -419,7 +431,6 @@ impl<'a> TryConvertFrom<&'a String> for &'a String {
     }
 }
 
-
 impl<'a> TryConvertFrom<&'a String> for &'a str {
     fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
         Ok(value.as_str())
@@ -432,24 +443,28 @@ impl TryConvertFrom<&String> for String {
     }
 }
 
-impl <'a,O:TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for O {
+impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for O {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             Ok(O::try_convert_from(value)?)
         } else {
-            Err(crate::error::Error::before_handler_invalid_param("value is missing!"))
+            Err(crate::error::Error::before_handler_invalid_param(
+                "value is missing!",
+            ))
         }
     }
 }
 
-impl<'a, O:TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Option<O> {
+impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Option<O> {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             match O::try_convert_from(value) {
                 Ok(r) => Ok(Some(r)),
-                Err(_) => Err(crate::error::Error::before_handler_invalid_param("before_handler_invalid_param")),
+                Err(_) => Err(crate::error::Error::before_handler_invalid_param(
+                    "before_handler_invalid_param",
+                )),
             }
-        }else {
+        } else {
             Ok(None)
         }
     }
@@ -459,16 +474,24 @@ impl<'a, O:TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Op
 mod tests {
     use http::Request;
 
-    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::{ConvertFromRefString, parse_line_header}};
+    use crate::{
+        TryConvertInto,
+        handler::types::HttpHandlerError,
+        request::{ConvertFromRefString, parse_line_header},
+    };
 
     #[test]
     fn parse_http1_line() {
-        let  b = Request::builder();
-        let a = parse_line_header(b"GET /hello HTTP/1.1\r\nauth:abc:caonima\r\nlen:123\r\n\r\n", b).unwrap();
+        let b = Request::builder();
+        let a = parse_line_header(
+            b"GET /hello HTTP/1.1\r\nauth:abc:caonima\r\nlen:123\r\n\r\n",
+            b,
+        )
+        .unwrap();
         let r = a.body(()).unwrap();
         let a = r.headers().get("auth").unwrap();
         assert_eq!(a, "abc:caonima");
-        let a =r.headers().get("len").unwrap();
+        let a = r.headers().get("len").unwrap();
         assert_eq!(a, "123");
     }
 

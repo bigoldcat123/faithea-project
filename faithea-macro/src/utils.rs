@@ -27,7 +27,7 @@ impl FromHttpRequest {
             }
             Body => {
                 quote! {
-                    (& mut _req).try_into()?,
+                    faithea::TryConvertInto::try_convert_into(& mut _req)?,
                 }
             }
             _Shared(name) => {

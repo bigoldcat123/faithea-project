@@ -2,7 +2,7 @@
 use chenzhonghai_app::static_file_map::file_map;
 use chenzhonghai_app::{json, ws::ws};
 use faithea::data::inbound::multipart::TryFromPart;
-use faithea::request::TryFromParam;
+use faithea::request::{TryFromParam, TryFromRequest};
 use faithea::{
     MultipartData, data::{
         Json,
@@ -26,15 +26,15 @@ struct Stu {
     name: String,
     age: i32,
 }
-impl TryFrom<&mut HttpRequest> for Stu {
-    type Error = HttpHandlerError;
-    fn try_from(_value: &mut HttpRequest) -> Result<Self, Self::Error> {
+impl <'a> TryFromRequest<'a> for Stu {
+    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
         Ok(Stu {
             name: "from req".into(),
             age: 111,
         })
     }
 }
+
 #[derive(Debug)]
 pub struct A {
     pub value: String,
