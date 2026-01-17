@@ -96,14 +96,6 @@ impl TryFromParam<'_> for MyAge {
         Ok(Self { age: a })
     }
 }
-// impl TryConvertFrom<&String> for MyAge {
-//     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
-//         let a = value
-//             .parse::<i32>()
-//             .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
-//         Ok(Self { age: a })
-//     }
-// }
 #[get("/pathParam/{name}/{age}")]
 async fn pathParam(name: String, age: MyAge) {
     format!("name is {}, age is {:?}", name, age)
