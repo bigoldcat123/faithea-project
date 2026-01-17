@@ -504,7 +504,7 @@ mod tests {
     #[test]
     fn option_test() {
         let s = Some(&"true".to_string());
-        let a: Result<i32, HttpHandlerError> = s.try_convert_into();
+        let a: Result<bool, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), true);
         fn a2(_: bool) {}
         a2(s.try_convert_into().map_err(|_| "").unwrap());

@@ -88,7 +88,7 @@ async fn cookie() {
 pub struct MyAge {
     pub age: i32,
 }
-impl TryFromParam for MyAge {
+impl TryFromParam<'_> for MyAge {
     fn try_from_param(value: &String) -> Result<Self, HttpHandlerError> {
         let a = value
             .parse::<i32>()
