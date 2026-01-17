@@ -10,7 +10,7 @@ use h2::RecvStream;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version,
     header::{
-        AsHeaderName, CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE,
+        AsHeaderName, CONNECTION, CONTENT_LENGTH, COOKIE, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE
     },
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -98,7 +98,7 @@ impl HttpRequest {
     }
     //#[allow(unused)]
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
-        if let Some(cookie) = self._inner.headers().get("cookie") {
+        if let Some(cookie) = self._inner.headers().get(COOKIE) {
             if let Ok(cookie) = cookie.to_str() {
                 Some(Cookie::from_cookie_header(cookie))
             } else {
