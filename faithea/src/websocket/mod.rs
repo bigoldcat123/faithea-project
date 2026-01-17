@@ -284,7 +284,6 @@ impl Http1WebSocketIncommingMessageParser {
                 .await
             {
                 if d == 0 {
-                    println!("{}", "other side close!");
                     return;
                 }
                 if !self.state.process().await {

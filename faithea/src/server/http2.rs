@@ -64,8 +64,9 @@ impl H2Server {
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
-            let e = process(socket, guards, handlers,error_handler).await;
-            log::error!("{:?}", e);
+            if let Err(e) = process(socket, guards, handlers,error_handler).await {
+                log::error!("{:?}", e);
+            }
             log::info!("client {} left", _addr);
         });
 

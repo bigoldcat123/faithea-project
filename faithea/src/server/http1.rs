@@ -49,13 +49,14 @@ impl H1Server {
         addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn Error>> {
-        println!("new client -> {}", addr);
+        log::info!("new client -> {}", addr);
         let handlers = Arc::clone(&self.handlers);
         let guards = Arc::clone(&self.guards);
         tokio::spawn(async move {
-            let e = process(socket, handlers, guards,error_handler).await;
-            println!("{:?}", e);
-            println!(" client left -> {}", addr);
+            if let Err(e) = process(socket, handlers, guards,error_handler).await {
+                log::error!("{:?}",e)
+            }
+            log::info!(" client left -> {}", addr);
         });
         Ok(())
     }
@@ -82,7 +83,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
         let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
-        println!("{:#?}", req._inner.uri());
+        log::info!("{:#?}", req._inner.uri());
         if is_websocket_upgrade(&req) {
             handle_upgrade_to_websocket(guards, handlers, req, tx, reader,error_handler).await;
             break ;
