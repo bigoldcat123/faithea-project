@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use bytes::Bytes;
 use faithea::{request::HttpRequest, websocket::{data::WebSocketDataPayLoad, socket::WebSocket}};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{
@@ -33,7 +32,7 @@ pub async fn ws(
         let data = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()).unwrap();
         let map = WS_SENDERS.lock().await;
         if let Some(sender) = map.get(&data.to) {
-            let a:Bytes = serde_json::to_vec(&data).unwrap().into();
+            let a:String = serde_json::to_string(&data).unwrap();
             sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
         }
     }

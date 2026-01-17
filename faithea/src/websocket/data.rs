@@ -1,3 +1,6 @@
+#![allow(unused)]
+use std::{fmt::Display, str::Utf8Error};
+
 use bytes::{BufMut, Bytes, BytesMut};
 use h2::SendStream;
 use tokio::io::{self, AsyncWrite, AsyncWriteExt};
@@ -5,34 +8,58 @@ use tokio::io::{self, AsyncWrite, AsyncWriteExt};
 use crate::websocket::WebSocketMessageType;
 
 pub struct WebSocketDataPayLoad {
-    r#type:WebSocketMessageType,
+    r#type: WebSocketMessageType,
     _inner: Bytes,
 }
 
 impl WebSocketDataPayLoad {
-    pub fn text(payload: Bytes) -> Self {
-        Self { _inner: payload ,r#type:WebSocketMessageType::Text}
+    pub fn text<D:Display>(payload: D) -> Self {
+        Self {
+            _inner: payload.to_string().into(),
+            r#type: WebSocketMessageType::Text,
+        }
     }
-    pub fn ping(payload: Bytes) -> Self{
-        Self { _inner: payload ,r#type:WebSocketMessageType::Ping}
+    pub(crate) fn _text(payload: Bytes) -> Self {
+        Self {
+            _inner: payload,
+            r#type: WebSocketMessageType::Text,
+        }
     }
-    pub fn pong(payload: Bytes) -> Self{
-        Self { _inner: payload ,r#type:WebSocketMessageType::Pong}
+    pub(crate) fn ping(payload: Bytes) -> Self {
+        Self {
+            _inner: payload,
+            r#type: WebSocketMessageType::Ping,
+        }
     }
-    pub fn close(payload: Bytes) -> Self{
-        Self { _inner: payload ,r#type:WebSocketMessageType::Close}
+    pub(crate) fn pong(payload: Bytes) -> Self {
+        Self {
+            _inner: payload,
+            r#type: WebSocketMessageType::Pong,
+        }
     }
-    pub fn binary(payload: Bytes) -> Self{
-        Self { _inner: payload ,r#type:WebSocketMessageType::Binary}
+    pub(crate) fn close(payload: Bytes) -> Self {
+        Self {
+            _inner: payload,
+            r#type: WebSocketMessageType::Close,
+        }
+    }
+    pub fn binary(payload: Bytes) -> Self {
+        Self {
+            _inner: payload,
+            r#type: WebSocketMessageType::Binary,
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         &self._inner
     }
+    pub fn as_str(&self) -> Result<&str, Utf8Error> {
+        str::from_utf8(self.as_bytes())
+    }
     fn generate_head_frame(&self) -> Bytes {
         let b = &self._inner;
         let mut buf = BytesMut::new();
-        let op:u8 = self.r#type.into();
+        let op: u8 = self.r#type.into();
         buf.put_u8(0x80 | op); // fin + text
 
         if b.len() < 126 {
@@ -46,20 +73,20 @@ impl WebSocketDataPayLoad {
         }
         buf.freeze()
     }
-    pub fn write_to_stream(
+    pub(crate) fn write_to_stream(
         data: Bytes,
         body_stream: &mut SendStream<Bytes>,
     ) -> Result<(), h2::Error> {
         body_stream.reserve_capacity(data.len());
         body_stream.send_data(data, false)
     }
-    pub async fn write_to_socket<W: AsyncWrite + Unpin>(
+    pub(crate) async fn write_to_socket<W: AsyncWrite + Unpin>(
         mut data: Bytes,
         socket: &mut W,
     ) -> Result<(), io::Error> {
         socket.write_all_buf(&mut data).await
     }
-    pub async fn serialize_to_stream(
+    pub(crate) async fn serialize_to_stream(
         self,
         body_stream: &mut SendStream<Bytes>,
     ) -> Result<(), h2::Error> {
@@ -68,7 +95,7 @@ impl WebSocketDataPayLoad {
         Self::write_to_stream(self._inner, body_stream)
     }
 
-    pub async fn serialize_to_socket<W: AsyncWrite + Unpin>(
+    pub(crate) async fn serialize_to_socket<W: AsyncWrite + Unpin>(
         self,
         socket: &mut W,
     ) -> Result<(), io::Error> {

@@ -72,7 +72,7 @@ impl ParserInnserState {
     async fn send_incomming_message(&mut self) {
         let _ = self
             .incomming_message_sender
-            .send(WebSocketDataPayLoad::text(
+            .send(WebSocketDataPayLoad::_text(
                 self.message.split_off(0).freeze(),
             ))
             .await;
@@ -110,7 +110,7 @@ impl ParserInnserState {
                         Ping => {
                             let _ = self
                                 .outcomming_message_sender
-                                .send(WebSocketDataPayLoad::text(b"pong"[..].into()))
+                                .send(WebSocketDataPayLoad::_text(b"pong"[..].into()))
                                 .await;
                         }
                         _ => {}
