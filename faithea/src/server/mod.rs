@@ -133,7 +133,7 @@ async fn handle_request(
                 // && let RequestBody::WebSocketStreamBody(stream_body) = body
                 {
                     let mut r = match &body {
-                        WebSocketStreamBody(_) => HttpResponse::new(),
+                        WebSocketStreamBodyHttp2(_) => HttpResponse::new(),
                         WebSocketStreamBodyHttp1(_) => HttpResponse::websocket_response(&req),
                         _ => unreachable!(),
                     };
@@ -142,7 +142,7 @@ async fn handle_request(
                     r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
                     tx.send(r).await.unwrap();
                     let incomming_message_receiver = match body {
-                        WebSocketStreamBody(stream_body) => {
+                        WebSocketStreamBodyHttp2(stream_body) => {
                             let (parser, incomming_message_receiver) =
                                 WebSocketIncommingMessageParser::new(
                                     stream_body,

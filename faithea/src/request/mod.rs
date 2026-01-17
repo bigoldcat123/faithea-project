@@ -33,7 +33,7 @@ pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
-    WebSocketStreamBody(RecvStream),
+    WebSocketStreamBodyHttp2(RecvStream),
     WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
 }
 impl Debug for RequestBody {
@@ -42,7 +42,7 @@ impl Debug for RequestBody {
             Self::Simple(_) => write!(f, "Simple(Bytes)")?,
             Self::MultiPart(_) => write!(f, "MultiPart(MultipartDataMap)")?,
             Self::Stream(_) => write!(f, "Stream(PathBuf)")?,
-            Self::WebSocketStreamBody(_) => write!(f, "WebSocketStreamBody(RecvStream)")?,
+            Self::WebSocketStreamBodyHttp2(_) => write!(f, "WebSocketStreamBody(RecvStream)")?,
             Self::WebSocketStreamBodyHttp1(_) => write!(
                 f,
                 "WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static>)"
@@ -182,7 +182,7 @@ impl HttpRequest {
         if p.method == Method::CONNECT {
             return Ok(HttpRequest::new(
                 p,
-                Some(RequestBody::WebSocketStreamBody(body_stream)),
+                Some(RequestBody::WebSocketStreamBodyHttp2(body_stream)),
             ));
         }
         let content_type = ContentType::try_from(&p.headers)?;
