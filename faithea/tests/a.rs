@@ -51,7 +51,7 @@ fn t2() {
 #[test]
 fn t3() {
     fn a(_p1: usize, _p2: &str, _p3: &String, _p4: &String, _p5: i32) {}
-    let p = &"2".to_string();
+    let p = Some(&"2".to_string());
     a(
         p.try_convert_into().map_err(|_| "").unwrap(),
         p.try_convert_into().map_err(|_| "").unwrap(),

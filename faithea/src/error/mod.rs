@@ -21,6 +21,10 @@ impl Error {
         log::error!("invalid param: {}", cause.as_ref());
         Self::BeforeHandler(BeforeHandlerError::InvalidParam(cause.as_ref().to_string()))
     }
+    pub fn before_handler_param_not_exist() -> Self {
+        log::error!("param_not_exist");
+        Self::BeforeHandler(BeforeHandlerError::ParamNotExist)
+    }
     pub fn before_handler_empty_request_body() -> Self {
         log::error!("empty request body");
         Self::BeforeHandler(BeforeHandlerError::EmpeyRequestBody)
@@ -56,6 +60,7 @@ impl Error {
 #[derive(Debug)]
 pub enum BeforeHandlerError {
     InvalidParam(String),
+    ParamNotExist,
     EmpeyRequestBody,
     IncompatibleBodyType,
     MultipartError(MultipartError),

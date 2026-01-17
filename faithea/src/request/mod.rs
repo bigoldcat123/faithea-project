@@ -51,18 +51,18 @@ impl Debug for RequestBody {
         Ok(())
     }
 }
-pub trait TryFromParam: Sized {
-    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError>;
+pub trait TryFromParam<'a>: Sized {
+    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError>;
 }
-impl<T: TryFromParam> TryConvertFrom<&String> for T {
-    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
-        Self::try_from_param(value)
-    }
-}
+// impl<T: TryFromParam> TryConvertFrom<&String> for T {
+//     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+//         Self::try_from_param(value)
+//     }
+// }
 pub trait TryFromRequest<'a>: Sized {
     fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError>;
 }
-impl<'a,T: TryFromRequest<'a>> TryConvertFrom<&'a mut HttpRequest> for T {
+impl<'a, T: TryFromRequest<'a>> TryConvertFrom<&'a mut HttpRequest> for T {
     fn try_convert_from(value: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
         Self::try_from_request(value)
     }
@@ -359,126 +359,109 @@ fn check_header(c: &[u8]) -> (bool, usize) {
     (false, 0)
 }
 
-pub trait ConvertFromRefString<'a, O> {
-    fn convert(self) -> Result<O, String>;
-}
-
-impl<'a, T> ConvertFromRefString<'a, T> for T {
-    fn convert(self) -> Result<T, String> {
-        Ok(self)
-    }
-}
-
-impl<'a> ConvertFromRefString<'a, Option<&'a str>> for &'a String {
-    fn convert(self) -> Result<Option<&'a str>, String> {
-        Ok(Some(self.as_str()))
-    }
-}
-
-impl<'a> ConvertFromRefString<'a, &'a str> for &'a String {
-    fn convert(self) -> Result<&'a str, String> {
-        Ok(self.as_str())
-    }
-}
-impl<'a> ConvertFromRefString<'a, String> for &'a String {
-    fn convert(self) -> Result<String, String> {
-        Ok(self.to_string())
-    }
-}
-//format!("can not convert String \"{}\" to type {}",value,stringify!($t))
-macro_rules! impl_convert_from_ref_string2 {
+macro_rules! impl_convert_from_param {
     ($($t:ty),*) => {
         $(
-            impl $crate::request::TryConvertFrom<&String> for  $t {
-                fn try_convert_from(value:&String) -> Result<Self,$crate::handler::types::HttpHandlerError> {
+            impl <'a> $crate::request::TryFromParam<'a> for  $t {
+                fn try_from_param(value:&'a String) -> Result<Self,$crate::handler::types::HttpHandlerError> {
                     value.parse::<$t>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
                 }
             }
-
         )*
     };
 }
 
-// #[deprecated]
-// macro_rules! impl_convert_from_option_ref_string {
-//     ($($t:ty),*) => {
-//         $(
-//             impl $crate::TryConvertFrom<Option<&String>> for  $t {
-//                 fn try_convert_from(value:Option<&String>) -> Result<Self,$crate::handler::types::HttpHandlerError> {
-//                     if let Some(value) = value {
-//                         value.parse::<Self>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
-//                     }else {
-//                         Err($crate::error::Error::before_handler_invalid_param("value is missing 1"))
-//                     }
-//                 }
-//             }
-//         )*
-//     };
-// }
-
-impl_convert_from_ref_string2!(
+impl_convert_from_param!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
-// impl_convert_from_ref_string!(
-//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
-// );
-// impl_convert_from_option_ref_string!(
-//     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
-// );
-impl<'a> TryConvertFrom<&'a String> for &'a String {
-    fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
-        Ok(value)
-    }
-}
-
-impl<'a> TryConvertFrom<&'a String> for &'a str {
-    fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
+impl <'a> TryFromParam<'a> for &'a str {
+    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
         Ok(value.as_str())
     }
 }
-
-impl TryConvertFrom<&String> for String {
-    fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+impl <'a> TryFromParam<'a> for &'a String {
+    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
+        Ok(value)
+    }
+}
+impl <'a> TryFromParam<'a> for String {
+    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
         Ok(value.to_string())
     }
 }
 
-impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for O {
+
+impl<'a,T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
-            Ok(O::try_convert_from(value)?)
+            T::try_from_param(value)
         } else {
-            Err(crate::error::Error::before_handler_invalid_param(
-                "value is missing!",
-            ))
+            Err(HttpHandlerError::before_handler_param_not_exist())
         }
     }
 }
-
-impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Option<O> {
+impl<'a,T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
-            match O::try_convert_from(value) {
-                Ok(r) => Ok(Some(r)),
-                Err(_) => Err(crate::error::Error::before_handler_invalid_param(
-                    "before_handler_invalid_param",
-                )),
-            }
+            T::try_from_param(value).map(|x| Some(x))
         } else {
             Ok(None)
         }
     }
 }
 
+// //format!("can not convert String \"{}\" to type {}",value,stringify!($t))
+
+// impl<'a> TryConvertFrom<&'a String> for &'a String {
+//     fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
+//         Ok(value)
+//     }
+// }
+
+// impl<'a> TryConvertFrom<&'a String> for &'a str {
+//     fn try_convert_from(value: &'a String) -> Result<Self, HttpHandlerError> {
+//         Ok(value.as_str())
+//     }
+// }
+
+// impl TryConvertFrom<&String> for String {
+//     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
+//         Ok(value.to_string())
+//     }
+// }
+
+// impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for O {
+//     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
+//         if let Some(value) = value {
+//             Ok(O::try_convert_from(value)?)
+//         } else {
+//             Err(crate::error::Error::before_handler_invalid_param(
+//                 "value is missing!",
+//             ))
+//         }
+//     }
+// }
+
+// impl<'a, O: TryConvertFrom<&'a String>> TryConvertFrom<Option<&'a String>> for Option<O> {
+//     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
+//         if let Some(value) = value {
+//             match O::try_convert_from(value) {
+//                 Ok(r) => Ok(Some(r)),
+//                 Err(_) => Err(crate::error::Error::before_handler_invalid_param(
+//                     "before_handler_invalid_param",
+//                 )),
+//             }
+//         } else {
+//             Ok(None)
+//         }
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use http::Request;
 
-    use crate::{
-        TryConvertInto,
-        handler::types::HttpHandlerError,
-        request::{ConvertFromRefString, parse_line_header},
-    };
+    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::parse_line_header};
 
     #[test]
     fn parse_http1_line() {
@@ -497,7 +480,7 @@ mod tests {
 
     #[test]
     fn number_test() {
-        let s = &"11".to_string();
+        let s = Some(&"11".to_string());
         let a: Result<i32, HttpHandlerError> = s.try_convert_into();
         let b: Result<i32, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), b.is_ok())
@@ -505,7 +488,7 @@ mod tests {
 
     #[test]
     fn bool_test() {
-        let s = &"true".to_string();
+        let s =Some( &"true".to_string());
         let a: Result<bool, HttpHandlerError> = s.try_convert_into();
         let b: Result<bool, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), b.is_ok())
@@ -513,9 +496,9 @@ mod tests {
 
     #[test]
     fn str_test() {
-        let s = &"true".to_string();
+        let s = Some(&"true".to_string());
         let a: Result<String, HttpHandlerError> = s.try_convert_into();
-        let b: Result<String, String> = s.convert();
+        let b: Result<String, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), b.is_ok())
     }
     #[test]
