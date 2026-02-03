@@ -125,43 +125,18 @@ async fn handle_request(
                 }
             },
             Handler::WbeSocket(ws_handler) => {
-                use RequestBody::*;
-
-                if let Some(body) = req._inner.body_mut().take()
+                if let Some(req_body) = req._inner.body_mut().take()
                 // && let RequestBody::WebSocketStreamBody(stream_body) = body
                 {
-                    let mut r = match &body {
-                        WebSocketStreamBodyHttp2(_) => HttpResponse::new(),
-                        WebSocketStreamBodyHttp1(_) => HttpResponse::websocket_response(&req),
-                        _ => unreachable!(),
-                    };
+                    let mut res = create_ws_res_from_req_body(&req, &req_body);
                     let (outcomming_message_sender, outcomming_message_receiver) =
                         tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
-                    r.set_body(ResponseBody::WsBody(outcomming_message_receiver));
-                    tx.send(r).await.unwrap();
-                    let incomming_message_receiver = match body {
-                        WebSocketStreamBodyHttp2(stream_body) => {
-                            let (parser, incomming_message_receiver) =
-                                WebSocketIncommingMessageParser::new(
-                                    stream_body,
-                                    outcomming_message_sender.clone(),
-                                );
-                            parser.start();
-                            incomming_message_receiver
-                        }
-                        WebSocketStreamBodyHttp1(reader) => {
-                            let (parser, incomming_message_receiver) =
-                                Http1WebSocketIncommingMessageParser::new(
-                                    reader,
-                                    outcomming_message_sender.clone(),
-                                );
-                            parser.start();
-                            incomming_message_receiver
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
+                    res.set_body(ResponseBody::WsBody(outcomming_message_receiver));
+                    tx.send(res).await.unwrap();
+                    let incomming_message_receiver = get_ws_incomming_message_receiver(
+                        req_body,
+                        outcomming_message_sender.clone(),
+                    );
                     let websocket =
                         WebSocket::new(outcomming_message_sender, incomming_message_receiver);
                     ws_handler(websocket, req).await;
@@ -170,5 +145,39 @@ async fn handle_request(
         }
     } else {
         let _ = tx.send(HttpResponse::not_found()).await;
+    }
+}
+
+fn create_ws_res_from_req_body(req: &HttpRequest, req_body: &RequestBody) -> HttpResponse {
+    use RequestBody::*;
+    let r = match req_body {
+        WebSocketStreamBodyHttp2(_) => HttpResponse::new(),
+        WebSocketStreamBodyHttp1(_) => HttpResponse::websocket_response(req),
+        _ => unreachable!(),
+    };
+    r
+}
+
+fn get_ws_incomming_message_receiver(
+    req_body: RequestBody,
+    outcomming_message_sender: tokio::sync::mpsc::Sender<WebSocketDataPayLoad>,
+) -> tokio::sync::mpsc::Receiver<WebSocketDataPayLoad> {
+    use RequestBody::*;
+    match req_body {
+        WebSocketStreamBodyHttp2(stream_body) => {
+            let (parser, incomming_message_receiver) =
+                WebSocketIncommingMessageParser::new(stream_body, outcomming_message_sender);
+            parser.start();
+            incomming_message_receiver
+        }
+        WebSocketStreamBodyHttp1(reader) => {
+            let (parser, incomming_message_receiver) =
+                Http1WebSocketIncommingMessageParser::new(reader, outcomming_message_sender);
+            parser.start();
+            incomming_message_receiver
+        }
+        _ => {
+            unreachable!()
+        }
     }
 }

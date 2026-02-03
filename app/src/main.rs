@@ -87,7 +87,8 @@ async fn cookie() {
 }
 #[get("/redirect")]
 async fn redirect() {
-    Redirect("/")
+    println!("redirect");
+    Redirect("https://localhost:443/")
 }
 #[derive(Debug)]
 pub struct MyAge {
@@ -147,7 +148,6 @@ async fn main() {
             res_modifiers!(format!("some error~~ {:?}", e))
         })
         .tls(
-             // /Users/dadigua/Desktop/graduation/key.pem
             "/Users/dadigua/Desktop/graduation/key.pem",
             "/Users/dadigua/Desktop/graduation/cert.pem",
         )
