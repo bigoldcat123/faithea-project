@@ -73,7 +73,7 @@ async fn process_request(
 ) {
     match guard_request(guards, req).await {
         Ok(req) => {
-            handle_request(handlers, req, tx.clone(),error_handler).await;
+            handle_request(handlers, req, tx.clone(), error_handler).await;
         }
         Err(res) => {
             let _ = tx.send(res).await;
@@ -117,12 +117,10 @@ async fn handle_request(
                         } else {
                             let _ = tx.send(HttpResponse::not_found()).await;
                         }
+                    } else if err.modify(&mut response).await.is_ok() {
+                        let _ = tx.send(response).await;
                     } else {
-                        if err.modify(&mut response).await.is_ok() {
-                            let _ = tx.send(response).await;
-                        } else {
-                            let _ = tx.send(HttpResponse::not_found()).await;
-                        }
+                        let _ = tx.send(HttpResponse::not_found()).await;
                     }
                 }
             },

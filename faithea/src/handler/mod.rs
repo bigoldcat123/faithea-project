@@ -16,8 +16,6 @@ pub struct HandlerTire {
 impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
     /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
-    ///
-
     pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) {
         let pre_fix = if let Some(pre_fix) = pre_fix.strip_suffix("/") {
             pre_fix

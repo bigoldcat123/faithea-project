@@ -47,7 +47,7 @@ macro_rules! map_str {
 #[macro_export]
 macro_rules! map_fu {
     () => {
-        |_| crate::error::Error::Unknown
+        |_| $crate::error::Error::Unknown
     };
 }
 // impl ConvertFromRefString<i32> for  &String {

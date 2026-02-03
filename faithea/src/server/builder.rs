@@ -13,7 +13,7 @@ use http::{
         ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
     },
 };
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+use rustls::{crypto::{ ring}, pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject}};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
@@ -48,6 +48,7 @@ pub(crate) struct TlsConfig {
 
 impl TlsConfig {
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, Box<dyn Error>> {
+        ring::default_provider().install_default().expect("install ring");
         let certs =
             CertificateDer::pem_file_iter(self.cert.as_path())?.collect::<Result<Vec<_>, _>>()?;
         let key = PrivateKeyDer::from_pem_file(self.key.as_path())?;
@@ -153,7 +154,7 @@ impl HttpServerBuilder {
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
                 tls: self.tls,
-                error_handler: self.error_handler.map(|x| Arc::new(x)),
+                error_handler: self.error_handler.map(Arc::new),
             })
         } else {
             Server::H1Server(H1Server {
@@ -161,7 +162,7 @@ impl HttpServerBuilder {
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
                 tls: self.tls,
-                error_handler: self.error_handler.map(|x| Arc::new(x)),
+                error_handler: self.error_handler.map(Arc::new),
             })
         }
     }

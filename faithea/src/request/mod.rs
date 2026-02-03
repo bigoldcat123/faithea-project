@@ -52,7 +52,7 @@ impl Debug for RequestBody {
     }
 }
 pub trait TryFromParam<'a>: Sized {
-    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError>;
+    fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError>;
 }
 // impl<T: TryFromParam> TryConvertFrom<&String> for T {
 //     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
@@ -363,7 +363,7 @@ macro_rules! impl_convert_from_param {
     ($($t:ty),*) => {
         $(
             impl <'a> $crate::request::TryFromParam<'a> for  $t {
-                fn try_from_param(value:&'a String) -> Result<Self,$crate::handler::types::HttpHandlerError> {
+                fn try_from_param(value:&'a str) -> Result<Self,$crate::handler::types::HttpHandlerError> {
                     value.parse::<$t>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
                 }
             }
@@ -375,17 +375,17 @@ impl_convert_from_param!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
 impl <'a> TryFromParam<'a> for &'a str {
-    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
-        Ok(value.as_str())
-    }
-}
-impl <'a> TryFromParam<'a> for &'a String {
-    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
+    fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError> {
         Ok(value)
     }
 }
+// impl <'a> TryFromParam<'a> for &'a String {
+//     fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError> {
+//         Ok(value)
+//     }
+// }
 impl <'a> TryFromParam<'a> for String {
-    fn try_from_param(value: &'a String) -> Result<Self, HttpHandlerError> {
+    fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError> {
         Ok(value.to_string())
     }
 }

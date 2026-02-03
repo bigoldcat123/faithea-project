@@ -1,4 +1,5 @@
 pub mod cookie;
+pub mod redirect;
 pub mod cors;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{Bytes, BytesMut};
