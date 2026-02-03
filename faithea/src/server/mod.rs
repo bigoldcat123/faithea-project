@@ -10,7 +10,7 @@ use tokio::{
 
 use crate::{
     guard::GuardTire,
-    handler::HandlerTire,
+    handler::{HandlerTire, types::{HttpHandler, WebSocketHandler}},
     request::{HttpRequest, RequestBody},
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
@@ -104,58 +104,61 @@ async fn handle_request(
 
         req.process_search_param();
         match handler {
-            Handler::Http(http_handler) => match http_handler(req).await {
-                Ok(res) => {
-                    let _ = tx.send(res).await;
-                }
-                Err(mut err) => {
-                    let mut response = HttpResponse::new();
-                    if let Some(x) = error_handler {
-                        let mut m = x(err).await;
-                        if m.modify(&mut response).await.is_ok() {
-                            let _ = tx.send(response).await;
-                        } else {
-                            let _ = tx.send(HttpResponse::not_found()).await;
-                        }
-                    } else if err.modify(&mut response).await.is_ok() {
-                        let _ = tx.send(response).await;
-                    } else {
-                        let _ = tx.send(HttpResponse::not_found()).await;
-                    }
-                }
-            },
-            Handler::WbeSocket(ws_handler) => {
-                if let Some(req_body) = req._inner.body_mut().take()
-                // && let RequestBody::WebSocketStreamBody(stream_body) = body
-                {
-                    let mut res = create_ws_res_from_req_body(&req, &req_body);
-                    let (outcomming_message_sender, outcomming_message_receiver) =
-                        tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
-                    res.set_body(ResponseBody::WsBody(outcomming_message_receiver));
-                    tx.send(res).await.unwrap();
-                    let incomming_message_receiver = get_ws_incomming_message_receiver(
-                        req_body,
-                        outcomming_message_sender.clone(),
-                    );
-                    let websocket =
-                        WebSocket::new(outcomming_message_sender, incomming_message_receiver);
-                    ws_handler(websocket, req).await;
-                }
-            }
+            Handler::Http(http_handler) => process_http_request(http_handler,req,tx,error_handler).await,
+            Handler::WbeSocket(ws_handler) => process_ws_request(ws_handler, req, tx).await
         }
     } else {
         let _ = tx.send(HttpResponse::not_found()).await;
     }
 }
+async fn process_http_request(http_handler:&HttpHandler,req:HttpRequest,tx: Sender<HttpResponse>,error_handler: Option<Arc<GlobalErrorHandler>>,) {
+    match http_handler(req).await {
+        Ok(res) => {
+            let _ = tx.send(res).await;
+        }
+        Err(mut err) => {
+            let mut response = HttpResponse::new();
+            if let Some(error_handler) = error_handler {
+                let mut m = error_handler(err).await;
+                if m.modify(&mut response).await.is_ok() {
+                    let _ = tx.send(response).await;
+                } else {
+                    let _ = tx.send(HttpResponse::not_found()).await;
+                }
+            } else if err.modify(&mut response).await.is_ok() {
+                let _ = tx.send(response).await;
+            } else {
+                let _ = tx.send(HttpResponse::not_found()).await;
+            }
+        }
+    }
+}
+async fn process_ws_request(ws_handler:&WebSocketHandler,mut req:HttpRequest,tx: Sender<HttpResponse>,) {
+    if let Some(req_body) = req._inner.body_mut().take()
+    // && let RequestBody::WebSocketStreamBody(stream_body) = body
+    {
+        let mut res = create_ws_res_from_req_body(&req, &req_body);
+        let (outcomming_message_sender, outcomming_message_receiver) =
+            tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
+        res.set_body(ResponseBody::WsBody(outcomming_message_receiver));
+        tx.send(res).await.unwrap();
+        let incomming_message_receiver = get_ws_incomming_message_receiver(
+            req_body,
+            outcomming_message_sender.clone(),
+        );
+        let websocket =
+            WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+        ws_handler(websocket, req).await;
+    }
+}
 
 fn create_ws_res_from_req_body(req: &HttpRequest, req_body: &RequestBody) -> HttpResponse {
     use RequestBody::*;
-    let r = match req_body {
+    match req_body {
         WebSocketStreamBodyHttp2(_) => HttpResponse::new(),
         WebSocketStreamBodyHttp1(_) => HttpResponse::websocket_response(req),
         _ => unreachable!(),
-    };
-    r
+    }
 }
 
 fn get_ws_incomming_message_receiver(
