@@ -3,14 +3,19 @@ mod http1;
 mod http2;
 use std::{error::Error, sync::Arc};
 
+use bytes::{BufMut, BytesMut};
+use h2::RecvStream;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadHalf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadHalf},
     sync::mpsc::Sender,
 };
 
 use crate::{
     guard::GuardTire,
-    handler::{HandlerTire, types::{HttpHandler, WebSocketHandler}},
+    handler::{
+        HandlerTire,
+        types::{HttpHandler, WebSocketHandler},
+    },
     request::{HttpRequest, RequestBody},
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
@@ -104,14 +109,21 @@ async fn handle_request(
 
         req.process_search_param();
         match handler {
-            Handler::Http(http_handler) => process_http_request(http_handler,req,tx,error_handler).await,
-            Handler::WbeSocket(ws_handler) => process_ws_request(ws_handler, req, tx).await
+            Handler::Http(http_handler) => {
+                process_http_request(http_handler, req, tx, error_handler).await
+            }
+            Handler::WbeSocket(ws_handler) => process_ws_request(ws_handler, req, tx).await,
         }
     } else {
         let _ = tx.send(HttpResponse::not_found()).await;
     }
 }
-async fn process_http_request(http_handler:&HttpHandler,req:HttpRequest,tx: Sender<HttpResponse>,error_handler: Option<Arc<GlobalErrorHandler>>,) {
+async fn process_http_request(
+    http_handler: &HttpHandler,
+    req: HttpRequest,
+    tx: Sender<HttpResponse>,
+    error_handler: Option<Arc<GlobalErrorHandler>>,
+) {
     match http_handler(req).await {
         Ok(res) => {
             let _ = tx.send(res).await;
@@ -133,7 +145,11 @@ async fn process_http_request(http_handler:&HttpHandler,req:HttpRequest,tx: Send
         }
     }
 }
-async fn process_ws_request(ws_handler:&WebSocketHandler,mut req:HttpRequest,tx: Sender<HttpResponse>,) {
+async fn process_ws_request(
+    ws_handler: &WebSocketHandler,
+    mut req: HttpRequest,
+    tx: Sender<HttpResponse>,
+) {
     if let Some(req_body) = req._inner.body_mut().take()
     // && let RequestBody::WebSocketStreamBody(stream_body) = body
     {
@@ -142,12 +158,9 @@ async fn process_ws_request(ws_handler:&WebSocketHandler,mut req:HttpRequest,tx:
             tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
         res.set_body(ResponseBody::WsBody(outcomming_message_receiver));
         tx.send(res).await.unwrap();
-        let incomming_message_receiver = get_ws_incomming_message_receiver(
-            req_body,
-            outcomming_message_sender.clone(),
-        );
-        let websocket =
-            WebSocket::new(outcomming_message_sender, incomming_message_receiver);
+        let incomming_message_receiver =
+            get_ws_incomming_message_receiver(req_body, outcomming_message_sender.clone());
+        let websocket = WebSocket::new(outcomming_message_sender, incomming_message_receiver);
         ws_handler(websocket, req).await;
     }
 }
@@ -182,5 +195,60 @@ fn get_ws_incomming_message_receiver(
         _ => {
             unreachable!()
         }
+    }
+}
+
+pub trait BytesSource {
+    fn read_buf(
+        &mut self,
+        buf: &mut BytesMut,
+    ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>>;
+    fn is_end(&self)-> bool;
+}
+
+pub(crate) struct Http1BytesSource<SOURCE: AsyncRead + Unpin> {
+    source: SOURCE,
+    len:usize,
+    current_len:usize
+}
+impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
+    pub(crate) fn new(source: SOURCE,len:usize,current_len:usize) -> Self {
+        Self { source ,current_len,len}
+    }
+}
+impl<SOURCE: AsyncRead + Unpin> BytesSource for Http1BytesSource<SOURCE> {
+    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
+        let res = self.source.read_buf(buf).await?;
+        self.current_len += res;
+        Ok(res)
+    }
+    fn is_end(&self)-> bool {
+        self.current_len >= self.len
+    }
+}
+pub(crate) struct Http2BytesSource {
+    source: RecvStream,
+}
+impl Http2BytesSource  {
+    pub(crate) fn new(source:RecvStream) -> Self{
+        Self{
+            source
+        }
+    }
+}
+impl BytesSource for Http2BytesSource {
+    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
+        if let Some(d) = self.source.data().await {
+            let d = d?;
+            let len = d.len();
+            buf.put(d);
+            self.source.flow_control().release_capacity(len)?;
+            Ok(len)
+        } else {
+            Ok(0)
+        }
+    }
+    fn is_end(&self)-> bool {
+        self.source.is_end_stream()
     }
 }
