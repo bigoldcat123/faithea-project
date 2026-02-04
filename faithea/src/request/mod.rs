@@ -5,21 +5,22 @@ pub mod path_param;
 pub mod search_param;
 use std::{fmt::Debug, path::PathBuf, str::FromStr};
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use h2::RecvStream;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version,
     header::{
-        AsHeaderName, CONNECTION, CONTENT_LENGTH, COOKIE, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE
+        AsHeaderName, CONNECTION, CONTENT_LENGTH, COOKIE, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION,
+        UPGRADE,
     },
 };
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, };
 
 use crate::{
     TryConvertFrom,
     data::inbound::multipart::{
         MultipartDataMap,
-        parser::{h1::MultiPartBodyParser, h2::H2MultiPartBodyParser},
+        parser::{h1::MultiPartBodyParser},
     },
     handler::types::HttpHandlerError,
     map_str,
@@ -27,6 +28,7 @@ use crate::{
         content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
     },
     route::{Route, RouteComponent},
+    server::{BytesSource, Http1BytesSource, Http2BytesSource},
 };
 
 pub enum RequestBody {
@@ -170,14 +172,13 @@ impl HttpRequest {
             None
         }
     }
-    pub(crate) async fn parse_h1<R: AsyncRead + Unpin>(
+    pub(crate) async fn parse_h1_frame<R: AsyncRead + Unpin>(
         r: &mut R,
         buf: &mut BytesMut,
     ) -> Result<HttpRequest, String> {
         parse_http_frame(r, buf).await
     }
-    pub(crate) async fn parse_h2(stream_req: Request<RecvStream>) -> Result<HttpRequest, String> {
-        use ContentType::*;
+    pub(crate) async fn parse_h2_frame(stream_req: Request<RecvStream>) -> Result<HttpRequest, String> {
         let (p, body_stream) = stream_req.into_parts();
         if p.method == Method::CONNECT {
             return Ok(HttpRequest::new(
@@ -185,37 +186,33 @@ impl HttpRequest {
                 Some(RequestBody::WebSocketStreamBodyHttp2(body_stream)),
             ));
         }
-        let content_type = ContentType::try_from(&p.headers)?;
-        let body = match content_type {
-            MultipartFormData(boundary) => {
-                H2MultiPartBodyParser::parse_h2(body_stream, boundary.as_bytes()).await?
-            }
-            _ => parse_simple_h2_body(body_stream).await?,
-        };
+        let bs = Http2BytesSource::new(body_stream);
+        let mut buf = BytesMut::with_capacity(4096);
+        let body = parse_body_frame(bs, &mut buf, &p.headers).await?;
         let req = HttpRequest::new(p, Some(body));
 
         Ok(req)
     }
 }
-async fn parse_simple_h2_body(mut body_stream: RecvStream) -> Result<RequestBody, String> {
-    let mut buf = BytesMut::with_capacity(1024);
-    while let Some(chunk) = body_stream.data().await {
-        let chunk = chunk.map_err(map_str!())?;
-        // let s = chunk
-        //     .chunk()
-        //     .iter()
-        //     .map(|b| format!("0x{:02x}", b))
-        //     .collect::<Vec<_>>()
-        //     .join(", ");
-        let len = chunk.len();
-        buf.put(chunk);
-        body_stream
-            .flow_control()
-            .release_capacity(len)
-            .map_err(map_str!())?;
-    }
-    Ok(RequestBody::Simple(buf.freeze()))
-}
+// async fn parse_simple_h2_body(mut body_stream: RecvStream) -> Result<RequestBody, String> {
+//     let mut buf = BytesMut::with_capacity(1024);
+//     while let Some(chunk) = body_stream.data().await {
+//         let chunk = chunk.map_err(map_str!())?;
+//         // let s = chunk
+//         //     .chunk()
+//         //     .iter()
+//         //     .map(|b| format!("0x{:02x}", b))
+//         //     .collect::<Vec<_>>()
+//         //     .join(", ");
+//         let len = chunk.len();
+//         buf.put(chunk);
+//         body_stream
+//             .flow_control()
+//             .release_capacity(len)
+//             .map_err(map_str!())?;
+//     }
+//     Ok(RequestBody::Simple(buf.freeze()))
+// }
 
 pub fn is_websocket_upgrade(req: &HttpRequest) -> bool {
     req.get_header(UPGRADE).is_some()
@@ -237,8 +234,8 @@ async fn parse_http_frame<R: AsyncRead + Unpin>(
             .map_err(map_str!())?
             .parse::<usize>()
             .map_err(map_str!())?;
-
-        let body = parse_body_frame(len, r, buf, req._inner.headers()).await?;
+        let bs = Http1BytesSource::new(r,len,buf.remaining());
+        let body = parse_body_frame( bs, buf, req._inner.headers()).await?;
         // let body = buf.split_to(len).freeze();
         *req._inner.body_mut() = Some(body);
     }
@@ -246,29 +243,27 @@ async fn parse_http_frame<R: AsyncRead + Unpin>(
     Ok(req)
 }
 
-pub async fn parse_body_frame<R: AsyncRead + Unpin>(
-    len: usize,
-    r: &mut R,
+pub async fn parse_body_frame<SOURCE: BytesSource>(
+    bs: SOURCE,
     buf: &mut BytesMut,
     headers: &HeaderMap<HeaderValue>,
 ) -> Result<RequestBody, String> {
     use ContentType::*;
     let content_type = ContentType::try_from(headers)?;
     match content_type {
-        ApplicationJson => parse_simple_body(r, buf, len).await,
-        MultipartFormData(boundary) => MultiPartBodyParser::parse_h1(r, buf, len, boundary).await,
-        _ => parse_simple_body(r, buf, len).await,
+        ApplicationJson => parse_simple_body(bs, buf).await,
+        MultipartFormData(boundary) => MultiPartBodyParser::parse(bs, buf, boundary).await,
+        _ => parse_simple_body(bs, buf).await,
     }
 }
 
-async fn parse_simple_body<R: AsyncRead + Unpin>(
-    r: &mut R,
+async fn parse_simple_body<R: BytesSource>(
+    mut r: R,
     buf: &mut BytesMut,
-    len: usize,
 ) -> Result<RequestBody, String> {
     loop {
-        if buf.len() >= len {
-            let body = buf.split_to(len).freeze();
+        if r.is_end() {
+            let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
         if let Ok(len) = r.read_buf(buf).await {
@@ -374,7 +369,7 @@ macro_rules! impl_convert_from_param {
 impl_convert_from_param!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
-impl <'a> TryFromParam<'a> for &'a str {
+impl<'a> TryFromParam<'a> for &'a str {
     fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError> {
         Ok(value)
     }
@@ -384,14 +379,13 @@ impl <'a> TryFromParam<'a> for &'a str {
 //         Ok(value)
 //     }
 // }
-impl <'a> TryFromParam<'a> for String {
+impl<'a> TryFromParam<'a> for String {
     fn try_from_param(value: &'a str) -> Result<Self, HttpHandlerError> {
         Ok(value.to_string())
     }
 }
 
-
-impl<'a,T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
+impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             T::try_from_param(value)
@@ -400,7 +394,7 @@ impl<'a,T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
         }
     }
 }
-impl<'a,T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
+impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             T::try_from_param(value).map(|x| Some(x))
@@ -488,7 +482,7 @@ mod tests {
 
     #[test]
     fn bool_test() {
-        let s =Some( &"true".to_string());
+        let s = Some(&"true".to_string());
         let a: Result<bool, HttpHandlerError> = s.try_convert_into();
         let b: Result<bool, HttpHandlerError> = s.try_convert_into();
         assert_eq!(a.is_ok(), b.is_ok())
