@@ -8,7 +8,14 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire, handler::HandlerTire, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{builder::{GlobalErrorHandler, TlsConfig}, handle_upgrade_to_websocket, process_request}
+    guard::GuardTire,
+    handler::HandlerTire,
+    request::{HttpRequest, is_websocket_upgrade},
+    response::HttpResponse,
+    server::{
+        builder::{GlobalErrorHandler, TlsConfig},
+        handle_upgrade_to_websocket, process_request,
+    },
 };
 
 pub struct H1Server {
@@ -21,7 +28,12 @@ pub struct H1Server {
 }
 impl H1Server {
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
-        log::info!("HTTP{} server starting on http{}://{}",if self.tls.is_some() {"S"} else {""},if self.tls.is_some() {"s"} else {""}, self.addr);
+        log::info!(
+            "HTTP{} server starting on http{}://{}",
+            if self.tls.is_some() { "S" } else { "" },
+            if self.tls.is_some() { "s" } else { "" },
+            self.addr
+        );
         log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
         match self.tls {
@@ -31,13 +43,17 @@ impl H1Server {
                     if let Ok((socket, addr)) = server.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
-                        let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
+                        let _ = self
+                            .deal_with(socket, addr, self.error_handler.clone())
+                            .await;
                     }
                 }
             }
             None => loop {
                 if let Ok((socket, addr)) = server.accept().await {
-                    let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
+                    let _ = self
+                        .deal_with(socket, addr, self.error_handler.clone())
+                        .await;
                 }
             },
         }
@@ -53,8 +69,8 @@ impl H1Server {
         let handlers = Arc::clone(&self.handlers);
         let guards = Arc::clone(&self.guards);
         tokio::spawn(async move {
-            if let Err(e) = process(socket, handlers, guards,error_handler).await {
-                log::error!("{:?}",e)
+            if let Err(e) = process(socket, handlers, guards, error_handler).await {
+                log::error!("{:?}", e)
             }
             log::info!(" client left -> {}", addr);
         });
@@ -82,13 +98,21 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
 
     let mut buf = BytesMut::with_capacity(4096 * 100); // 4KB
     loop {
-        let req = HttpRequest::parse_h1(&mut reader, &mut buf).await?;
+        let (guards, handlers, tx, error_handler) = (
+            guards.clone(),
+            handlers.clone(),
+            tx.clone(),
+            error_handler.clone(),
+        );
+        let req = HttpRequest::parse_h1_frame(&mut reader, &mut buf).await?;
         log::info!("{:#?}", req._inner.uri());
+
         if is_websocket_upgrade(&req) {
-            handle_upgrade_to_websocket(guards, handlers, req, tx, reader,error_handler).await;
-            break ;
-        }else {
-            process_request(guards.clone(), handlers.clone(), req, tx.clone(),error_handler.clone()).await;
+            handle_upgrade_to_websocket(guards, handlers, req, tx, reader, error_handler).await;
+            break;
+        } else {
+            //  no need to spawn a new tast, as the client side will not send a new req before receving response...
+            process_request(guards, handlers, req, tx, error_handler).await;
         }
     }
     Ok(())
