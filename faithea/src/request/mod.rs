@@ -266,13 +266,7 @@ async fn parse_simple_body<R: BytesSource>(
             let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
-        if let Ok(len) = r.read_buf(buf).await {
-            if len == 0 {
-                return Err("other side closed".to_string());
-            }
-        } else {
-            return Err("error!".to_string());
-        }
+        let _len = r.read_buf(buf).await.map_err(map_str!())?;
     }
 }
 async fn parse_line_header_frame<R: AsyncRead + Unpin>(

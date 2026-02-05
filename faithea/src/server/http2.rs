@@ -100,8 +100,9 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
             }
         });
         tokio::spawn(async move {
-            let request = HttpRequest::parse_h2_frame(request).await.unwrap();
-            process_request(guards, handlers, request, tx,error_handler).await;
+            if let Ok(request) = HttpRequest::parse_h2_frame(request).await {
+                process_request(guards, handlers, request, tx,error_handler).await;
+            }
         });
     }
 

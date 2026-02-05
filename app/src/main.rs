@@ -64,7 +64,7 @@ async fn multipart(data: Multipart<StuInfo>) {
     let f = data
         .profile
         .iter()
-        .map(|x| x.file_name.clone())
+        .map(|x| (x.file_name.clone(),x.temp_path.clone()))
         .collect::<Vec<_>>();
     // let mut file = tokio::fs::File::open(&data.profile[0].temp_path).await.unwrap();
     // let mut target =  tokio::fs::File::create(format!("/Users/dadigua/Desktop/graduation/{}",&data.profile[0].file_name.as_ref().unwrap())).await.unwrap();

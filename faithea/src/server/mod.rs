@@ -219,6 +219,9 @@ impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
 impl<SOURCE: AsyncRead + Unpin> BytesSource for Http1BytesSource<SOURCE> {
     async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
         let res = self.source.read_buf(buf).await?;
+        if res == 0 {
+            return Err(std::io::Error::other("EOF ERROR"))?;
+        }
         self.current_len += res;
         Ok(res)
     }
@@ -239,8 +242,10 @@ impl Http2BytesSource  {
 impl BytesSource for Http2BytesSource {
     async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
         if let Some(d) = self.source.data().await {
+            // println!("{:?}",d.is_err());
             let d = d?;
             let len = d.len();
+
             buf.put(d);
             self.source.flow_control().release_capacity(len)?;
             Ok(len)
