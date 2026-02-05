@@ -14,14 +14,11 @@ use http::{
         UPGRADE,
     },
 };
-use tokio::io::{AsyncRead, AsyncReadExt, };
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     TryConvertFrom,
-    data::inbound::multipart::{
-        MultipartDataMap,
-        parser::{h1::MultiPartBodyParser},
-    },
+    data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser},
     handler::types::HttpHandlerError,
     map_str,
     request::{
@@ -172,13 +169,15 @@ impl HttpRequest {
             None
         }
     }
-    pub(crate) async fn parse_h1_frame<R: AsyncRead + Unpin>(
+    pub(crate) async fn parse_h1_frame<R: AsyncRead + Unpin + Send>(
         r: &mut R,
         buf: &mut BytesMut,
     ) -> Result<HttpRequest, String> {
         parse_http_frame(r, buf).await
     }
-    pub(crate) async fn parse_h2_frame(stream_req: Request<RecvStream>) -> Result<HttpRequest, String> {
+    pub(crate) async fn parse_h2_frame(
+        stream_req: Request<RecvStream>,
+    ) -> Result<HttpRequest, String> {
         let (p, body_stream) = stream_req.into_parts();
         if p.method == Method::CONNECT {
             return Ok(HttpRequest::new(
@@ -221,7 +220,7 @@ pub fn is_websocket_upgrade(req: &HttpRequest) -> bool {
         && req.get_header(SEC_WEBSOCKET_VERSION).is_some()
 }
 
-async fn parse_http_frame<R: AsyncRead + Unpin>(
+async fn parse_http_frame<R: AsyncRead + Unpin + Send>(
     r: &mut R,
     buf: &mut BytesMut,
 ) -> Result<HttpRequest, String> {
@@ -234,8 +233,8 @@ async fn parse_http_frame<R: AsyncRead + Unpin>(
             .map_err(map_str!())?
             .parse::<usize>()
             .map_err(map_str!())?;
-        let bs = Http1BytesSource::new(r,len,buf.remaining());
-        let body = parse_body_frame( bs, buf, req._inner.headers()).await?;
+        let bs = Http1BytesSource::new(r, len, buf.remaining());
+        let body = parse_body_frame(bs, buf, req._inner.headers()).await?;
         // let body = buf.split_to(len).freeze();
         *req._inner.body_mut() = Some(body);
     }
@@ -275,20 +274,23 @@ async fn parse_line_header_frame<R: AsyncRead + Unpin>(
     builder: http::request::Builder,
 ) -> Result<http::request::Builder, String> {
     loop {
-        if let Ok(read_len) = r.read_buf(buf).await {
-            if read_len == 0 {
-                return Err("other side closed".to_string());
+        match r.read_buf(buf).await {
+            Ok(read_len) => {
+                if read_len == 0 {
+                    return Err("other side closed".to_string());
+                }
+                let (check_header_is_ok, position) = check_header(buf.chunk());
+                if check_header_is_ok {
+                    let b = parse_line_header(&buf[..position], builder)?;
+                    buf.advance(position);
+                    return Ok(b);
+                }
             }
-            let (check_header_is_ok, position) = check_header(buf.chunk());
-            if check_header_is_ok {
-                let b = parse_line_header(&buf[..position], builder)?;
-                buf.advance(position);
-                return Ok(b);
+            Err(e) => {
+                return Err(
+                    format!("reading bytes from socket error while parsing parse_line_header_frame -> {e:?}")
+                );
             }
-        } else {
-            return Err(
-                "reading bytes from socket error while parsing parse_line_header_frame".to_string(),
-            );
         }
     }
 }

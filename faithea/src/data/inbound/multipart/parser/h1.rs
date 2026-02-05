@@ -118,7 +118,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     fn check_body_end(&self) -> (bool, usize) {
         let mut i = 0;
         let mut j = 0;
-        while i < self.buf.len() {
+        while i < self.buf.len() && j < self.boundary_with_prefix.len() {
             if self.boundary_with_prefix[j] == self.buf[i] {
                 i += 1;
                 j += 1;

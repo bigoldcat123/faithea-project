@@ -69,8 +69,9 @@ async fn multipart(data: Multipart<StuInfo>) {
     // let mut file = tokio::fs::File::open(&data.profile[0].temp_path).await.unwrap();
     // let mut target =  tokio::fs::File::create(format!("/Users/dadigua/Desktop/graduation/{}",&data.profile[0].file_name.as_ref().unwrap())).await.unwrap();
     // tokio::io::copy(&mut file, &mut target).await.unwrap();
-    println!("哈哈哈");
-
+    assert_eq!(data.profile.len(),16);
+    assert_eq!(data.name.len(),2);
+    assert_eq!(data.other_info.value,"asd");
     format!(
         "name: {:?},age: {}, merried: {:?}, other_info:{:?},profile_len: {:?},  ",
         data.name, data.age, data.merried, data.other_info, f
@@ -147,11 +148,11 @@ async fn main() {
         .globale_error_handler(async |e: faithea::error::Error| {
             res_modifiers!(format!("some error~~ {:?}", e))
         })
-        .tls(
-            "/Users/dadigua/Desktop/graduation/key.pem",
-            "/Users/dadigua/Desktop/graduation/cert.pem",
-        )
-        .h2()
+        // .tls(
+        //     "/Users/dadigua/Desktop/graduation/key.pem",
+        //     "/Users/dadigua/Desktop/graduation/cert.pem",
+        // )
+        // .h2()
         .host("0.0.0.0")
         .port(443)
         .build()

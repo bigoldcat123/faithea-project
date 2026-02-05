@@ -11,23 +11,17 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire,
-    handler::{
+    guard::GuardTire, handler::{
         HandlerTire,
         types::{HttpHandler, WebSocketHandler},
-    },
-    request::{HttpRequest, RequestBody},
-    response::{HttpResponse, HttpResponseModifier, ResponseBody},
-    route::Route,
-    server::{
+    }, map_str, request::{HttpRequest, RequestBody}, response::{HttpResponse, HttpResponseModifier, ResponseBody}, route::Route, server::{
         builder::{GlobalErrorHandler, HttpServerBuilder},
         http1::H1Server,
         http2::H2Server,
-    },
-    websocket::{
-        Http1WebSocketIncommingMessageParser, WebSocketIncommingMessageParser,
+    }, websocket::{
+        WebSocketIncommingMessageParser,
         data::WebSocketDataPayLoad, socket::WebSocket,
-    },
+    }
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -182,13 +176,13 @@ fn get_ws_incomming_message_receiver(
     match req_body {
         WebSocketStreamBodyHttp2(stream_body) => {
             let (parser, incomming_message_receiver) =
-                WebSocketIncommingMessageParser::new(stream_body, outcomming_message_sender);
+                WebSocketIncommingMessageParser::new(Http2BytesSource::new(stream_body), outcomming_message_sender);
             parser.start();
             incomming_message_receiver
         }
         WebSocketStreamBodyHttp1(reader) => {
             let (parser, incomming_message_receiver) =
-                Http1WebSocketIncommingMessageParser::new(reader, outcomming_message_sender);
+                WebSocketIncommingMessageParser::new(Http1BytesSource::new(reader, 0, 0), outcomming_message_sender);
             parser.start();
             incomming_message_receiver
         }
@@ -198,11 +192,11 @@ fn get_ws_incomming_message_receiver(
     }
 }
 
-pub trait BytesSource {
+pub trait BytesSource:Send {
     fn read_buf(
         &mut self,
         buf: &mut BytesMut,
-    ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>>;
+    ) -> impl Future<Output = Result<usize, String>> + Send;
     fn is_end(&self)-> bool;
 }
 
@@ -216,11 +210,11 @@ impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
         Self { source ,current_len,len}
     }
 }
-impl<SOURCE: AsyncRead + Unpin> BytesSource for Http1BytesSource<SOURCE> {
-    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
-        let res = self.source.read_buf(buf).await?;
+impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> {
+    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, String> {
+        let res = self.source.read_buf(buf).await.map_err(map_str!())?;
         if res == 0 {
-            return Err(std::io::Error::other("EOF ERROR"))?;
+            return Err("EOF ERROR".to_string())?;
         }
         self.current_len += res;
         Ok(res)
@@ -240,14 +234,14 @@ impl Http2BytesSource  {
     }
 }
 impl BytesSource for Http2BytesSource {
-    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, Box<dyn std::error::Error>> {
+    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, String> {
         if let Some(d) = self.source.data().await {
             // println!("{:?}",d.is_err());
-            let d = d?;
+            let d = d.map_err(map_str!())?;
             let len = d.len();
 
             buf.put(d);
-            self.source.flow_control().release_capacity(len)?;
+            self.source.flow_control().release_capacity(len).map_err(map_str!())?;
             Ok(len)
         } else {
             Ok(0)

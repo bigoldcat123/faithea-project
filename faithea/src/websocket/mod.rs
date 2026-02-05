@@ -1,11 +1,9 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use h2::RecvStream;
+use bytes::{Buf, BufMut,BytesMut};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
     sync::mpsc::{Receiver, Sender},
 };
 
-use crate::websocket::data::WebSocketDataPayLoad;
+use crate::{server::BytesSource, websocket::data::WebSocketDataPayLoad};
 
 pub mod data;
 pub mod socket;
@@ -205,9 +203,6 @@ impl ParserInnserState {
         }
         true
     }
-    fn put(&mut self, data: Bytes) {
-        self.buf.put(data);
-    }
     fn new(
         incomming_message_sender: Sender<WebSocketDataPayLoad>,
         outcomming_message_sender: Sender<WebSocketDataPayLoad>,
@@ -222,19 +217,19 @@ impl ParserInnserState {
         }
     }
 }
-pub struct WebSocketIncommingMessageParser {
-    incomming_message_stream: RecvStream,
+pub struct WebSocketIncommingMessageParser<SOURCE> {
+    incomming_message_stream_source: SOURCE,
     state: ParserInnserState,
 }
-impl WebSocketIncommingMessageParser {
+impl <SOURCE:BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
     pub fn new(
-        incomming_message_stream: RecvStream,
+        incomming_message_stream_source: SOURCE,
         outcommint_message_sender: Sender<WebSocketDataPayLoad>,
     ) -> (Self, Receiver<WebSocketDataPayLoad>) {
         let (incomming_message_sender, rx) = tokio::sync::mpsc::channel(100);
         (
             Self {
-                incomming_message_stream,
+                incomming_message_stream_source,
                 state: ParserInnserState::new(incomming_message_sender, outcommint_message_sender),
             },
             rx,
@@ -242,57 +237,16 @@ impl WebSocketIncommingMessageParser {
     }
     pub fn start(mut self) {
         tokio::spawn(async move {
-            while let Some(d) = self.incomming_message_stream.data().await {
-                let d = d.expect("other side closed");
-                let chunk_len = d.len();
-                self.state.put(d);
+            loop {
+                let _len = self.incomming_message_stream_source.read_buf(&mut self.state.buf).await.expect("other side closed");
                 if !self.state.process().await {
                     break;
                 }
-                self.incomming_message_stream
-                    .flow_control()
-                    .release_capacity(chunk_len)
-                    .expect("release_capacity error");
             }
         });
     }
 }
 
-pub struct Http1WebSocketIncommingMessageParser {
-    incomming_message_stream: Box<dyn AsyncRead + Send + Sync + Unpin + 'static>,
-    state: ParserInnserState,
-}
-impl Http1WebSocketIncommingMessageParser {
-    pub fn new<R: AsyncRead + Send + Sync + Unpin + 'static>(
-        incomming_message_stream: R,
-        outcomming_message_sender: Sender<WebSocketDataPayLoad>,
-    ) -> (Self, Receiver<WebSocketDataPayLoad>) {
-        let (incomming_message_sender, rx) = tokio::sync::mpsc::channel(100);
-        (
-            Self {
-                incomming_message_stream: Box::new(incomming_message_stream),
-                state: ParserInnserState::new(incomming_message_sender, outcomming_message_sender),
-            },
-            rx,
-        )
-    }
-    pub fn start(mut self) {
-        tokio::spawn(async move {
-            while let Ok(d) = self
-                .incomming_message_stream
-                .read_buf(&mut self.state.buf)
-                .await
-            {
-                if d == 0 {
-                    return;
-                }
-                if !self.state.process().await {
-                    break;
-                }
-            }
-        });
-    }
-}
 
 
 #[cfg(test)]
