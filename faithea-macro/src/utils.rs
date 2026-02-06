@@ -74,11 +74,15 @@ fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
 fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
     if let FnArg::Typed(t) = arg {
         let mut is_search_param = false;
+        let mut rarg_name  = None;
         for i in 0..t.attrs.len() {
             let x = &t.attrs[i];
             let a = &x.meta;
             let name = quote! {#a}.to_string();
-            if name == "search_param" {
+            if name.starts_with("search_param") {
+                if let Ok(arg_name) = x.parse_args::<LitStr>() {
+                    rarg_name = Some(arg_name);
+                }
                 is_search_param = true;
                 t.attrs.remove(0);
                 break;
@@ -86,8 +90,10 @@ fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
         }
 
         if let Pat::Ident(PatIdent { ident, .. }) = t.pat.as_ref() {
-            let name = LitStr::new(&ident.to_string(), ident.span());
-            return Some((name, t.ty.as_ref(), is_search_param));
+            if rarg_name.is_none() {
+                rarg_name = Some(LitStr::new(&ident.to_string(), ident.span()));
+            }
+            return Some((rarg_name.unwrap(), t.ty.as_ref(), is_search_param));
         }
     }
     None
