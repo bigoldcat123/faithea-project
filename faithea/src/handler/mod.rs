@@ -58,6 +58,38 @@ impl HandlerTire {
         );
     }
 
+    pub fn put<F, O, P>(&mut self, url: P, f: F)
+    where
+        F: RawHttpHandlerTrait<O>,
+        O: HttpHandlerResultTrait,
+        P: AsRef<str>,
+    {
+        let url = regulate_url_path(url);
+        let mut route = Route::from(url.as_str());
+        route.r.reverse();
+        self.add_route(
+            route.r,
+            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            Method::PUT,
+        );
+    }
+
+    pub fn delete<F, O, P>(&mut self, url: P, f: F)
+    where
+        F: RawHttpHandlerTrait<O>,
+        O: HttpHandlerResultTrait,
+        P: AsRef<str>,
+    {
+        let url = regulate_url_path(url);
+        let mut route = Route::from(url.as_str());
+        route.r.reverse();
+        self.add_route(
+            route.r,
+            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            Method::DELETE,
+        );
+    }
+
     pub fn options<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
