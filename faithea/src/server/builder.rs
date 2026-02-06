@@ -134,7 +134,7 @@ impl HttpServerBuilder {
             cert: cert.as_ref().to_path_buf(),
             h2: self.h2,
         });
-        self
+        self.port(443).host("0.0.0.0")
     }
 
     pub fn websocket<F, R>(mut self, route: &str, ws_handler: F) -> Self

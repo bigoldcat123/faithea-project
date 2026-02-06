@@ -148,13 +148,11 @@ async fn main() {
         .globale_error_handler(async |e: faithea::error::Error| {
             res_modifiers!(format!("some error~~ {:?}", e))
         })
-        // .tls(
-        //     "/Users/dadigua/Desktop/graduation/key.pem",
-        //     "/Users/dadigua/Desktop/graduation/cert.pem",
-        // )
+        .tls(
+            "/Users/dadigua/Desktop/graduation/key.pem",
+            "/Users/dadigua/Desktop/graduation/cert.pem",
+        )
         // .h2()
-        // .host("0.0.0.0")
-        // .port(443)
         .build()
         .run()
         .await;
