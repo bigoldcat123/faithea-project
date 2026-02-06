@@ -44,11 +44,11 @@ pub fn handlers(input: TokenStream) -> TokenStream {
 }
 
 
-#[proc_macro_derive(MultipartData)]
+#[proc_macro_derive(MultipartData,attributes(faithea))]
 pub fn derive_multipart_data(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    match expand_multipart(&input) {
+    match expand_multipart(& input) {
         Ok(ts) => ts,
         Err(e) => e.to_compile_error().into(),
     }

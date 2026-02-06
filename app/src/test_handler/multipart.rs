@@ -21,6 +21,7 @@ impl TryFromPart for A {
 
 #[derive(MultipartData, Debug)]
 struct StuInfo {
+    #[faithea(rename="otherInfo")]
     pub other_info: A,
     pub name: Vec<String>,
     pub age: i32,

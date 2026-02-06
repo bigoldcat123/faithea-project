@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{Data, DeriveInput, Error, Fields};
+use quote::{ quote};
+use syn::{Attribute, Data, DeriveInput, Error, Expr, Fields, Lit};
 
 // fn is_option(ty: &Type) -> bool {
 //     if let Type::Path(p) = ty
@@ -36,8 +36,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
 
     let assigns = named_fields.iter().map(|f| {
         let field_ident = f.ident.as_ref().unwrap();
-        let field_name = field_ident.to_string();
-
+        let field_name = extra_rename(&f.attrs).unwrap_or(field_ident.to_string());
         quote! {
             #field_ident: data
                 .remove(#field_name)
@@ -61,4 +60,30 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
         }
     }
     .into())
+}
+
+fn extra_rename(attr: & Vec<Attribute>) -> Option<String> {
+    for i in 0..attr.len() {
+        let a = &attr[i];
+        let m = &a.meta;
+        let m_name = quote! {#m}.to_string();
+        if m_name.starts_with("faithea") {
+            let a = a.parse_args::<Expr>().unwrap();
+            if let Expr::Assign(asign) = a {
+                if let Expr::Path(left) = asign.left.as_ref()
+                    && let Expr::Lit(right) = asign.right.as_ref()
+                {
+                    if let Some(rename) = left.path.get_ident() {
+                        if rename == "rename" {
+                            if let Lit::Str(l) = &right.lit {
+                                return Some(l.value().clone())
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
+    None
 }
