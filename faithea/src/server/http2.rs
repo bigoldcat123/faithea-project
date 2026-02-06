@@ -59,15 +59,14 @@ impl H2Server {
         _addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        log::info!("client {} enter", _addr);
+        log::debug!("client {} enter", _addr);
 
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
             if let Err(e) = process(socket, guards, handlers,error_handler).await {
-                log::error!("{:?}", e);
+                log::debug!("{:?}", e);
             }
-            log::info!("client {} left", _addr);
         });
 
         Ok(())

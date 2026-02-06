@@ -65,14 +65,13 @@ impl H1Server {
         addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn Error>> {
-        log::info!("new client -> {}", addr);
+        log::debug!("new client -> {}", addr);
         let handlers = Arc::clone(&self.handlers);
         let guards = Arc::clone(&self.guards);
         tokio::spawn(async move {
             if let Err(e) = process(socket, handlers, guards, error_handler).await {
-                log::error!("{:?}", e)
+                log::debug!("{:?}", e)
             }
-            log::info!(" client left -> {}", addr);
         });
         Ok(())
     }
