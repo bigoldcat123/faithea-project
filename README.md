@@ -53,8 +53,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-faithea = "0.1.6"
-tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
+faithea = "0.1.8"
+tokio = { version = "1.48.0", features = ["rt-multi-thread","macros"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
