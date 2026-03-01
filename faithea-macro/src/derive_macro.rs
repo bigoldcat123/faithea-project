@@ -62,6 +62,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
     .into())
 }
 
+// #[faithea(rename="newName")]
 fn extra_rename(attr: & Vec<Attribute>) -> Option<String> {
     for i in 0..attr.len() {
         let a = &attr[i];

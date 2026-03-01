@@ -32,7 +32,7 @@ async fn file() {
 ```rust
 #[get("/searchParam")]
 async fn search_param(
-    #[search_param] name: usize,
+    #[search_param("Name")] name: usize,
     #[search_param] age: String,
 ) {
     println!("name: {}, age:{}, }",name,age,);
@@ -75,6 +75,7 @@ async fn search_params_and_path_params_and_json(
 ```rust
 #[derive(MultipartData, Debug)]
 struct StuInfo {
+    #[faithea(rename="otherInfo")]
     pub name: String,
     pub age: i32,
     pub merried: Option<bool>,
