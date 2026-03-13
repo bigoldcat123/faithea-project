@@ -5,7 +5,7 @@ use faithea::{
     websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
 };
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncWriteExt, sync::{Mutex, mpsc::Sender}};
+use tokio::{sync::{Mutex, mpsc::Sender}};
 
 static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));

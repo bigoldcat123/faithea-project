@@ -41,7 +41,9 @@ impl From<u8> for WebSocketMessageType {
             0x8 => WebSocketMessageType::Close,
             0x9 => WebSocketMessageType::Ping,
             0xA => WebSocketMessageType::Pong,
-            _ => panic!("Invalid WebSocket opcode: 0x{:02X}", value),
+            _ => {
+                // unknown error close the connection.
+                WebSocketMessageType::Close},
         }
     }
 }
