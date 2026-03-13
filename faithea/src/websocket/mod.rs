@@ -151,7 +151,6 @@ impl ParserInnserState {
         if self.buf.remaining() < 2 {
             return false;
         }
-        let mut ad = 0;
         let (msg_type, msg_finished) = self.parse_frame_header();
         self.current_message_type = msg_type;
 
