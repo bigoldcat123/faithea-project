@@ -8,6 +8,20 @@ use crate::{server::BytesSource, websocket::data::WebSocketDataPayLoad};
 pub mod data;
 pub mod socket;
 
+// WebSocket Frame Constants (RFC 6455)
+/// FIN bit mask: indicates this is the final fragment in a message
+const FIN_BIT_MASK: u8 = 0x80;
+/// Opcode mask: extracts the 4-bit opcode from the first byte
+const OPCODE_MASK: u8 = 0x0F;
+/// Payload length mask: extracts the 7-bit payload length from the second byte
+const PAYLOAD_LEN_MASK: u8 = 0x7F;
+/// Extended payload length indicator: 126 means 16-bit length follows
+const EXTENDED_LEN_16: usize = 126;
+/// Extended payload length indicator: 127 means 64-bit length follows
+const EXTENDED_LEN_64: usize = 127;
+/// Mask key length in bytes
+const MASK_KEY_LEN: usize = 4;
+
 #[derive(Debug,PartialEq, Eq)]
 enum WebSocketActorState {
     Head,
@@ -33,7 +47,7 @@ enum WebSocketMessageType {
 }
 impl From<u8> for WebSocketMessageType {
     fn from(value: u8) -> Self {
-        match value & 0x0F {
+        match value & OPCODE_MASK {
             // 取最后4位（操作码）
             0x0 => WebSocketMessageType::Continuation,
             0x1 => WebSocketMessageType::Text,
@@ -142,27 +156,26 @@ impl ParserInnserState {
         let p = self.buf.get_u8();
 
         self.current_message_type = WebSocketMessageType::from(p);
-        let msg_finished = p & 0x80 == 0x80;
+        let msg_finished = p & FIN_BIT_MASK == FIN_BIT_MASK;
 
         if self.current_message_type == WebSocketMessageType::Close {
             self.machine_state = WebSocketActorState::ConnectionClose;
             return true;
         }
 
-        let mut len = (self.buf.get_u8() & 0x7f) as usize;
-        if len == 126 {
+        let mut len = (self.buf.get_u8() & PAYLOAD_LEN_MASK) as usize;
+        if len == EXTENDED_LEN_16 {
             if self.buf.remaining() < 2 {
                 return false;
             }
             len = self.buf.get_u16() as usize;
-        } else if len == 127 {
+        } else if len == EXTENDED_LEN_64 {
             if self.buf.remaining() < 8 {
                 return false;
             }
             len = self.buf.get_u64() as usize;
         }
-        log::info!("{} {} {:?}",len,msg_finished,self.current_message_type);
-        if self.buf.remaining() < 4 {
+        if self.buf.remaining() < MASK_KEY_LEN {
             return false;
         }
         let mask = [
@@ -190,7 +203,7 @@ impl ParserInnserState {
         let mut real = vec![];
         let new_msg_len = self.buf.len().min(remain);
         for (i, &d) in self.buf[..new_msg_len].iter().enumerate() {
-            real.push(d ^ mask[(i + self.message.len()) % 4]);
+            real.push(d ^ mask[(i + self.message.len()) % MASK_KEY_LEN]);
         }
         self.message.put(&real[..]);
         readed += new_msg_len;
