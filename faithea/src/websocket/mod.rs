@@ -128,7 +128,6 @@ impl ParserInnserState {
                                 .await;
                         }
                         Continuation => {
-                            log::info!("send continuation!");
                             self.send_incomming_message().await;
                         }
                         _ => {
@@ -152,38 +151,23 @@ impl ParserInnserState {
         if self.buf.remaining() < 2 {
             return false;
         }
+        let mut ad = 0;
+        let (msg_type, msg_finished) = self.parse_frame_header();
+        self.current_message_type = msg_type;
 
-        let p = self.buf.get_u8();
-
-        self.current_message_type = WebSocketMessageType::from(p);
-        let msg_finished = p & FIN_BIT_MASK == FIN_BIT_MASK;
-
-        if self.current_message_type == WebSocketMessageType::Close {
+        if msg_type == WebSocketMessageType::Close {
             self.machine_state = WebSocketActorState::ConnectionClose;
             return true;
         }
 
-        let mut len = (self.buf.get_u8() & PAYLOAD_LEN_MASK) as usize;
-        if len == EXTENDED_LEN_16 {
-            if self.buf.remaining() < 2 {
-                return false;
-            }
-            len = self.buf.get_u16() as usize;
-        } else if len == EXTENDED_LEN_64 {
-            if self.buf.remaining() < 8 {
-                return false;
-            }
-            len = self.buf.get_u64() as usize;
-        }
-        if self.buf.remaining() < MASK_KEY_LEN {
+        let Some(len) = self.parse_payload_length() else {
             return false;
-        }
-        let mask = [
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-            self.buf.get_u8(),
-        ];
+        };
+
+        let Some(mask) = self.parse_mask_key() else {
+            return false;
+        };
+
         self.machine_state = WebSocketActorState::Body {
             readed: 0,
             len,
@@ -191,6 +175,45 @@ impl ParserInnserState {
             msg_finished,
         };
         true
+    }
+
+    /// Parse first byte: returns (message_type, fin_bit)
+    fn parse_frame_header(&mut self) -> (WebSocketMessageType, bool) {
+        let p = self.buf.get_u8();
+        let msg_type = WebSocketMessageType::from(p);
+        let msg_finished = p & FIN_BIT_MASK == FIN_BIT_MASK;
+        (msg_type, msg_finished)
+    }
+
+    /// Parse payload length including extended length handling.
+    /// Returns None if insufficient data.
+    fn parse_payload_length(&mut self) -> Option<usize> {
+        let mut len = (self.buf.get_u8() & PAYLOAD_LEN_MASK) as usize;
+        if len == EXTENDED_LEN_16 {
+            if self.buf.remaining() < 2 {
+                return None;
+            }
+            len = self.buf.get_u16() as usize;
+        } else if len == EXTENDED_LEN_64 {
+            if self.buf.remaining() < 8 {
+                return None;
+            }
+            len = self.buf.get_u64() as usize;
+        }
+        Some(len)
+    }
+
+    /// Parse 4-byte mask key. Returns None if insufficient data.
+    fn parse_mask_key(&mut self) -> Option<[u8; 4]> {
+        if self.buf.remaining() < MASK_KEY_LEN {
+            return None;
+        }
+        Some([
+            self.buf.get_u8(),
+            self.buf.get_u8(),
+            self.buf.get_u8(),
+            self.buf.get_u8(),
+        ])
     }
     fn parse_body(
         &mut self,
