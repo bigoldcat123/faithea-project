@@ -111,7 +111,13 @@ impl ParserInnserState {
                                 .send(WebSocketDataPayLoad::_text(b"pong"[..].into()))
                                 .await;
                         }
-                        _ => {}
+                        Continuation => {
+                            log::info!("send continuation!");
+                            self.send_incomming_message().await;
+                        }
+                        _ => {
+                            log::info!("unknow what todo for {:?}",self.current_message_type)
+                        }
                     }
 
                     break;
@@ -153,6 +159,7 @@ impl ParserInnserState {
             }
             len = self.buf.get_u64() as usize;
         }
+        log::info!("{} {} {:?}",len,msg_finished,self.current_message_type);
         if self.buf.remaining() < 4 {
             return false;
         }
@@ -187,7 +194,7 @@ impl ParserInnserState {
         readed += new_msg_len;
         let _ = self.buf.split_to(new_msg_len);
         if readed == len {
-            if self.current_message_type == WebSocketMessageType::Continuation {
+            if !msg_finished {
                 self.machine_state = WebSocketActorState::Head;
             } else {
                 self.machine_state = WebSocketActorState::Finished;

@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use faithea::{request::HttpRequest, websocket::{data::WebSocketDataPayLoad, socket::WebSocket}};
-use serde::{Deserialize, Serialize};
-use tokio::sync::{
-    Mutex,
-    mpsc::Sender,
+use faithea::{
+    request::HttpRequest,
+    websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
 };
+use serde::{Deserialize, Serialize};
+use tokio::{io::AsyncWriteExt, sync::{Mutex, mpsc::Sender}};
 
 static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -18,22 +18,22 @@ struct WsDataMessage {
     content: String,
 }
 
-pub async fn ws(
-    websocket: WebSocket,
-    req: HttpRequest,
-) {
-    let  (mut r,s) = websocket.split();
+pub async fn ws(websocket: WebSocket, req: HttpRequest) {
+    let (mut r, s) = websocket.split();
     let name = req.get_pathparam("name").unwrap();
     {
         let mut map = WS_SENDERS.lock().await;
         map.insert(name.clone(), s.clone());
     }
     while let Some(msg) = r.recv().await {
-        let data = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()).unwrap();
-        let map = WS_SENDERS.lock().await;
-        if let Some(sender) = map.get(&data.to) {
-            let a:String = serde_json::to_string(&data).unwrap();
-            sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
+        if let Ok(data) = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()) {
+            let map = WS_SENDERS.lock().await;
+            if let Some(sender) = map.get(&data.to) {
+                let a: String = serde_json::to_string(&data).unwrap();
+                sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
+            }
+        }else {
+            log::error!("parsing json error");
         }
     }
 }

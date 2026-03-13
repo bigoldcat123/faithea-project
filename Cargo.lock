@@ -177,6 +177,7 @@ dependencies = [
  "bytes",
  "env_logger",
  "faithea",
+ "log",
  "serde",
  "serde_json",
  "sqlx",
