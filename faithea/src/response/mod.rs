@@ -1,6 +1,8 @@
 pub mod cookie;
 pub mod redirect;
 pub mod cors;
+pub mod stream;
+pub mod sse;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
@@ -137,6 +139,7 @@ pub enum ResponseBody {
     #[default]
     Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
+    Stream(Receiver<Bytes>)
 }
 
 impl ResponseBody {
@@ -158,6 +161,13 @@ impl ResponseBody {
                 body_stream.reserve_capacity(b.len());
                 body_stream.send_data(b, true)?;
             }
+            Stream(mut r) => {
+                while let Some(r) = r.recv().await {
+                    body_stream.reserve_capacity(r.len());
+                    body_stream.send_data(r, false)?;
+                }
+                body_stream.send_data(Bytes::new(), true)?;
+            }
             File(mut f) => {
                 let mut buf = BytesMut::with_capacity(4096);
                 while let Ok(n) = f.read_buf(&mut buf).await {
@@ -169,7 +179,7 @@ impl ResponseBody {
                     body_stream.send_data(buf.split_to(n).freeze(), false)?;
                 }
             }
-            Empty => {}
+
             WsBody(mut receiver) => {
                 tokio::spawn(async move {
                     while let Some(b) = receiver.recv().await {
@@ -177,6 +187,7 @@ impl ResponseBody {
                     }
                 });
             }
+            _ => {}
         }
 
         Ok(())
@@ -193,14 +204,18 @@ impl ResponseBody {
             File(f) => {
                 tokio::io::copy(f, socket).await?;
             }
-            Empty => {
-                // No body to write
+
+            Stream(r) => {
+                while let Some(mut r) = r.recv().await {
+                    socket.write_all_buf(&mut r).await?;
+                }
             }
             WsBody(receiver) => {
                 while let Some(_payload) = receiver.recv().await {
                     _payload.serialize_to_socket(socket).await?;
                 }
             }
+            _ => {}
         }
         socket.flush().await?;
         Ok(())
