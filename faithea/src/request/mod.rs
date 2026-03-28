@@ -162,6 +162,10 @@ impl HttpRequest {
         }
     }
 
+    pub fn uri(&self) -> &Uri {
+        self._inner.uri()
+    }
+
     pub fn get_search_param<S: AsRef<str>>(&self, _key: S) -> Option<&String> {
         if let Some(s) = self.search_param.as_ref() {
             s._inner.get(_key.as_ref())
