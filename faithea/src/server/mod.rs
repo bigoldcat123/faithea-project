@@ -1,6 +1,7 @@
 pub mod builder;
 mod http1;
 mod http2;
+mod parser;
 use std::{error::Error, sync::Arc};
 
 use bytes::{BufMut, BytesMut};

@@ -21,6 +21,7 @@ async fn main() {
         .globale_error_handler(async |e: faithea::error::Error| {
             res_modifiers!(format!("some error~~ {:?}", e))
         })
+        .static_map("/static/**","/path/to/your/dir")
         // .tls(
         //     "/Users/dadigua/Desktop/graduation/key.pem",
         //     "/Users/dadigua/Desktop/graduation/cert.pem",

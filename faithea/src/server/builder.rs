@@ -81,6 +81,9 @@ impl HttpServerBuilder {
         self.error_handler = Some(Box::new(move |err| Box::pin(handler(err))));
         self
     }
+    pub fn static_map(mut self,url_prefix:&str,path_to_dir:&str) -> Self {
+        self
+    }
     pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self
     where
         F: RawGuardTrait<O>,
