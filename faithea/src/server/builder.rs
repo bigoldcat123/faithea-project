@@ -13,7 +13,10 @@ use http::{
         ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
     },
 };
-use rustls::{crypto::{ ring}, pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject}};
+use rustls::{
+    crypto::ring,
+    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+};
 use tokio_rustls::TlsAcceptor;
 
 use crate::{
@@ -23,6 +26,7 @@ use crate::{
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
     server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
+    util::static_map,
     websocket::socket::WebSocket,
 };
 pub trait GlobaleHandlerResponseRaw: Future<Output = ResponseModifier> + Send + 'static {}
@@ -48,7 +52,9 @@ pub(crate) struct TlsConfig {
 
 impl TlsConfig {
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, Box<dyn Error>> {
-        ring::default_provider().install_default().expect("install ring");
+        ring::default_provider()
+            .install_default()
+            .expect("install ring");
         let certs =
             CertificateDer::pem_file_iter(self.cert.as_path())?.collect::<Result<Vec<_>, _>>()?;
         let key = PrivateKeyDer::from_pem_file(self.key.as_path())?;
@@ -81,7 +87,15 @@ impl HttpServerBuilder {
         self.error_handler = Some(Box::new(move |err| Box::pin(handler(err))));
         self
     }
-    pub fn static_map(mut self,url_prefix:&str,path_to_dir:&str) -> Self {
+    pub fn static_map(mut self, url_prefix: &str, path_to_dir: &'static str) -> Self {
+        // let path_to_dir = path_to_dir.to_string();
+        self.handlers
+            .get(url_prefix, move |req: HttpRequest| async move {
+                let mut a = static_map(&req, path_to_dir).await;
+                let mut res = HttpResponse::new();
+                a.modify(&mut res).await?;
+                Ok(res)
+            });
         self
     }
     pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self

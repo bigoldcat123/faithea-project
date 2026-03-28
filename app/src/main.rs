@@ -1,8 +1,7 @@
 // #![allow(unused)]
-use chenzhonghai_app::static_file_map::file_map;
 use chenzhonghai_app::test_handler::test_handlers;
-use chenzhonghai_app::{ws::ws};
-use faithea::{handlers, res_modifiers, server::HttpServer};
+use chenzhonghai_app::ws::ws;
+use faithea::{res_modifiers, server::HttpServer};
 
 //(flavor = "current_thread")
 #[tokio::main(flavor = "current_thread")]
@@ -10,7 +9,7 @@ async fn main() {
     env_logger::init();
     let r = HttpServer::builder()
         .mount("/", test_handlers())
-        .mount("/static", handlers!(file_map))
+        // .mount("/static", handlers!(file_map))
         .cors()
         .guard("/protected/**", async |req| Ok(req))
         .guard("/**", async |e| {
@@ -21,7 +20,10 @@ async fn main() {
         .globale_error_handler(async |e: faithea::error::Error| {
             res_modifiers!(format!("some error~~ {:?}", e))
         })
-        .static_map("/static/**","/path/to/your/dir")
+        .static_map(
+            "/static/**",
+            "/Users/dadigua/Desktop/graduation/front-end-app",
+        )
         // .tls(
         //     "/Users/dadigua/Desktop/graduation/key.pem",
         //     "/Users/dadigua/Desktop/graduation/cert.pem",
