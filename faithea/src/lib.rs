@@ -129,7 +129,7 @@ pub type ResponseModifier = Vec<Box<dyn crate::response::HttpResponseModifier + 
 
 #[macro_export]
 macro_rules! res_modifiers {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         {
             let a:$crate::ResponseModifier = vec![
                $( Box::new($e),)*
