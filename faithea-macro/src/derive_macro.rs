@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{ quote};
+use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Error, Expr, Fields, Lit};
 
 // fn is_option(ty: &Type) -> bool {
@@ -63,25 +63,20 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
 }
 
 // #[faithea(rename="newName")]
-fn extra_rename(attr: & Vec<Attribute>) -> Option<String> {
-    for i in 0..attr.len() {
-        let a = &attr[i];
+fn extra_rename(attr: &Vec<Attribute>) -> Option<String> {
+    for a in attr {
         let m = &a.meta;
         let m_name = quote! {#m}.to_string();
         if m_name.starts_with("faithea") {
             let a = a.parse_args::<Expr>().unwrap();
-            if let Expr::Assign(asign) = a {
-                if let Expr::Path(left) = asign.left.as_ref()
-                    && let Expr::Lit(right) = asign.right.as_ref()
-                {
-                    if let Some(rename) = left.path.get_ident() {
-                        if rename == "rename" {
-                            if let Lit::Str(l) = &right.lit {
-                                return Some(l.value().clone())
-                            }
-                        }
-                    }
-                }
+            if let Expr::Assign(asign) = a
+                && let Expr::Path(left) = asign.left.as_ref()
+                && let Expr::Lit(right) = asign.right.as_ref()
+                && let Some(rename) = left.path.get_ident()
+                && rename == "rename"
+                && let Lit::Str(l) = &right.lit
+            {
+                return Some(l.value().clone());
             }
             break;
         }
