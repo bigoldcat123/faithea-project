@@ -1,8 +1,10 @@
-use faithea::{
-    data::inbound::multipart::{MultiPartFile, Multipart, Part, TryFromPart},
-    handler::types::HttpHandlerError,
-    MultipartData, post,
-};
+use faithea::post;
+use faithea::data::inbound::multipart::Multipart;
+use faithea::handler::types::HttpHandlerError;
+use faithea::data::inbound::multipart::Part;
+use faithea::data::inbound::multipart::TryFromPart;
+use faithea::data::inbound::multipart::MultiPartFile;
+use faithea::MultipartData;
 
 #[derive(Debug)]
 pub struct A {
@@ -36,9 +38,6 @@ pub async fn multipart(data: Multipart<StuInfo>) {
         .iter()
         .map(|x| (x.file_name.clone(), x.temp_path.clone()))
         .collect::<Vec<_>>();
-    // assert_eq!(data.profile.len(), 16);
-    // assert_eq!(data.name.len(), 2);
-    // assert_eq!(data.other_info.value, "asd");
     format!(
         "name: {:?},age: {}, merried: {:?}, other_info:{:?},profile_len: {:?},  ",
         data.name, data.age, data.merried, data.other_info, f

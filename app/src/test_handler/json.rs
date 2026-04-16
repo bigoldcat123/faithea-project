@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use faithea::{data::Json, post};
+use faithea::{post};
+use faithea::data::Json;
 use serde::{Deserialize, Serialize};
 
 

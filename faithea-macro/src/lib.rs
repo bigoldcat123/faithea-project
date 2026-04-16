@@ -21,7 +21,7 @@ macro_rules! macro_define {
 macro_define!(get,post,delete,put);
 
 
-
+/// Vec<HandlerModifier>
 #[proc_macro]
 pub fn handlers(input: TokenStream) -> TokenStream {
     // 解析为 Path 列表（支持 ident 和 a::b::c）
