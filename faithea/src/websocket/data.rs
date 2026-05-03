@@ -9,7 +9,7 @@ use crate::websocket::WebSocketMessageType;
 
 pub struct WebSocketDataPayLoad {
     r#type: WebSocketMessageType,
-    _inner: Bytes,
+    pub(crate)  _inner: Bytes,
 }
 
 impl WebSocketDataPayLoad {
@@ -56,7 +56,7 @@ impl WebSocketDataPayLoad {
     pub fn as_str(&self) -> Result<&str, Utf8Error> {
         str::from_utf8(self.as_bytes())
     }
-    fn generate_head_frame(&self) -> Bytes {
+    pub(crate) fn generate_head_frame(&self) -> Bytes {
         let b = &self._inner;
         let mut buf = BytesMut::new();
         let op: u8 = self.r#type.into();

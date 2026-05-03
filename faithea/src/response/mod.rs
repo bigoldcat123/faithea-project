@@ -1,10 +1,12 @@
 pub mod cookie;
-pub mod redirect;
 pub mod cors;
-pub mod stream;
+pub mod redirect;
 pub mod sse;
+pub mod stream;
+use std::{pin::{ pin}, task::Poll};
+
 use base64::{Engine, prelude::BASE64_STANDARD};
-use bytes::{Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
     HeaderMap, HeaderValue, Response, StatusCode,
@@ -13,6 +15,7 @@ use http::{
         UPGRADE,
     },
 };
+use hyper::body::{Body, Frame};
 use sha1::{Digest, Sha1};
 use tokio::{
     fs::File,
@@ -21,7 +24,7 @@ use tokio::{
 };
 
 use crate::{
-    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
+    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::{self, WebSocketDataPayLoad},
 };
 
 #[derive(Default, Debug)]
@@ -70,7 +73,7 @@ impl HttpResponse {
         r._innser
             .headers_mut()
             .insert(CONTENT_LENGTH, HeaderValue::from_static("9"));
-        r.set_body(ResponseBody::Simple("not found".into()));
+        r.set_body(ResponseBody::Simple(Some("not found".into())));
         r
     }
     pub fn error(err_message: String) -> Self {
@@ -81,7 +84,7 @@ impl HttpResponse {
             CONTENT_LENGTH,
             HeaderValue::from_maybe_shared(body.len().to_string()).expect("impossible!"),
         );
-        r.set_body(ResponseBody::Simple(body));
+        r.set_body(ResponseBody::Simple(Some(body)));
         r
     }
     pub fn set_body(&mut self, body: ResponseBody) {
@@ -132,14 +135,15 @@ impl HttpResponse {
 #[derive(Default, Debug)]
 pub enum ResponseBody {
     /// In-memory byte data for small responses.
-    Simple(Bytes),
+    Simple(Option<Bytes>),
     /// File handle for streaming large responses efficiently.
     File(File),
     /// No body content.
     #[default]
+    #[deprecated]
     Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
-    Stream(Receiver<Bytes>)
+    Stream(Receiver<Bytes>),
 }
 
 impl ResponseBody {
@@ -157,7 +161,7 @@ impl ResponseBody {
     ) -> Result<(), Box<dyn std::error::Error>> {
         use ResponseBody::*;
         match self {
-            Simple(b) => {
+            Simple(Some(b)) => {
                 body_stream.reserve_capacity(b.len());
                 body_stream.send_data(b, true)?;
             }
@@ -198,7 +202,7 @@ impl ResponseBody {
     ) -> Result<(), Box<dyn std::error::Error>> {
         use self::ResponseBody::*;
         match self {
-            Simple(b) => {
+            Simple(Some(b)) => {
                 socket.write_all_buf(b).await?;
             }
             File(f) => {
@@ -219,6 +223,61 @@ impl ResponseBody {
         }
         socket.flush().await?;
         Ok(())
+    }
+}
+
+impl Body for ResponseBody {
+    type Data = Bytes;
+    type Error = crate::error::Error;
+    // fn is_end_stream(&self) -> bool {
+
+    // }
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match *self {
+            ResponseBody::Simple(ref mut bytes) => {
+                if let Some(bytes) = bytes.take() {
+                    Poll::Ready(Some(Ok(Frame::data(bytes))))
+                } else {
+                    Poll::Ready(None)
+                }
+            }
+            ResponseBody::File(ref mut file) => {
+                let mut buf = BytesMut::with_capacity(2048);
+                pin!(file.read_buf(&mut buf))
+                    .poll(cx)
+                    .map(|_| Some(Ok(Frame::data(buf.freeze()))))
+            }
+            ResponseBody::Stream(ref mut steam) => {
+                match steam.poll_recv(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(data) => {
+                        Poll::Ready(data.map(|data| Ok(Frame::data(data))))
+                    }
+                }
+            }
+            ResponseBody::WsBody(ref mut steam) => {
+                match steam.poll_recv(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(data) => {
+                        if let Some(data) = data {
+                            let head = data.generate_head_frame();
+                            let body = data._inner;
+                            let mut res = BytesMut::with_capacity(head.len() + body.len());
+                            res.put(head);
+                            res.put(body);
+                            let combined: Bytes = res.freeze(); // 变成不可变的 Bytes
+                            Poll::Ready(Some(Ok(Frame::data(combined))))
+                        }else {
+                            Poll::Ready(None)
+                        }
+                    }
+                }
+            }
+            _ => std::task::Poll::Pending,
+        }
     }
 }
 

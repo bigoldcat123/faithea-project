@@ -1,6 +1,7 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use bytes::BytesMut;
+use hyper::{server::conn::http1, service::service_fn};
 use tokio::{
     io::{AsyncRead, AsyncWrite, split},
     net::TcpListener,
@@ -8,14 +9,9 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire,
-    handler::HandlerTire,
-    request::{HttpRequest, is_websocket_upgrade},
-    response::HttpResponse,
-    server::{
-        builder::{GlobalErrorHandler, TlsConfig},
-        handle_upgrade_to_websocket, process_request,
-    },
+    guard::GuardTire, handler::HandlerTire, io::TokioIo, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{
+        ServerFuncProvider, builder::{GlobalErrorHandler, TlsConfig}, handle_upgrade_to_websocket, process_request
+    }, service::{self, my_service_fn}
 };
 
 pub struct H1Server {
@@ -27,6 +23,9 @@ pub struct H1Server {
     pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 impl H1Server {
+    fn fun_provider(&self) -> ServerFuncProvider {
+        ServerFuncProvider::new(self.handlers.clone(), self.guards.clone(), self.error_handler.clone())
+    }
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
         log::info!(
             "HTTP{} server starting on http{}://{}",
@@ -36,6 +35,9 @@ impl H1Server {
         );
         log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
+
+
+
         match self.tls {
             Some(ref cfg) => {
                 let acceptor = cfg.tls_acceptor()?;
@@ -43,6 +45,10 @@ impl H1Server {
                     if let Ok((socket, addr)) = server.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
+                        // let io = TokioIo::new(socket);
+                        // let _ = http1::Builder::new()
+                        //     .serve_connection(io, service_fn(crate::service::serve))
+                        //     .await;
                         let _ = self
                             .deal_with(socket, addr, self.error_handler.clone())
                             .await;
@@ -51,15 +57,20 @@ impl H1Server {
             }
             None => loop {
                 if let Ok((socket, addr)) = server.accept().await {
-                    let _ = self
-                        .deal_with(socket, addr, self.error_handler.clone())
+                    let io = TokioIo::new(socket);
+                    let _ = http1::Builder::new()
+                        .serve_connection(io, my_service_fn(service::serve,self.fun_provider()))
+                        .with_upgrades()
                         .await;
+                    // let _ = self
+                    //     .deal_with(socket, addr, self.error_handler.clone())
+                    //     .await;
                 }
             },
         }
     }
 
-    async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         &self,
         socket: IO,
         addr: SocketAddr,
@@ -83,6 +94,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     guards: Arc<GuardTire>,
     error_handler: Option<Arc<GlobalErrorHandler>>,
 ) -> Result<(), String> {
+
     let (mut reader, mut writer) = split(socket);
     let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
 

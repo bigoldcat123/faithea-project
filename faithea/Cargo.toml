@@ -25,3 +25,5 @@ h2 = "0.4.12"
 base64 = "0.22.1"
 sha1 = "0.10.6"
 log = "0.4.29"
+hyper = { version = "1.9.0", features = ["http1", "server"] }
+pin-project-lite = "0.2.17"

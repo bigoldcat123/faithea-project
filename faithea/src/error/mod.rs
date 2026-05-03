@@ -119,7 +119,7 @@ impl HttpResponseModifier for Error {
             let b = format!("{:?}", self).as_bytes().to_vec();
             let b = Bytes::from(b);
             res.add_header(CONTENT_LENGTH, b.len().to_string().parse()?);
-            res.set_body(ResponseBody::Simple(b));
+            res.set_body(ResponseBody::Simple(Some(b)));
             Ok(())
         })
     }

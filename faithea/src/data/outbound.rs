@@ -16,7 +16,7 @@ impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = HttpHandlerError;
     fn try_from(value: &Json<T>) -> Result<Self, Self::Error> {
         let res = serde_json::to_vec(value)?;
-        Ok(Self::Simple(Bytes::from(res)))
+        Ok(Self::Simple(Some(Bytes::from(res))))
     }
 }
 impl<T: Serialize> TryFrom<&mut Json<T>> for ResponseBody {
@@ -40,7 +40,7 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
                 HeaderValue::from_maybe_shared("application/json").map_err(map_fu!())?,
             );
             let body = self.try_into()?;
-            if let Simple(ref b) = body {
+            if let Simple(Some(ref b)) = body {
                 res.add_header(
                     CONTENT_LENGTH,
                     HeaderValue::from_maybe_shared(b.len().to_string())?,
@@ -72,7 +72,7 @@ impl HttpResponseModifier for &str {
                 HeaderValue::from_maybe_shared(self.len().to_string()).map_err(map_fu!())?,
             );
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
-            res.set_body(ResponseBody::Simple(b));
+            res.set_body(ResponseBody::Simple(Some(b)));
             Ok(())
         })
     }
@@ -95,7 +95,7 @@ impl HttpResponseModifier for String {
                 HeaderValue::from_maybe_shared(self.len().to_string()).map_err(map_fu!())?,
             );
             let b: Bytes = Bytes::from_iter(self.as_bytes().iter().copied());
-            res.set_body(ResponseBody::Simple(b));
+            res.set_body(ResponseBody::Simple(Some(b)));
             Ok(())
         })
     }
