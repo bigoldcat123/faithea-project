@@ -59,7 +59,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                     self.parse_body().await?;
                 }
                 End => return {
-                    log::debug!("END");
                     Ok(RequestBody::MultiPart(self.generate_multipart()))},
             }
         }
@@ -165,7 +164,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     }
 
     fn body_ends(&self) -> bool {
-        log::debug!("{} {}",self.buf.len(),self.r.is_end());
         &self.buf[..] == b"\r\n" && self.r.is_end()
     }
 
@@ -212,7 +210,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         self.state
     }
     async fn parse_body(&mut self) -> Result<(), String> {
-        log::debug!("parse_body");
         let key_name = self
             .header_info
             .name
@@ -243,7 +240,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         self.map.take().unwrap()
     }
     async fn parse_header(&mut self) -> Result<(), String> {
-        log::debug!("parse_header");
         let header_len;
         loop {
             let (inner_is_ok, inner_header_len) = self.check_mutipart_header();
@@ -268,7 +264,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         Ok(())
     }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
-        log::debug!("remove_mutipart_body_prefix");
         // remove pre_fix
         while self.buf.len() < self.boundary.len() + 2 {
             let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;

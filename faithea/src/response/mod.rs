@@ -248,7 +248,17 @@ impl Body for ResponseBody {
                 let mut buf = BytesMut::with_capacity(2048);
                 pin!(file.read_buf(&mut buf))
                     .poll(cx)
-                    .map(|_| Some(Ok(Frame::data(buf.freeze()))))
+                    .map(|res| {
+                        if let Ok(size) = res {
+                            if size != 0 {
+                                Some(Ok(Frame::data(buf.freeze())))
+                            }else {
+                                None
+                            }
+                        }else {
+                            None
+                        }
+                    })
             }
             ResponseBody::Stream(ref mut steam) => {
                 match steam.poll_recv(cx) {
@@ -276,7 +286,7 @@ impl Body for ResponseBody {
                     }
                 }
             }
-            _ => std::task::Poll::Pending,
+            _ => std::task::Poll::Ready(None),
         }
     }
 }

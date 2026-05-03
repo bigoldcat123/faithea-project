@@ -27,6 +27,7 @@ pub async fn serve(
     req: Request<Incoming>,
     provider: ServerFuncProvider,
 ) -> Result<Response<ResponseBody>, crate::error::Error> {
+    let uri = req.uri().clone();
     let (parts, body) = req.into_parts();
 
     let bs = HyperIncommingBytesSource::new(body);
@@ -42,8 +43,12 @@ pub async fn serve(
     }
 
     match guard_request(provider.guards().clone(), req).await {
-        Ok(req) => handle_request(provider.handlers(), req, provider.error_handler()).await,
-        Err(res) => Ok(res._innser),
+        Ok(req) => {
+            handle_request(provider.handlers(), req, provider.error_handler()).await
+        },
+        Err(res) => {
+            Ok(res._innser)
+        },
     }
 }
 async fn handle_request(

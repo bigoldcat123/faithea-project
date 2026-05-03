@@ -1,7 +1,7 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use bytes::BytesMut;
-use hyper::{server::conn::http1, service::service_fn};
+use hyper::{server::conn::http1};
 use tokio::{
     io::{AsyncRead, AsyncWrite, split},
     net::TcpListener,
@@ -9,9 +9,17 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire, handler::HandlerTire, io::TokioIo, request::{HttpRequest, is_websocket_upgrade}, response::HttpResponse, server::{
-        ServerFuncProvider, builder::{GlobalErrorHandler, TlsConfig}, handle_upgrade_to_websocket, process_request
-    }, service::{self, my_service_fn}
+    guard::GuardTire,
+    handler::HandlerTire,
+    io::TokioIo,
+    request::{HttpRequest, is_websocket_upgrade},
+    response::HttpResponse,
+    server::{
+        ServerFuncProvider,
+        builder::{GlobalErrorHandler, TlsConfig},
+        handle_upgrade_to_websocket, process_request,
+    },
+    service::{self, my_service_fn},
 };
 
 pub struct H1Server {
@@ -24,7 +32,11 @@ pub struct H1Server {
 }
 impl H1Server {
     fn fun_provider(&self) -> ServerFuncProvider {
-        ServerFuncProvider::new(self.handlers.clone(), self.guards.clone(), self.error_handler.clone())
+        ServerFuncProvider::new(
+            self.handlers.clone(),
+            self.guards.clone(),
+            self.error_handler.clone(),
+        )
     }
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
         log::info!(
@@ -35,8 +47,6 @@ impl H1Server {
         );
         log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
-
-
 
         match self.tls {
             Some(ref cfg) => {
@@ -57,32 +67,33 @@ impl H1Server {
             }
             None => loop {
                 if let Ok((socket, addr)) = server.accept().await {
-                    let io = TokioIo::new(socket);
-                    let _ = http1::Builder::new()
-                        .serve_connection(io, my_service_fn(service::serve,self.fun_provider()))
-                        .with_upgrades()
-                        .await;
-                    // let _ = self
-                    //     .deal_with(socket, addr, self.error_handler.clone())
-                    //     .await;
+                    let provider = self.fun_provider();
+                    tokio::spawn(async move {
+                        let io = TokioIo::new(socket);
+                        let res = http1::Builder::new()
+                            .serve_connection(io, my_service_fn(service::serve, provider))
+                            .with_upgrades()
+                            .await;
+                        if let Err(e) = res {
+                            log::error!("{e:?}");
+                        }
+                    });
+
                 }
             },
         }
     }
 
-async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+    async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         &self,
         socket: IO,
         addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn Error>> {
-        log::debug!("new client -> {}", addr);
         let handlers = Arc::clone(&self.handlers);
         let guards = Arc::clone(&self.guards);
         tokio::spawn(async move {
-            if let Err(e) = process(socket, handlers, guards, error_handler).await {
-                log::debug!("{:?}", e)
-            }
+            if let Err(e) = process(socket, handlers, guards, error_handler).await {}
         });
         Ok(())
     }
@@ -94,7 +105,6 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
     guards: Arc<GuardTire>,
     error_handler: Option<Arc<GlobalErrorHandler>>,
 ) -> Result<(), String> {
-
     let (mut reader, mut writer) = split(socket);
     let (tx, mut rx) = mpsc::channel::<HttpResponse>(10);
 
