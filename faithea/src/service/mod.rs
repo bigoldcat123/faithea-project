@@ -1,58 +1,49 @@
-use std::{
-    error::Error,
-    marker::PhantomData,
-    pin::pin,
-    sync::{Arc, mpsc::Sender},
-};
+pub(crate) mod h2;
+use std::{marker::PhantomData, sync::Arc};
 
 use bytes::BytesMut;
 use http::{
-    Request, Response, header::{
-        CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION,
-        UPGRADE,
-    },
+    Request, Response,
+    header::{CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
 };
 use hyper::{
     body::{Body, Incoming},
     service::Service,
     upgrade::Upgraded,
 };
-use tokio::{io::{AsyncWriteExt, split}, sync::Mutex};
+use tokio::io::{AsyncWriteExt, split};
 
 use crate::{
-    handler::{HandlerTire, types::{Handler, HttpHandler}}, io::TokioIo, request::{HttpRequest, RequestBody}, response::{HttpResponse, HttpResponseModifier, ResponseBody}, route::Route, server::{
-        Http1BytesSource, Http2BytesSource, HyperIncommingBytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request
-    }, websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket}
+    handler::{
+        HandlerTire,
+        types::{Handler, HttpHandler},
+    },
+    io::TokioIo,
+    request::HttpRequest,
+    response::{HttpResponse, HttpResponseModifier, ResponseBody},
+    route::Route,
+    server::{
+        Http1BytesSource, HyperIncommingBytesSource, ServerFuncProvider,
+        builder::GlobalErrorHandler, guard_request,
+    },
+    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
-pub async fn serve(
+pub async fn serve_http1(
     req: Request<Incoming>,
     provider: ServerFuncProvider,
 ) -> Result<Response<ResponseBody>, crate::error::Error> {
     if is_websocket_upgrade_hyper(&req) {
-        let (parts, body) = req.into_parts();
-        let req2 = HttpRequest::new(parts.clone(), None);
-         let http_req = HttpRequest::new(parts, None);
-
-         let response = HttpResponse::websocket_response(&http_req);
-        let mut req = match guard_request(provider.guards(), http_req).await {
-            Ok(req) => Request::from_parts(req._inner.into_parts().0, body),
-            Err(e) => {return Ok(e._innser);}
-        };
-        tokio::task::spawn(async move {
-            match hyper::upgrade::on(&mut req).await {
-                Ok(upgraded) => {
-                    if let Err(e) = server_upgraded_io(upgraded,req2,provider).await {
-                    };
-                }
-                Err(e) => eprintln!("upgrade error: {}", e),
-            }
-        });
-        return Ok(response._innser)
+        handle_websocket(req, provider.clone()).await
+    } else {
+        handle_http(req, provider).await
     }
-
+}
+async fn handle_http(
+    req: Request<Incoming>,
+    provider: ServerFuncProvider,
+) -> Result<Response<ResponseBody>, crate::error::Error> {
     let (parts, body) = req.into_parts();
-
     let bs = HyperIncommingBytesSource::new(body);
     let mut buf = BytesMut::with_capacity(4096);
 
@@ -70,14 +61,40 @@ pub async fn serve(
         Err(res) => Ok(res._innser),
     }
 }
+async fn handle_websocket(
+    req: Request<Incoming>,
+    provider: ServerFuncProvider,
+) -> Result<Response<ResponseBody>, crate::error::Error> {
+    let (parts, body) = req.into_parts();
+    let req2 = HttpRequest::new(parts.clone(), None);
+    let http_req = HttpRequest::new(parts, None);
+
+    let response = HttpResponse::websocket_response(&http_req);
+    let mut req = match guard_request(provider.guards(), http_req).await {
+        Ok(req) => Request::from_parts(req._inner.into_parts().0, body),
+        Err(e) => {
+            return Ok(e._innser);
+        }
+    };
+    tokio::task::spawn(async move {
+        match hyper::upgrade::on(&mut req).await {
+            Ok(upgraded) => {
+                if let Err(e) = server_upgraded_io(upgraded, req2, provider).await {
+
+                };
+            }
+            Err(e) => eprintln!("upgrade error: {}", e),
+        }
+    });
+    return Ok(response._innser);
+}
 async fn server_upgraded_io(
     upgrade: Upgraded,
-    mut req:HttpRequest,
+    mut req: HttpRequest,
     provider: ServerFuncProvider,
 ) -> Result<(), ()> {
-
-    let  upgraded = TokioIo::new(upgrade);
-    let (read,mut write) = split(upgraded);
+    let upgraded = TokioIo::new(upgrade);
+    let (read, mut write) = split(upgraded);
 
     let (outcomming_message_sender, mut outcomming_message_receiver) =
         tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
@@ -97,10 +114,9 @@ async fn server_upgraded_io(
     parser.start();
     let websocket = WebSocket::new(outcomming_message_sender, incomming_message_receiver);
 
-
-
-    if let Some((_matched_url, handler)) =
-        provider.handlers().get_handler(req._inner.uri().path(), req._inner.method().clone())
+    if let Some((_matched_url, handler)) = provider
+        .handlers()
+        .get_handler(req._inner.uri().path(), req._inner.method().clone())
     {
         req.process_routes(&_matched_url, &Route::from(req._inner.uri().path()));
 
@@ -110,12 +126,10 @@ async fn server_upgraded_io(
                 unreachable!()
             }
             Handler::WbeSocket(ws_handler) => {
-                ws_handler(websocket,req).await;
-            },
+                ws_handler(websocket, req).await;
+            }
         }
     }
-
-
 
     Ok(())
 }
@@ -141,7 +155,7 @@ async fn handle_request(
             Handler::Http(http_handler) => {
                 process_http_request(http_handler, req, error_handler).await
             }
-            Handler::WbeSocket(ws_handler) => unimplemented!(),
+            _ => unreachable!(),
         }
     } else {
         Ok(HttpResponse::not_found()._innser)

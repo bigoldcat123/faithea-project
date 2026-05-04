@@ -52,26 +52,33 @@ impl H1Server {
             Some(ref cfg) => {
                 let acceptor = cfg.tls_acceptor()?;
                 loop {
-                    if let Ok((socket, addr)) = server.accept().await
+                    if let Ok((socket, _addr)) = server.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
-                        // let io = TokioIo::new(socket);
-                        // let _ = http1::Builder::new()
-                        //     .serve_connection(io, service_fn(crate::service::serve))
+                        let provider = self.fun_provider();
+                        tokio::spawn(async move {
+                            let io = TokioIo::new(socket);
+                            let res = http1::Builder::new()
+                                .serve_connection(io, my_service_fn(service::serve_http1, provider))
+                                .with_upgrades()
+                                .await;
+                            if let Err(e) = res {
+                                log::error!("{e:?}");
+                            }
+                        });
+                        // let _ = self
+                        //     .deal_with(socket, addr, self.error_handler.clone())
                         //     .await;
-                        let _ = self
-                            .deal_with(socket, addr, self.error_handler.clone())
-                            .await;
                     }
                 }
             }
             None => loop {
-                if let Ok((socket, addr)) = server.accept().await {
+                if let Ok((socket, _addr)) = server.accept().await {
                     let provider = self.fun_provider();
                     tokio::spawn(async move {
                         let io = TokioIo::new(socket);
                         let res = http1::Builder::new()
-                            .serve_connection(io, my_service_fn(service::serve, provider))
+                            .serve_connection(io, my_service_fn(service::serve_http1, provider))
                             .with_upgrades()
                             .await;
                         if let Err(e) = res {
@@ -87,7 +94,7 @@ impl H1Server {
     async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         &self,
         socket: IO,
-        addr: SocketAddr,
+        _addr: SocketAddr,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Result<(), Box<dyn Error>> {
         let handlers = Arc::clone(&self.handlers);

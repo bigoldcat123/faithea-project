@@ -24,7 +24,7 @@ use tokio::{
 };
 
 use crate::{
-    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::{self, WebSocketDataPayLoad},
+    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
 };
 
 #[derive(Default, Debug)]
@@ -38,7 +38,7 @@ impl HttpResponse {
     pub fn new() -> Self {
         let _innser = Response::builder()
             // .version(Version::HTTP_2)
-            .body(ResponseBody::Empty)
+            .body(ResponseBody::Simple(None))
             .expect("impossible!!");
         Self { _innser }
     }

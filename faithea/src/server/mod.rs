@@ -5,7 +5,7 @@ mod parser;
 use std::{
     error::Error,
     future::poll_fn,
-    pin::{Pin, pin},
+    pin::Pin,
     sync::Arc,
 };
 
