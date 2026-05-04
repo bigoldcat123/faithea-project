@@ -28,7 +28,7 @@ pub enum RequestBody {
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
     WebSocketStreamBodyHttp2(RecvStream),
-    WebSocketStreamBodyHttp1(Mutex<Box<dyn AsyncRead + Send + 'static + Unpin>>),
+    WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
     // WebSocketStreamBodyHttp1Hyper(ReadHalf<TokioIo<Upgraded>>),
 }
 impl Debug for RequestBody {
