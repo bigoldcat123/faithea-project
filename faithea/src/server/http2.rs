@@ -63,7 +63,7 @@ impl H2Server {
                 let acceptor = cfg.tls_acceptor()?;
 
                 loop {
-                    if let Ok((socket, addr)) = listener.accept().await
+                    if let Ok((socket, _addr)) = listener.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
                         let io = TokioIo::new(socket);
@@ -84,16 +84,25 @@ impl H2Server {
                 }
             }
             None => loop {
-                if let Ok((socket, addr)) = listener.accept().await {
-                    let _ = self
-                        .deal_with(socket, addr, self.error_handler.clone())
-                        .await;
+                if let Ok((socket, _addr)) = listener.accept().await {
+                    let io = TokioIo::new(socket);
+                    let provider = ServerFuncProvider::new(
+                        self.handlers.clone(),
+                        self.guards.clone(),
+                        self.error_handler.clone(),
+                    );
+                    tokio::spawn(async move {
+                        let _ = http2::Builder::new(TokioExecutor)
+                            .enable_connect_protocol()
+                            .serve_connection(io, my_service_fn(service::h2::serve_http2, provider))
+                            .await;
+                    });
                 }
             },
         }
     }
 
-    async fn deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
+    async fn _deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         &self,
         socket: IO,
         _addr: SocketAddr,

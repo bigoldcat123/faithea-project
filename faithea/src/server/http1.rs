@@ -59,7 +59,7 @@ impl H1Server {
                         tokio::spawn(async move {
                             let io = TokioIo::new(socket);
                             let res = http1::Builder::new()
-                                .serve_connection(io, my_service_fn(service::serve_http1, provider))
+                                .serve_connection(io, my_service_fn(service::h1::serve_http1, provider))
                                 .with_upgrades()
                                 .await;
                             if let Err(e) = res {
@@ -78,14 +78,16 @@ impl H1Server {
                     tokio::spawn(async move {
                         let io = TokioIo::new(socket);
                         let res = http1::Builder::new()
-                            .serve_connection(io, my_service_fn(service::serve_http1, provider))
+                            .serve_connection(io, my_service_fn(service::h1::serve_http1, provider))
                             .with_upgrades()
                             .await;
                         if let Err(e) = res {
                             log::error!("{e:?}");
                         }
                     });
-
+                    // let _ = self
+                    //     .deal_with(socket, addr, self.error_handler.clone())
+                    //     .await;
                 }
             },
         }

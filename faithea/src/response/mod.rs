@@ -9,11 +9,10 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{BufMut, Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
-    HeaderMap, HeaderValue, Response, StatusCode,
-    header::{
+    HeaderMap, HeaderValue, Method, Response, StatusCode, header::{
         CONNECTION, CONTENT_LENGTH, IntoHeaderName, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY,
         UPGRADE,
-    },
+    }
 };
 use hyper::body::{Body, Frame};
 use sha1::{Digest, Sha1};
@@ -32,7 +31,7 @@ pub struct HttpResponse {
     // status_line: ResponseStatusLine,
     // headers: HttpHeader,
     // pub body: ResponseBody,
-    pub(crate) _innser: Response<ResponseBody>,
+    pub(crate) _inner: Response<ResponseBody>,
 }
 impl HttpResponse {
     pub fn new() -> Self {
@@ -40,22 +39,26 @@ impl HttpResponse {
             // .version(Version::HTTP_2)
             .body(ResponseBody::Simple(None))
             .expect("impossible!!");
-        Self { _innser }
+        Self { _inner: _innser }
     }
     pub fn websocket_response(req: &HttpRequest) -> Self {
-        let mut res = Self::new();
-        *res._innser.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
-        let upgrade = req.get_header(UPGRADE).unwrap();
-        res._innser.headers_mut().insert(UPGRADE, upgrade.clone());
-        res._innser
-            .headers_mut()
-            .insert(CONNECTION, "Upgrade".parse().unwrap());
-        let key = req.get_header(SEC_WEBSOCKET_KEY).unwrap().to_str().unwrap();
-        let accept = Self::cal_sec_websocket_accept(key);
-        res._innser
-            .headers_mut()
-            .insert(SEC_WEBSOCKET_ACCEPT, accept.parse().unwrap());
-        res
+        if req._inner.method() == Method::CONNECT {
+            HttpResponse::new()
+        }else {
+            let mut res = Self::new();
+            *res._inner.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+            let upgrade = req.get_header(UPGRADE).unwrap();
+            res._inner.headers_mut().insert(UPGRADE, upgrade.clone());
+            res._inner
+                .headers_mut()
+                .insert(CONNECTION, "Upgrade".parse().unwrap());
+            let key = req.get_header(SEC_WEBSOCKET_KEY).unwrap().to_str().unwrap();
+            let accept = Self::cal_sec_websocket_accept(key);
+            res._inner
+                .headers_mut()
+                .insert(SEC_WEBSOCKET_ACCEPT, accept.parse().unwrap());
+            res
+        }
     }
     fn cal_sec_websocket_accept(key: &str) -> String {
         let mut hasher = Sha1::new();
@@ -67,10 +70,10 @@ impl HttpResponse {
 
     pub fn not_found() -> Self {
         let mut r = Self::new();
-        *r._innser.status_mut() = StatusCode::NOT_FOUND;
+        *r._inner.status_mut() = StatusCode::NOT_FOUND;
 
         // r.status_line.info = "Not Found".to_string();
-        r._innser
+        r._inner
             .headers_mut()
             .insert(CONTENT_LENGTH, HeaderValue::from_static("9"));
         r.set_body(ResponseBody::Simple(Some("not found".into())));
@@ -78,9 +81,9 @@ impl HttpResponse {
     }
     pub fn error(err_message: String) -> Self {
         let mut r = Self::new();
-        *r._innser.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        *r._inner.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         let body: Bytes = err_message.into();
-        r._innser.headers_mut().insert(
+        r._inner.headers_mut().insert(
             CONTENT_LENGTH,
             HeaderValue::from_maybe_shared(body.len().to_string()).expect("impossible!"),
         );
@@ -88,11 +91,11 @@ impl HttpResponse {
         r
     }
     pub fn set_body(&mut self, body: ResponseBody) {
-        *self._innser.body_mut() = body
+        *self._inner.body_mut() = body
     }
 
     pub fn add_header<K: IntoHeaderName>(&mut self, key: K, value: HeaderValue) {
-        self._innser.headers_mut().insert(key, value);
+        self._inner.headers_mut().insert(key, value);
     }
 
     pub async fn write_line_header_bytes<W: AsyncWrite + Unpin>(
@@ -100,10 +103,10 @@ impl HttpResponse {
         socket: &mut W,
     ) -> Result<(), std::io::Error> {
         // line
-        let line_bytes = format!("{:?} {}\r\n", self._innser.version(), self._innser.status());
+        let line_bytes = format!("{:?} {}\r\n", self._inner.version(), self._inner.status());
         socket.write_all(line_bytes.as_bytes()).await?;
         // header
-        for (k, v) in self._innser.headers().iter() {
+        for (k, v) in self._inner.headers().iter() {
             socket.write_all(k.as_str().as_bytes()).await?;
             socket.write_all(": ".as_bytes()).await?;
             socket.write_all(v.as_bytes()).await?;
@@ -118,13 +121,13 @@ impl HttpResponse {
         socket: &mut W,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.write_line_header_bytes(socket).await?;
-        self._innser.body_mut().serialize_to_h1_socket(socket).await
+        self._inner.body_mut().serialize_to_h1_socket(socket).await
     }
     pub async fn serialize_to_socket_h2(
         self,
         respond: &mut SendResponse<Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut h, b) = self._innser.into_parts();
+        let (mut h, b) = self._inner.into_parts();
         h.headers.remove(CONTENT_LENGTH);
         h.headers.remove(CONNECTION);
         let body_stream = respond.send_response(Response::from_parts(h, ()), false)?;
@@ -140,7 +143,9 @@ pub enum ResponseBody {
     File(File),
     /// No body content.
     #[default]
+
     #[deprecated]
+    /// use Simple(None) instead
     Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
     Stream(Receiver<Bytes>),
@@ -334,7 +339,7 @@ impl HttpResponseModifier for StatusCode {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
     {
         Box::pin(async move {
-            *res._innser.status_mut() = *self;
+            *res._inner.status_mut() = *self;
             Ok(())
         })
     }

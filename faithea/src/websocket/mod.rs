@@ -282,7 +282,7 @@ impl <SOURCE:BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
     pub fn start(mut self) {
         tokio::spawn(async move {
             loop {
-                let _len = self.incomming_message_stream_source.read_buf(&mut self.state.buf).await.expect("other side closed");
+                let _len = self.incomming_message_stream_source.read_buf(&mut self.state.buf).await;
                 if !self.state.process().await {
                     break;
                 }
