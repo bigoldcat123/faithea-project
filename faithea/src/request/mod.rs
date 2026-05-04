@@ -14,18 +14,13 @@ use http::{
         UPGRADE,
     },
 };
-use tokio::io::{AsyncRead, AsyncReadExt};
+use hyper::upgrade::Upgraded;
+use tokio::{io::{AsyncRead, AsyncReadExt, ReadHalf}, sync::Mutex};
 
 use crate::{
-    TryConvertFrom,
-    data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser},
-    handler::types::HttpHandlerError,
-    map_str,
-    request::{
+    TryConvertFrom, data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser}, handler::types::HttpHandlerError, io::TokioIo, map_str, request::{
         content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
-    },
-    route::{Route, RouteComponent},
-    server::{BytesSource, Http1BytesSource, Http2BytesSource},
+    }, route::{Route, RouteComponent}, server::{BytesSource, Http1BytesSource, Http2BytesSource}
 };
 
 pub enum RequestBody {
@@ -33,7 +28,8 @@ pub enum RequestBody {
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
     WebSocketStreamBodyHttp2(RecvStream),
-    WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
+    WebSocketStreamBodyHttp1(Mutex<Box<dyn AsyncRead + Send + 'static + Unpin>>),
+    // WebSocketStreamBodyHttp1Hyper(ReadHalf<TokioIo<Upgraded>>),
 }
 impl Debug for RequestBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

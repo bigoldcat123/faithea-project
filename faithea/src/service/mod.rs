@@ -6,28 +6,51 @@ use std::{
 };
 
 use bytes::BytesMut;
-use http::{Request, Response, header::CONTENT_LENGTH};
+use http::{
+    Request, Response, header::{
+        CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION,
+        UPGRADE,
+    },
+};
 use hyper::{
     body::{Body, Incoming},
     service::Service,
+    upgrade::Upgraded,
 };
+use tokio::{io::split, sync::Mutex};
 
 use crate::{
-    data::outbound::StaticFile,
-    handler::{HandlerTire, types::HttpHandler},
-    request::HttpRequest,
-    response::{HttpResponse, HttpResponseModifier, ResponseBody},
-    route::Route,
-    server::{
+    handler::{HandlerTire, types::HttpHandler}, io::TokioIo, request::{HttpRequest, RequestBody}, response::{HttpResponse, HttpResponseModifier, ResponseBody}, route::Route, server::{
         HyperIncommingBytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request,
-    },
+    }
 };
 
 pub async fn serve(
     req: Request<Incoming>,
     provider: ServerFuncProvider,
 ) -> Result<Response<ResponseBody>, crate::error::Error> {
-    let uri = req.uri().clone();
+    if is_websocket_upgrade_hyper(&req) {
+        let (parts, body) = req.into_parts();
+        let mut req = match guard_request(provider.guards(), HttpRequest::new(parts, None)).await {
+            Ok(req) => Request::from_parts(req._inner.into_parts().0, body),
+            Err(e) => {return Ok(e._innser);}
+        };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        tokio::task::spawn(async move {
+            match hyper::upgrade::on(&mut req).await {
+                Ok(upgraded) => {
+                    if let Err(e) = server_upgraded_io(upgraded, tx,provider).await {
+                    };
+                }
+                Err(e) => eprintln!("upgrade error: {}", e),
+            }
+        });
+        let a = rx
+            .await
+            .map_err(|_| crate::error::Error::after_handler_incompatible_body_type());
+        return a;
+    }
+
     let (parts, body) = req.into_parts();
 
     let bs = HyperIncommingBytesSource::new(body);
@@ -43,13 +66,25 @@ pub async fn serve(
     }
 
     match guard_request(provider.guards().clone(), req).await {
-        Ok(req) => {
-            handle_request(provider.handlers(), req, provider.error_handler()).await
-        },
-        Err(res) => {
-            Ok(res._innser)
-        },
+        Ok(req) => handle_request(provider.handlers(), req, provider.error_handler()).await,
+        Err(res) => Ok(res._innser),
     }
+}
+async fn server_upgraded_io(
+    upgrade: Upgraded,
+    tx: tokio::sync::oneshot::Sender<Response<ResponseBody>>,
+    provider: ServerFuncProvider,
+) -> Result<(), ()> {
+
+    let mut upgraded = TokioIo::new(upgrade);
+    let (read,write) = split(upgraded);
+    Ok(())
+}
+fn is_websocket_upgrade_hyper(req: &Request<Incoming>) -> bool {
+    req.headers().get(UPGRADE).is_some()
+        && req.headers().get(CONNECTION).is_some()
+        && req.headers().get(SEC_WEBSOCKET_KEY).is_some()
+        && req.headers().get(SEC_WEBSOCKET_VERSION).is_some()
 }
 async fn handle_request(
     handlers: Arc<HandlerTire>,
