@@ -1,14 +1,12 @@
 use http::{HeaderMap, HeaderValue, header::CONTENT_TYPE};
 
-use crate::{ map_str};
+use crate::map_str;
 
 pub(crate) enum ContentType<'a> {
     ApplicationJson,
     MultipartFormData(&'a str),
     Simple,
 }
-
-
 
 impl<'a> TryFrom<&'a HeaderMap<HeaderValue>> for ContentType<'a> {
     type Error = String;
@@ -31,7 +29,6 @@ impl<'a> TryFrom<&'a HeaderMap<HeaderValue>> for ContentType<'a> {
         }
     }
 }
-
 
 // impl<'a> TryFrom<&'a HttpHeader> for ContentType<'a> {
 //     type Error = String;

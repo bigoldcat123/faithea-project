@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use crate::{
-    data::outbound::StaticFile, request::HttpRequest, res_modifiers, response::{HttpResponseModifier, redirect::Redirect},
+    data::outbound::StaticFile,
+    request::HttpRequest,
+    res_modifiers,
+    response::{HttpResponseModifier, redirect::Redirect},
 };
 
 /// # how to use

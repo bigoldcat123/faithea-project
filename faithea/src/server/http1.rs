@@ -1,7 +1,7 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use bytes::BytesMut;
-use hyper::{server::conn::http1};
+use hyper::server::conn::http1;
 use tokio::{
     io::{AsyncRead, AsyncWrite, split},
     net::TcpListener,
@@ -59,7 +59,10 @@ impl H1Server {
                         tokio::spawn(async move {
                             let io = TokioIo::new(socket);
                             let res = http1::Builder::new()
-                                .serve_connection(io, my_service_fn(service::h1::serve_http1, provider))
+                                .serve_connection(
+                                    io,
+                                    my_service_fn(service::h1::serve_http1, provider),
+                                )
                                 .with_upgrades()
                                 .await;
                             if let Err(e) = res {

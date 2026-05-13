@@ -42,7 +42,10 @@ impl Error {
         ))
     }
     pub fn before_handler_multipart_can_not_parse_from_part<C: AsRef<str>>(cause: C) -> Self {
-        log::error!("multipart cat not parse from part cause -> {}",cause.as_ref());
+        log::error!(
+            "multipart cat not parse from part cause -> {}",
+            cause.as_ref()
+        );
         Self::BeforeHandler(BeforeHandlerError::MultipartError(
             MultipartError::CanNotParseFromPart(cause.as_ref().to_string()),
         ))
@@ -85,13 +88,13 @@ impl From<InvalidHeaderValue> for Error {
 }
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
-        log::error!("serde_json::Error -> {}",value);
+        log::error!("serde_json::Error -> {}", value);
         Self::InvalidJsonStr(value)
     }
 }
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
-        log::error!("std::io::Error -> {}",value);
+        log::error!("std::io::Error -> {}", value);
         Self::AfterHandler(ModifierError::IoError(value))
     }
 }

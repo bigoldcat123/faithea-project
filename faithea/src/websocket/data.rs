@@ -9,11 +9,11 @@ use crate::websocket::WebSocketMessageType;
 
 pub struct WebSocketDataPayLoad {
     r#type: WebSocketMessageType,
-    pub(crate)  _inner: Bytes,
+    pub(crate) _inner: Bytes,
 }
 
 impl WebSocketDataPayLoad {
-    pub fn text<D:Display>(payload: D) -> Self {
+    pub fn text<D: Display>(payload: D) -> Self {
         Self {
             _inner: payload.to_string().into(),
             r#type: WebSocketMessageType::Text,

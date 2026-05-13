@@ -5,7 +5,7 @@ use faithea::{
     websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
 };
 use serde::{Deserialize, Serialize};
-use tokio::{sync::{Mutex, mpsc::Sender}};
+use tokio::sync::{Mutex, mpsc::Sender};
 
 static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -32,7 +32,7 @@ pub async fn ws(websocket: WebSocket, req: HttpRequest) {
                 let a: String = serde_json::to_string(&data).unwrap();
                 sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
             }
-        }else {
+        } else {
             log::error!("parsing json error");
         }
     }

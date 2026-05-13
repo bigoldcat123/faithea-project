@@ -74,7 +74,7 @@ fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
 fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
     if let FnArg::Typed(t) = arg {
         let mut is_search_param = false;
-        let mut rarg_name  = None;
+        let mut rarg_name = None;
         for i in 0..t.attrs.len() {
             let x = &t.attrs[i];
             let a = &x.meta;

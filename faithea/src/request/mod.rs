@@ -17,9 +17,16 @@ use http::{
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
-    TryConvertFrom, data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser}, handler::types::HttpHandlerError, io::TokioIo, map_str, request::{
+    TryConvertFrom,
+    data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser},
+    handler::types::HttpHandlerError,
+    io::TokioIo,
+    map_str,
+    request::{
         content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
-    }, route::{Route, RouteComponent}, server::{BytesSource, Http1BytesSource, Http2BytesSource}
+    },
+    route::{Route, RouteComponent},
+    server::{BytesSource, Http1BytesSource, Http2BytesSource},
 };
 
 pub enum RequestBody {
@@ -286,9 +293,9 @@ async fn parse_line_header_frame<R: AsyncRead + Unpin>(
                 }
             }
             Err(e) => {
-                return Err(
-                    format!("reading bytes from socket error while parsing parse_line_header_frame -> {e:?}")
-                );
+                return Err(format!(
+                    "reading bytes from socket error while parsing parse_line_header_frame -> {e:?}"
+                ));
             }
         }
     }

@@ -35,9 +35,9 @@ use crate::handler::types::HttpHandlerError;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
 pub mod error;
-pub mod websocket;
 pub mod io;
 pub mod service;
+pub mod websocket;
 
 #[macro_export]
 macro_rules! map_str {

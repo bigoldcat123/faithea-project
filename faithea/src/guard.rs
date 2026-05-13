@@ -17,12 +17,8 @@ impl<T: Fn(HttpRequest) -> Pin<Box<dyn GuardResultTrait>> + Send + Sync + 'stati
     for T
 {
 }
-pub trait RawGuardTrait<R:GuardResultTrait>:Fn(HttpRequest) -> R + Send + Sync + 'static {
-
-}
-impl<T: Fn(HttpRequest) -> R + Send + Sync + 'static, R:GuardResultTrait> RawGuardTrait<R> for T {
-
-}
+pub trait RawGuardTrait<R: GuardResultTrait>: Fn(HttpRequest) -> R + Send + Sync + 'static {}
+impl<T: Fn(HttpRequest) -> R + Send + Sync + 'static, R: GuardResultTrait> RawGuardTrait<R> for T {}
 pub type Guard = Box<dyn GuardTrait>;
 
 #[derive(Default)]
@@ -49,7 +45,7 @@ impl GuardTire {
     fn add_with_route_components<F, R>(&mut self, mut url: Route, f: F)
     where
         F: RawGuardTrait<R>,
-        R: GuardResultTrait
+        R: GuardResultTrait,
     {
         if let Some(next) = url.r.pop() {
             if !self.path.contains_key(&next) {

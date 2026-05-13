@@ -2,12 +2,7 @@ pub mod builder;
 mod http1;
 mod http2;
 mod parser;
-use std::{
-    error::Error,
-    future::poll_fn,
-    pin::Pin,
-    sync::Arc,
-};
+use std::{error::Error, future::poll_fn, pin::Pin, sync::Arc};
 
 use bytes::{BufMut, BytesMut};
 use h2::RecvStream;

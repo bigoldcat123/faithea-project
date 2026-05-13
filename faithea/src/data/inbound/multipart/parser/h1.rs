@@ -4,10 +4,7 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     data::inbound::multipart::{
         MultiPartFile, MultipartDataMap, Part,
-        parser::{
-            HeaderInfo, MultiPartBodyParserState,
-            build_boundary_next_array,
-        },
+        parser::{HeaderInfo, MultiPartBodyParserState, build_boundary_next_array},
     },
     map_str,
     request::RequestBody,
@@ -58,8 +55,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 Body => {
                     self.parse_body().await?;
                 }
-                End => return {
-                    Ok(RequestBody::MultiPart(self.generate_multipart()))},
+                End => return { Ok(RequestBody::MultiPart(self.generate_multipart())) },
             }
         }
     }
@@ -91,8 +87,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
             .map_err(|x| x.to_string())?;
         loop {
             while self.buf.len() < self.boundary.len() + 7 {
-                let _read_len =
-                    self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
                 // if read_len == 0 {
                 //     return Err("Unexpected EOF".to_string());
                 // }

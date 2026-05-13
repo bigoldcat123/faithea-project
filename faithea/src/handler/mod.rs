@@ -3,7 +3,14 @@ use std::collections::HashMap;
 use http::Method;
 
 use crate::{
-    handler::types::{Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit, WebSocketHandlerResultTrait}, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier
+    handler::types::{
+        Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
+        WebSocketHandlerResultTrait,
+    },
+    regulate_url_path,
+    request::HttpRequest,
+    route::{Route, RouteComponent},
+    server::HandlerModifier,
 };
 pub mod types;
 #[derive(Default)]
@@ -128,7 +135,7 @@ impl HandlerTire {
     pub fn websoekct_h2<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
         F: RawWebSocketHandlerTarit<R>,
-        R: WebSocketHandlerResultTrait
+        R: WebSocketHandlerResultTrait,
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
@@ -217,7 +224,7 @@ mod test {
     use http::Method;
 
     use crate::{
-        handler::{HandlerTire, types:: HttpHandlerError},
+        handler::{HandlerTire, types::HttpHandlerError},
         request::HttpRequest,
         response::HttpResponse,
     };

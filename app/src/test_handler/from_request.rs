@@ -1,8 +1,8 @@
-use faithea::{data::Json, post};
-use faithea::handler::types::HttpHandlerError;
-use faithea::request::TryFromRequest;
-use faithea::request::HttpRequest;
 use faithea::data::inbound::FromRequest;
+use faithea::handler::types::HttpHandlerError;
+use faithea::request::HttpRequest;
+use faithea::request::TryFromRequest;
+use faithea::{data::Json, post};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

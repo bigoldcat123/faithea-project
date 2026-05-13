@@ -1,19 +1,15 @@
-
-
 use bytes::BytesMut;
 use http::{
     Request, Response,
     header::{CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
 };
-use hyper::
-    body::Incoming
-;
+use hyper::body::Incoming;
 
 use crate::{
-    request::HttpRequest, response::ResponseBody, server::{
-        HyperIncommingBytesSource, ServerFuncProvider,
-        guard_request,
-    }, service::{handle_request, handle_websocket}
+    request::HttpRequest,
+    response::ResponseBody,
+    server::{HyperIncommingBytesSource, ServerFuncProvider, guard_request},
+    service::{handle_request, handle_websocket},
 };
 
 pub async fn serve_http1(
@@ -48,7 +44,6 @@ async fn handle_http(
         Err(res) => Ok(res._inner),
     }
 }
-
 
 fn is_websocket_upgrade_hyper(req: &Request<Incoming>) -> bool {
     req.headers().get(UPGRADE).is_some()

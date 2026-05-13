@@ -75,7 +75,10 @@ impl H2Server {
                         tokio::spawn(async move {
                             let _ = http2::Builder::new(TokioExecutor)
                                 .enable_connect_protocol()
-                                .serve_connection(io, my_service_fn(service::h2::serve_http2, provider))
+                                .serve_connection(
+                                    io,
+                                    my_service_fn(service::h2::serve_http2, provider),
+                                )
                                 .await;
                         });
 

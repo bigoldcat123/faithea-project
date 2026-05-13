@@ -1,10 +1,12 @@
-
 use bytes::BytesMut;
 use http::{Method, Request, Response};
 use hyper::body::Incoming;
 
 use crate::{
-    request::HttpRequest, response::ResponseBody, server::{HyperIncommingBytesSource, ServerFuncProvider, guard_request}, service::{handle_request, handle_websocket}
+    request::HttpRequest,
+    response::ResponseBody,
+    server::{HyperIncommingBytesSource, ServerFuncProvider, guard_request},
+    service::{handle_request, handle_websocket},
 };
 
 pub async fn serve_http2(
@@ -34,7 +36,6 @@ async fn handle_http(
         Err(res) => Ok(res._inner),
     }
 }
-
 
 fn is_websocket_upgrade_hyper(req: &Request<Incoming>) -> bool {
     req.method() == Method::CONNECT

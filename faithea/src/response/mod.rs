@@ -3,16 +3,17 @@ pub mod cors;
 pub mod redirect;
 pub mod sse;
 pub mod stream;
-use std::{pin::{ pin}, task::Poll};
+use std::{pin::pin, task::Poll};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{BufMut, Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
-    HeaderMap, HeaderValue, Method, Response, StatusCode, header::{
+    HeaderMap, HeaderValue, Method, Response, StatusCode,
+    header::{
         CONNECTION, CONTENT_LENGTH, IntoHeaderName, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY,
         UPGRADE,
-    }
+    },
 };
 use hyper::body::{Body, Frame};
 use sha1::{Digest, Sha1};
@@ -44,7 +45,7 @@ impl HttpResponse {
     pub fn websocket_response(req: &HttpRequest) -> Self {
         if req._inner.method() == Method::CONNECT {
             HttpResponse::new()
-        }else {
+        } else {
             let mut res = Self::new();
             *res._inner.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
             let upgrade = req.get_header(UPGRADE).unwrap();
@@ -143,7 +144,6 @@ pub enum ResponseBody {
     File(File),
     /// No body content.
     #[default]
-
     #[deprecated]
     /// use Simple(None) instead
     Empty,
@@ -251,28 +251,22 @@ impl Body for ResponseBody {
             }
             ResponseBody::File(ref mut file) => {
                 let mut buf = BytesMut::with_capacity(2048);
-                pin!(file.read_buf(&mut buf))
-                    .poll(cx)
-                    .map(|res| {
-                        if let Ok(size) = res {
-                            if size != 0 {
-                                Some(Ok(Frame::data(buf.freeze())))
-                            }else {
-                                None
-                            }
-                        }else {
+                pin!(file.read_buf(&mut buf)).poll(cx).map(|res| {
+                    if let Ok(size) = res {
+                        if size != 0 {
+                            Some(Ok(Frame::data(buf.freeze())))
+                        } else {
                             None
                         }
-                    })
-            }
-            ResponseBody::Stream(ref mut steam) => {
-                match steam.poll_recv(cx) {
-                    Poll::Pending => Poll::Pending,
-                    Poll::Ready(data) => {
-                        Poll::Ready(data.map(|data| Ok(Frame::data(data))))
+                    } else {
+                        None
                     }
-                }
+                })
             }
+            ResponseBody::Stream(ref mut steam) => match steam.poll_recv(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(data) => Poll::Ready(data.map(|data| Ok(Frame::data(data)))),
+            },
             ResponseBody::WsBody(ref mut steam) => {
                 match steam.poll_recv(cx) {
                     Poll::Pending => Poll::Pending,
@@ -285,7 +279,7 @@ impl Body for ResponseBody {
                             res.put(body);
                             let combined: Bytes = res.freeze(); // 变成不可变的 Bytes
                             Poll::Ready(Some(Ok(Frame::data(combined))))
-                        }else {
+                        } else {
                             Poll::Ready(None)
                         }
                     }

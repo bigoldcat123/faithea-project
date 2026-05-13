@@ -1,10 +1,10 @@
-use faithea::post;
+use faithea::MultipartData;
+use faithea::data::inbound::multipart::MultiPartFile;
 use faithea::data::inbound::multipart::Multipart;
-use faithea::handler::types::HttpHandlerError;
 use faithea::data::inbound::multipart::Part;
 use faithea::data::inbound::multipart::TryFromPart;
-use faithea::data::inbound::multipart::MultiPartFile;
-use faithea::MultipartData;
+use faithea::handler::types::HttpHandlerError;
+use faithea::post;
 
 #[derive(Debug)]
 pub struct A {
@@ -23,7 +23,7 @@ impl TryFromPart for A {
 
 #[derive(MultipartData, Debug)]
 struct StuInfo {
-    #[faithea(rename="otherInfo")]
+    #[faithea(rename = "otherInfo")]
     pub other_info: A,
     pub name: Vec<String>,
     pub age: i32,

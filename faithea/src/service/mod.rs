@@ -1,14 +1,28 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use http::{Request, Response};
-use hyper::{body::{Body, Incoming}, service::Service, upgrade::Upgraded};
+use hyper::{
+    body::{Body, Incoming},
+    service::Service,
+    upgrade::Upgraded,
+};
 use tokio::io::{AsyncWriteExt, split};
 
-use crate::{handler::{HandlerTire, types::{Handler, HttpHandler}}, io::TokioIo, request::HttpRequest, response::{HttpResponse, HttpResponseModifier, ResponseBody}, route::Route, server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request}, websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket}};
+use crate::{
+    handler::{
+        HandlerTire,
+        types::{Handler, HttpHandler},
+    },
+    io::TokioIo,
+    request::HttpRequest,
+    response::{HttpResponse, HttpResponseModifier, ResponseBody},
+    route::Route,
+    server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request},
+    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
+};
 
-pub(crate) mod h2;
 pub(crate) mod h1;
-
+pub(crate) mod h2;
 
 pub async fn handle_websocket(
     req: Request<Incoming>,
@@ -33,11 +47,7 @@ pub async fn handle_websocket(
     });
     return Ok(response._inner);
 }
-async fn server_upgraded_io(
-    upgrade: Upgraded,
-    mut req: HttpRequest,
-    provider: ServerFuncProvider,
-) {
+async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: ServerFuncProvider) {
     let upgraded = TokioIo::new(upgrade);
     let (read, mut write) = split(upgraded);
 
@@ -70,11 +80,10 @@ async fn server_upgraded_io(
             Handler::WbeSocket(ws_handler) => {
                 ws_handler(websocket, req).await;
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
-
 
 async fn handle_request(
     handlers: Arc<HandlerTire>,
@@ -98,7 +107,7 @@ async fn handle_request(
         Ok(HttpResponse::not_found()._inner)
     }
 }
- async fn process_http_request(
+async fn process_http_request(
     http_handler: &HttpHandler,
     req: HttpRequest,
     error_handler: Option<Arc<GlobalErrorHandler>>,
@@ -122,8 +131,6 @@ async fn handle_request(
         }
     }
 }
-
-
 
 pub fn my_service_fn<F, R, S>(f: F, provider: ServerFuncProvider) -> MyServiceFn<F, R>
 where

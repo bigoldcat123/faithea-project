@@ -1,7 +1,4 @@
-use faithea::{
-    handler::types::HttpHandlerError, request::TryFromParam,
-    get,
-};
+use faithea::{get, handler::types::HttpHandlerError, request::TryFromParam};
 
 #[derive(Debug)]
 pub struct MyAge {

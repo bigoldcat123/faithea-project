@@ -1,17 +1,17 @@
 use bytes::Bytes;
 use tokio::sync::mpsc::Receiver;
 
-use crate::{
-    response::{HttpResponseModifier, ResponseBody},
-};
+use crate::response::{HttpResponseModifier, ResponseBody};
 
 pub struct Stream {
-     receiver: Option<Receiver<Bytes>>,
+    receiver: Option<Receiver<Bytes>>,
 }
 
 impl Stream {
-    pub fn new(receiver:Receiver<Bytes>) -> Self {
-        Self { receiver: Some(receiver) }
+    pub fn new(receiver: Receiver<Bytes>) -> Self {
+        Self {
+            receiver: Some(receiver),
+        }
     }
 }
 impl HttpResponseModifier for Stream {
