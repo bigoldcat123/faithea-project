@@ -1,13 +1,11 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, task::Poll};
 
 use http::{Request, Response};
 use hyper::{
     body::{Body, Incoming},
-    service::Service,
     upgrade::Upgraded,
 };
 use tokio::io::{AsyncWriteExt, split};
-
 use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
 
 use crate::{
@@ -17,7 +15,7 @@ use crate::{
         types::{Handler, HttpHandler},
     },
     io::TokioIo,
-    request::HttpRequest,
+    request::{HttpRequest, RequestBody},
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
     server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler},
@@ -145,35 +143,46 @@ async fn process_http_request(
 
 pub fn my_service_fn<F, R, S>(f: F, provider: ServerFuncProvider) -> MyServiceFn<F, R>
 where
-    F: Fn(Request<R>, ServerFuncProvider) -> S,
+    F: Fn(Request<R>, ServerFuncProvider) -> S + Clone,
     S: Future,
 {
     MyServiceFn {
-        f,
+        f:Arc::new(f),
         provider,
         _req: PhantomData,
     }
 }
 /// Service returned by [`service_fn`]
+
 pub struct MyServiceFn<F, R> {
-    f: F,
+    f: Arc<F>,
     provider: ServerFuncProvider,
     _req: PhantomData<fn(R)>,
 }
+impl <F,R> Clone for MyServiceFn<F,R> {
+    fn clone(&self) -> Self {
+        Self { f: self.f.clone(), provider: self.provider.clone(), _req: self._req.clone() }
+    }
+}
 
-impl<F, ReqBody, Ret, ResBody, E> Service<Request<ReqBody>> for MyServiceFn<F, ReqBody>
+impl<F,ReqBody, Ret, ResBody, E> tower::Service<Request<ReqBody>> for MyServiceFn<F, ReqBody>
 where
-    F: Fn(Request<ReqBody>, ServerFuncProvider) -> Ret,
-    ReqBody: Body,
-    Ret: Future<Output = Result<Response<ResBody>, E>>,
+    F: Fn(Request<ReqBody>, ServerFuncProvider) -> Ret + Clone,
+    ReqBody:Body,
+    Ret: Future<Output = Result<Response<ResBody>, E>> + Send,
     E: Into<Box<dyn std::error::Error + Send + Sync>>,
     ResBody: Body,
 {
     type Response = Response<ResBody>;
     type Error = E;
     type Future = Ret;
-
-    fn call(&self, req: Request<ReqBody>) -> Self::Future {
+    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         (self.f)(req, self.provider.clone())
+    }
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }

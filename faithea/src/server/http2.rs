@@ -1,7 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use hyper::server::conn::http2;
+use hyper_util::service::TowerToHyperService;
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
 
 use crate::{
     guard::GuardTire,
@@ -66,11 +68,14 @@ impl H2Server {
                             self.error_handler.clone(),
                         );
                         tokio::spawn(async move {
+                            let s = ServiceBuilder::new().service(my_service_fn(service::h2::serve_http2, provider));
+                            let s = TowerToHyperService::new(s);
+
                             let _ = http2::Builder::new(TokioExecutor)
                                 .enable_connect_protocol()
                                 .serve_connection(
                                     io,
-                                    my_service_fn(service::h2::serve_http2, provider),
+                                    s
                                 )
                                 .await;
                         });
@@ -88,9 +93,11 @@ impl H2Server {
                         self.error_handler.clone(),
                     );
                     tokio::spawn(async move {
+                        let s = ServiceBuilder::new().service(my_service_fn(service::h2::serve_http2, provider));
+                        let s = TowerToHyperService::new(s);
                         let _ = http2::Builder::new(TokioExecutor)
                             .enable_connect_protocol()
-                            .serve_connection(io, my_service_fn(service::h2::serve_http2, provider))
+                            .serve_connection(io, s)
                             .await;
                     });
                 }
