@@ -225,6 +225,7 @@ impl ResponseBody {
                 while let Some(_payload) = receiver.recv().await {
                     let mut frame = _payload.into_frame_bytes();
                     socket.write_all_buf(&mut frame).await?;
+                    socket.flush().await?;
                 }
             }
             _ => {}

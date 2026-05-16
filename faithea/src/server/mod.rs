@@ -219,7 +219,7 @@ fn get_ws_incomming_message_receiver(
         }
         WebSocketStreamBodyHttp1(reader) => {
             let (parser, incomming_message_receiver) = WebSocketIncommingMessageParser::new(
-                Http1BytesSource::new(reader, 0, 0),
+                Http1BytesSource::stream(reader),
                 outcomming_message_sender,
             );
             parser.start();
@@ -276,6 +276,7 @@ pub(crate) struct Http1BytesSource<SOURCE: AsyncRead + Unpin> {
     source: SOURCE,
     len: usize,
     current_len: usize,
+    is_stream: bool,
 }
 impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
     pub(crate) fn new(source: SOURCE, len: usize, current_len: usize) -> Self {
@@ -283,6 +284,16 @@ impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
             source,
             current_len,
             len,
+            is_stream: false,
+        }
+    }
+
+    pub(crate) fn stream(source: SOURCE) -> Self {
+        Self {
+            source,
+            current_len: 0,
+            len: usize::MAX,
+            is_stream: true,
         }
     }
 }
@@ -296,9 +307,12 @@ impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> 
                 .await
                 .map_err(map_str!())?;
             if res == 0 {
+                self.current_len = self.len;
                 return Err("EOF ERROR".to_string());
             }
-            self.current_len += res;
+            if !self.is_stream {
+                self.current_len += res;
+            }
             Ok(res)
         })
     }

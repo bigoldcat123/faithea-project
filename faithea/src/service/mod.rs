@@ -58,14 +58,15 @@ async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: S
 
     tokio::spawn(async move {
         while let Some(ws_msg) = outcomming_message_receiver.recv().await {
-            log::info!("{:?}",ws_msg);
+            log::info!("{:?}", ws_msg);
             let mut frame = ws_msg.into_frame_bytes();
             let _ = write.write_all_buf(&mut frame).await;
+            let _ = write.flush().await;
         }
     });
 
     let (parser, incomming_message_receiver) = WebSocketIncommingMessageParser::new(
-        Http1BytesSource::new(read, 0, 0),
+        Http1BytesSource::stream(read),
         outcomming_message_sender.clone(),
     );
     parser.start();
