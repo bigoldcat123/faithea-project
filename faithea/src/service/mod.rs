@@ -11,6 +11,7 @@ use tokio::io::{AsyncWriteExt, split};
 use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
 
 use crate::{
+    guard::GuardTire,
     handler::{
         HandlerTire,
         types::{Handler, HttpHandler},
@@ -19,11 +20,20 @@ use crate::{
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
-    server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request},
+    server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler},
 };
 
 pub(crate) mod h1;
 pub(crate) mod h2;
+
+pub(crate) async fn guard_request(
+    guards: Arc<GuardTire>,
+    req: HttpRequest,
+) -> Result<HttpRequest, HttpResponse> {
+    guards
+        .guard(&req._inner.uri().path().to_string()[..], req)
+        .await
+}
 
 pub async fn handle_websocket(
     req: Request<Incoming>,

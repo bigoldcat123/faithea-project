@@ -55,7 +55,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 Body => {
                     self.parse_body().await?;
                 }
-                End => return { Ok(RequestBody::MultiPart(self.generate_multipart())) },
+                End => return Ok(RequestBody::MultiPart(self.generate_multipart())),
             }
         }
     }

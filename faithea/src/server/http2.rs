@@ -1,22 +1,15 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use h2::server::Builder;
 use hyper::server::conn::http2;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
-};
+use tokio::net::TcpListener;
 
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     io::TokioIo,
-    request::HttpRequest,
-    response::HttpResponse,
     server::{
         ServerFuncProvider,
         builder::{GlobalErrorHandler, TlsConfig},
-        process_request,
     },
     service::{self, my_service_fn},
 };
@@ -104,54 +97,4 @@ impl H2Server {
             },
         }
     }
-
-    async fn _deal_with<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-        &self,
-        socket: IO,
-        _addr: SocketAddr,
-        error_handler: Option<Arc<GlobalErrorHandler>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let guards = self.guards.clone();
-        let handlers = self.handlers.clone();
-        tokio::spawn(async move {
-            if let Err(e) = process(socket, guards, handlers, error_handler).await {}
-        });
-
-        Ok(())
-    }
-}
-
-async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
-    socket: IO,
-    guards: Arc<GuardTire>,
-    handlers: Arc<HandlerTire>,
-    error_handler: Option<Arc<GlobalErrorHandler>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut h2 = Builder::new()
-        .enable_connect_protocol()
-        .handshake(socket)
-        .await?;
-    // let mut h2 = h2::server::handshake(socket).await?;
-
-    while let Some(req) = h2.accept().await {
-        let (request, respond) = req?;
-        let guards = guards.clone();
-        let handlers = handlers.clone();
-        let error_handler = error_handler.clone();
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<HttpResponse>(16);
-
-        tokio::spawn(async move {
-            let mut respond = respond;
-            while let Some(r) = rx.recv().await {
-                let _ = r.serialize_to_socket_h2(&mut respond).await;
-            }
-        });
-        tokio::spawn(async move {
-            if let Ok(request) = HttpRequest::parse_h2_frame(request).await {
-                process_request(guards, handlers, request, tx, error_handler).await;
-            }
-        });
-    }
-
-    Ok(())
 }

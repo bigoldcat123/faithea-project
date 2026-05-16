@@ -136,30 +136,23 @@ impl HttpResponse {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub enum ResponseBody {
     /// In-memory byte data for small responses.
     Simple(Option<Bytes>),
     /// File handle for streaming large responses efficiently.
     File(File),
-    /// No body content.
-    #[default]
-    #[deprecated]
-    /// use Simple(None) instead
-    Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
     Stream(Receiver<Bytes>),
 }
 
-impl ResponseBody {
-    // fn is_empty_body(&self) -> bool {
-    //     if let ResponseBody::Empty = self {
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
+impl Default for ResponseBody {
+    fn default() -> Self {
+        Self::Simple(None)
+    }
+}
 
+impl ResponseBody {
     async fn seriliaze_to_h2_stream(
         self,
         mut body_stream: SendStream<Bytes>,
@@ -281,7 +274,6 @@ impl Body for ResponseBody {
                     }
                 }
             },
-            _ => std::task::Poll::Ready(None),
         }
     }
 }

@@ -1,23 +1,15 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
-use bytes::BytesMut;
 use hyper::server::conn::http1;
-use tokio::{
-    io::{AsyncRead, AsyncWrite, split},
-    net::TcpListener,
-    sync::mpsc,
-};
+use tokio::net::TcpListener;
 
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     io::TokioIo,
-    request::{HttpRequest, is_websocket_upgrade},
-    response::HttpResponse,
     server::{
         ServerFuncProvider,
         builder::{GlobalErrorHandler, TlsConfig},
-        handle_upgrade_to_websocket, process_request,
     },
     service::{self, my_service_fn},
 };
