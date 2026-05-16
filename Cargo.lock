@@ -392,6 +392,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "faithea-io-core"
+version = "0.1.0"
+
+[[package]]
 name = "faithea-macro"
 version = "0.1.4"
 dependencies = [
