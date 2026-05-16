@@ -59,7 +59,6 @@ pub async fn handle_websocket(
     return Ok(response._inner);
 }
 async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: ServerFuncProvider) {
-    log::info!("websocket upgrade: {:?}", req._inner.uri());
     let upgraded = TokioIo::new(upgrade);
     let (read, mut write) = split(upgraded);
 
@@ -68,7 +67,6 @@ async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: S
 
     tokio::spawn(async move {
         while let Some(ws_msg) = outcomming_message_receiver.recv().await {
-            log::info!("{:?}", ws_msg);
             let mut frame = ws_msg.into_frame_bytes();
             let _ = write.write_all_buf(&mut frame).await;
             let _ = write.flush().await;
