@@ -6,7 +6,7 @@ pub mod stream;
 use std::{pin::pin, task::Poll};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
     HeaderMap, HeaderValue, Method, Response, StatusCode,
@@ -23,9 +23,9 @@ use tokio::{
     sync::mpsc::Receiver,
 };
 
-use crate::{
-    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
-};
+use faithea_websocket::WebSocketDataPayLoad;
+
+use crate::{handler::types::HttpHandlerError, request::HttpRequest};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -192,7 +192,9 @@ impl ResponseBody {
             WsBody(mut receiver) => {
                 tokio::spawn(async move {
                     while let Some(b) = receiver.recv().await {
-                        let _ = b.serialize_to_stream(&mut body_stream).await;
+                        let frame = b.into_frame_bytes();
+                        body_stream.reserve_capacity(frame.len());
+                        let _ = body_stream.send_data(frame, false);
                     }
                 });
             }
@@ -221,7 +223,8 @@ impl ResponseBody {
             }
             WsBody(receiver) => {
                 while let Some(_payload) = receiver.recv().await {
-                    _payload.serialize_to_socket(socket).await?;
+                    let mut frame = _payload.into_frame_bytes();
+                    socket.write_all_buf(&mut frame).await?;
                 }
             }
             _ => {}
@@ -267,24 +270,16 @@ impl Body for ResponseBody {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(data) => Poll::Ready(data.map(|data| Ok(Frame::data(data)))),
             },
-            ResponseBody::WsBody(ref mut steam) => {
-                match steam.poll_recv(cx) {
-                    Poll::Pending => Poll::Pending,
-                    Poll::Ready(data) => {
-                        if let Some(data) = data {
-                            let head = data.generate_head_frame();
-                            let body = data._inner;
-                            let mut res = BytesMut::with_capacity(head.len() + body.len());
-                            res.put(head);
-                            res.put(body);
-                            let combined: Bytes = res.freeze(); // 变成不可变的 Bytes
-                            Poll::Ready(Some(Ok(Frame::data(combined))))
-                        } else {
-                            Poll::Ready(None)
-                        }
+            ResponseBody::WsBody(ref mut steam) => match steam.poll_recv(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(data) => {
+                    if let Some(data) = data {
+                        Poll::Ready(Some(Ok(Frame::data(data.into_frame_bytes()))))
+                    } else {
+                        Poll::Ready(None)
                     }
                 }
-            }
+            },
             _ => std::task::Poll::Ready(None),
         }
     }

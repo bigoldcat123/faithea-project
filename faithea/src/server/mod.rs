@@ -5,6 +5,8 @@ mod parser;
 use std::{error::Error, future::poll_fn, pin::Pin, sync::Arc};
 
 use bytes::{BufMut, BytesMut};
+pub use faithea_io_core::BytesSource;
+use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
 use h2::RecvStream;
 use hyper::body::{Body, Incoming};
 use tokio::{
@@ -27,7 +29,6 @@ use crate::{
         http1::H1Server,
         http2::H2Server,
     },
-    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -230,13 +231,6 @@ fn get_ws_incomming_message_receiver(
     }
 }
 
-pub trait BytesSource: Send {
-    fn read_buf(
-        &mut self,
-        buf: &mut BytesMut,
-    ) -> impl Future<Output = Result<usize, String>> + Send;
-    fn is_end(&self) -> bool;
-}
 pub struct HyperIncommingBytesSource {
     inner: Incoming,
     is_end: bool,
@@ -251,11 +245,11 @@ impl HyperIncommingBytesSource {
 }
 
 impl BytesSource for HyperIncommingBytesSource {
-    fn read_buf(
-        &mut self,
-        buf: &mut BytesMut,
-    ) -> impl Future<Output = Result<usize, String>> + Send {
-        async {
+    fn read_buf2<'a>(
+        &'a mut self,
+        buf: &'a mut BytesMut,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
+        Box::pin(async move {
             if let Some(frame) = poll_fn(|cx| Pin::new(&mut self.inner).poll_frame(cx)).await {
                 if let Ok(frame) = frame {
                     let data = frame
@@ -271,7 +265,7 @@ impl BytesSource for HyperIncommingBytesSource {
                 self.is_end = true;
                 return Ok(0);
             }
-        }
+        })
     }
     fn is_end(&self) -> bool {
         self.is_end
@@ -293,13 +287,20 @@ impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
     }
 }
 impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> {
-    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, String> {
-        let res = self.source.read_buf(buf).await.map_err(map_str!())?;
-        if res == 0 {
-            return Err("EOF ERROR".to_string())?;
-        }
-        self.current_len += res;
-        Ok(res)
+    fn read_buf2<'a>(
+        &'a mut self,
+        buf: &'a mut BytesMut,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let res = AsyncReadExt::read_buf(&mut self.source, buf)
+                .await
+                .map_err(map_str!())?;
+            if res == 0 {
+                return Err("EOF ERROR".to_string());
+            }
+            self.current_len += res;
+            Ok(res)
+        })
     }
     fn is_end(&self) -> bool {
         self.current_len >= self.len
@@ -314,21 +315,26 @@ impl Http2BytesSource {
     }
 }
 impl BytesSource for Http2BytesSource {
-    async fn read_buf(&mut self, buf: &mut BytesMut) -> Result<usize, String> {
-        if let Some(d) = self.source.data().await {
-            // println!("{:?}",d.is_err());
-            let d = d.map_err(map_str!())?;
-            let len = d.len();
+    fn read_buf2<'a>(
+        &'a mut self,
+        buf: &'a mut BytesMut,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
+        Box::pin(async move {
+            if let Some(d) = self.source.data().await {
+                // println!("{:?}",d.is_err());
+                let d = d.map_err(map_str!())?;
+                let len = d.len();
 
-            buf.put(d);
-            self.source
-                .flow_control()
-                .release_capacity(len)
-                .map_err(map_str!())?;
-            Ok(len)
-        } else {
-            Ok(0)
-        }
+                buf.put(d);
+                self.source
+                    .flow_control()
+                    .release_capacity(len)
+                    .map_err(map_str!())?;
+                Ok(len)
+            } else {
+                Ok(0)
+            }
+        })
     }
     fn is_end(&self) -> bool {
         self.source.is_end_stream()

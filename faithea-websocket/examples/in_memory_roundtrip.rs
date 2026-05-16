@@ -1,7 +1,9 @@
 use std::error::Error;
 
 use bytes::{BufMut, BytesMut};
-use faithea_websocket::{WebSocketDataPayLoad, WebSocketIncommingMessageParser, WebSocketMessageType};
+use faithea_websocket::{
+    WebSocketDataPayLoad, WebSocketIncommingMessageParser, WebSocketMessageType,
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     sync::mpsc,

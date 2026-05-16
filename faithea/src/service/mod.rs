@@ -8,6 +8,8 @@ use hyper::{
 };
 use tokio::io::{AsyncWriteExt, split};
 
+use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
+
 use crate::{
     handler::{
         HandlerTire,
@@ -18,7 +20,6 @@ use crate::{
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
     server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler, guard_request},
-    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub(crate) mod h1;
@@ -48,6 +49,7 @@ pub async fn handle_websocket(
     return Ok(response._inner);
 }
 async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: ServerFuncProvider) {
+    log::info!("websocket upgrade: {:?}", req._inner.uri());
     let upgraded = TokioIo::new(upgrade);
     let (read, mut write) = split(upgraded);
 
@@ -55,10 +57,10 @@ async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: S
         tokio::sync::mpsc::channel::<WebSocketDataPayLoad>(16);
 
     tokio::spawn(async move {
-        while let Some(mut ws_msg) = outcomming_message_receiver.recv().await {
-            let mut head = ws_msg.generate_head_frame();
-            let _ = write.write_all_buf(&mut head).await;
-            let _ = write.write_all_buf(&mut ws_msg._inner).await;
+        while let Some(ws_msg) = outcomming_message_receiver.recv().await {
+            log::info!("{:?}",ws_msg);
+            let mut frame = ws_msg.into_frame_bytes();
+            let _ = write.write_all_buf(&mut frame).await;
         }
     });
 

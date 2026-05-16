@@ -87,7 +87,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
             .map_err(|x| x.to_string())?;
         loop {
             while self.buf.len() < self.boundary.len() + 7 {
-                let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
                 // if read_len == 0 {
                 //     return Err("Unexpected EOF".to_string());
                 // }
@@ -136,7 +136,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         let mut simple_body = BytesMut::new();
         loop {
             while self.buf.len() <= self.boundary.len() + 6 {
-                let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
                 // if read_len == 0 {
                 //     return Err("Unexpected EOF".to_string());
                 // }
@@ -242,7 +242,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 header_len = inner_header_len;
                 break;
             }
-            let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+            let read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
             if read_len == 0 {
                 self.state = MultiPartBodyParserState::End;
                 return Ok(());
@@ -261,7 +261,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
         // remove pre_fix
         while self.buf.len() < self.boundary.len() + 2 {
-            let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+            let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
             // if read_len == 0 {
             //     return Err("Unexpected EOF".to_string());
             // }

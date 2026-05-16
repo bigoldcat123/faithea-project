@@ -271,7 +271,7 @@ async fn parse_simple_body<R: BytesSource>(
             let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
-        let _len = r.read_buf(buf).await.map_err(map_str!())?;
+        let _len = r.read_buf2(buf).await.map_err(map_str!())?;
     }
 }
 async fn parse_line_header_frame<R: AsyncRead + Unpin>(

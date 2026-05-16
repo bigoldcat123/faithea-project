@@ -80,6 +80,14 @@ impl WebSocketDataPayLoad {
         buf.freeze()
     }
 
+    pub fn into_frame_bytes(self) -> Bytes {
+        let head = self.generate_head_frame();
+        let mut frame = BytesMut::with_capacity(head.len() + self.inner.len());
+        frame.put(head);
+        frame.put(self.inner);
+        frame.freeze()
+    }
+
     pub(crate) async fn write_to_socket<W: BytesSink + ?Sized>(
         data: &[u8],
         socket: &mut W,

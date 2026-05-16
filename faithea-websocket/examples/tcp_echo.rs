@@ -1,7 +1,9 @@
 use std::error::Error;
 
+use faithea_websocket::{
+    WebSocketDataPayLoad, WebSocketIncommingMessageParser, WebSocketMessageType,
+};
 use tokio::{net::TcpListener, sync::mpsc};
-use faithea_websocket::{WebSocketDataPayLoad, WebSocketIncommingMessageParser, WebSocketMessageType};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

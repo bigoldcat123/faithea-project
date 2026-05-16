@@ -26,6 +26,7 @@ pub async fn ws(websocket: WebSocket, req: HttpRequest) {
         map.insert(name.clone(), s.clone());
     }
     while let Some(msg) = r.recv().await {
+        log::info!("{:?}",msg);
         if let Ok(data) = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()) {
             let map = WS_SENDERS.lock().await;
             if let Some(sender) = map.get(&data.to) {

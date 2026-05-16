@@ -375,7 +375,9 @@ async fn read_loop<SOURCE>(
 
         match source.read_buf2(codec.buffer_mut()).await {
             Ok(0) => break,
-            Ok(_) => {}
+            Ok(len) => {
+                println!("{}",len);
+            }
             Err(_) => {
                 let _ = control_sender
                     .send(WebSocketDataPayLoad::close(Bytes::new()))
