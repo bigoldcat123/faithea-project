@@ -1,5 +1,2 @@
-
 #[tokio::test]
-async fn test_hello() {
-
-}
+async fn test_hello() {}

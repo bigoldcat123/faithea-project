@@ -1,12 +1,12 @@
 use std::{marker::PhantomData, sync::Arc, task::Poll};
 
+use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
 use http::{Request, Response};
 use hyper::{
     body::{Body, Incoming},
     upgrade::Upgraded,
 };
 use tokio::io::{AsyncWriteExt, split};
-use faithea_websocket::{WebSocket, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
 
 use crate::{
     guard::GuardTire,
@@ -15,7 +15,7 @@ use crate::{
         types::{Handler, HttpHandler},
     },
     io::TokioIo,
-    request::{HttpRequest, RequestBody},
+    request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier, ResponseBody},
     route::Route,
     server::{Http1BytesSource, ServerFuncProvider, builder::GlobalErrorHandler},
@@ -147,7 +147,7 @@ where
     S: Future,
 {
     MyServiceFn {
-        f:Arc::new(f),
+        f: Arc::new(f),
         provider,
         _req: PhantomData,
     }
@@ -159,16 +159,20 @@ pub struct MyServiceFn<F, R> {
     provider: ServerFuncProvider,
     _req: PhantomData<fn(R)>,
 }
-impl <F,R> Clone for MyServiceFn<F,R> {
+impl<F, R> Clone for MyServiceFn<F, R> {
     fn clone(&self) -> Self {
-        Self { f: self.f.clone(), provider: self.provider.clone(), _req: self._req.clone() }
+        Self {
+            f: self.f.clone(),
+            provider: self.provider.clone(),
+            _req: self._req.clone(),
+        }
     }
 }
 
-impl<F,ReqBody, Ret, ResBody, E> tower::Service<Request<ReqBody>> for MyServiceFn<F, ReqBody>
+impl<F, ReqBody, Ret, ResBody, E> tower::Service<Request<ReqBody>> for MyServiceFn<F, ReqBody>
 where
     F: Fn(Request<ReqBody>, ServerFuncProvider) -> Ret + Clone,
-    ReqBody:Body,
+    ReqBody: Body,
     Ret: Future<Output = Result<Response<ResBody>, E>> + Send,
     E: Into<Box<dyn std::error::Error + Send + Sync>>,
     ResBody: Body,

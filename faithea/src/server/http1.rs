@@ -1,17 +1,14 @@
-use std::{error::Error, net::SocketAddr, pin::Pin, sync::Arc, task::Poll};
+use std::{error::Error, net::SocketAddr, sync::Arc};
 
-use http::{Request, Response};
-use hyper::{body::Incoming, server::conn::http1};
+use hyper::server::conn::http1;
 use hyper_util::service::TowerToHyperService;
 use tokio::net::TcpListener;
-use tower::{Service, ServiceBuilder};
+use tower::ServiceBuilder;
 
 use crate::{
     guard::GuardTire,
     handler::HandlerTire,
     io::TokioIo,
-    request::HttpRequest,
-    response::{HttpResponse, ResponseBody},
     server::{
         ServerFuncProvider,
         builder::{GlobalErrorHandler, TlsConfig},
@@ -55,13 +52,11 @@ impl H1Server {
                         let provider = self.fun_provider();
                         tokio::spawn(async move {
                             let io = TokioIo::new(socket);
-                            let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
+                            let s = ServiceBuilder::new()
+                                .service(my_service_fn(service::h1::serve_http1, provider));
                             let s = TowerToHyperService::new(s);
                             let res = http1::Builder::new()
-                                .serve_connection(
-                                    io,
-                                    s, // my_service_fn(service::h1::serve_http1, provider),
-                                )
+                                .serve_connection(io, s)
                                 .with_upgrades()
                                 .await;
                             if let Err(e) = res {
@@ -76,7 +71,8 @@ impl H1Server {
                     let provider = self.fun_provider();
                     tokio::spawn(async move {
                         let io = TokioIo::new(socket);
-                        let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
+                        let s = ServiceBuilder::new()
+                            .service(my_service_fn(service::h1::serve_http1, provider));
                         let s = TowerToHyperService::new(s);
 
                         let res = http1::Builder::new()
@@ -91,14 +87,4 @@ impl H1Server {
             },
         }
     }
-}
-
-fn a<R,S:tower::Service<R> + Clone>(s:S) {
-
-}
-fn b<S:Clone>(s:S) {
-
-}
-fn c<R,S:tower::Service<R>>(s:S) {
-
 }

@@ -74,17 +74,17 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     async fn parse_file_body(&mut self) -> Result<MultiPartFile, String> {
         let file_name = self.header_info.file_name.take();
         let mime_type = self.header_info.mime_type.take();
+        let temp_file = tempfile::Builder::new()
+            .prefix("faithea-multipart-")
+            .tempfile()
+            .map_err(map_str!())?;
+        let temp_path = temp_file.path().to_string_lossy().into_owned();
         let multipart_file = MultiPartFile {
-            temp_path: format!(
-                "/Users/dadigua/Desktop/graduation/temp{}",
-                rand::random::<u64>()
-            ),
+            temp_path,
             file_name,
             mime_type,
         };
-        let mut f = tokio::fs::File::create(&multipart_file.temp_path)
-            .await
-            .map_err(|x| x.to_string())?;
+        let mut f = tokio::fs::File::from_std(temp_file.into_file());
         loop {
             while self.buf.len() < self.boundary.len() + 7 {
                 let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
