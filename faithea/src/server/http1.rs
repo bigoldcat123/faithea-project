@@ -42,49 +42,55 @@ impl H1Server {
         log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;
 
-        match self.tls {
-            Some(ref cfg) => {
-                let acceptor = cfg.tls_acceptor()?;
-                loop {
-                    if let Ok((socket, _addr)) = server.accept().await
-                        && let Ok(socket) = acceptor.clone().accept(socket).await
-                    {
-                        let provider = self.fun_provider();
-                        tokio::spawn(async move {
-                            let io = TokioIo::new(socket);
-                            let s = ServiceBuilder::new()
-                                .service(my_service_fn(service::h1::serve_http1, provider));
-                            let s = TowerToHyperService::new(s);
-                            let res = http1::Builder::new()
-                                .serve_connection(io, s)
-                                .with_upgrades()
-                                .await;
-                            if let Err(e) = res {
-                                log::error!("{e:?}");
-                            }
-                        });
-                    }
-                }
-            }
-            None => loop {
-                if let Ok((socket, _addr)) = server.accept().await {
-                    let provider = self.fun_provider();
-                    tokio::spawn(async move {
-                        let io = TokioIo::new(socket);
-                        let s = ServiceBuilder::new()
-                            .service(my_service_fn(service::h1::serve_http1, provider));
-                        let s = TowerToHyperService::new(s);
+        match self.tls.as_ref() {
+            Some(cfg) => self.run_tls(server, cfg).await,
+            None => self.run_plain(server).await,
+        }
+    }
 
-                        let res = http1::Builder::new()
-                            .serve_connection(io, s)
-                            .with_upgrades()
-                            .await;
-                        if let Err(e) = res {
-                            log::error!("{e:?}");
-                        }
-                    });
-                }
-            },
+    async fn run_tls(&self, server: TcpListener, cfg: &TlsConfig) -> Result<(), Box<dyn Error>> {
+        let acceptor = cfg.tls_acceptor()?;
+        loop {
+            if let Ok((socket, _addr)) = server.accept().await
+                && let Ok(socket) = acceptor.clone().accept(socket).await
+            {
+                let provider = self.fun_provider();
+                tokio::spawn(async move {
+                    let io = TokioIo::new(socket);
+                    let s = ServiceBuilder::new()
+                        .service(my_service_fn(service::h1::serve_http1, provider));
+                    let s = TowerToHyperService::new(s);
+                    let res = http1::Builder::new()
+                        .serve_connection(io, s)
+                        .with_upgrades()
+                        .await;
+                    if let Err(e) = res {
+                        log::error!("{e:?}");
+                    }
+                });
+            }
+        }
+    }
+
+    async fn run_plain(&self, server: TcpListener) -> Result<(), Box<dyn Error>> {
+        loop {
+            if let Ok((socket, _addr)) = server.accept().await {
+                let provider = self.fun_provider();
+                tokio::spawn(async move {
+                    let io = TokioIo::new(socket);
+                    let s = ServiceBuilder::new()
+                        .service(my_service_fn(service::h1::serve_http1, provider));
+                    let s = TowerToHyperService::new(s);
+
+                    let res = http1::Builder::new()
+                        .serve_connection(io, s)
+                        .with_upgrades()
+                        .await;
+                    if let Err(e) = res {
+                        log::error!("{e:?}");
+                    }
+                });
+            }
         }
     }
 }
