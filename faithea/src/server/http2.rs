@@ -69,16 +69,15 @@ impl H2Server {
 
     async fn run_tls(&self, listener: TcpListener, cfg: &TlsConfig) -> Result<(), Box<dyn Error>> {
         let acceptor = cfg.tls_acceptor()?;
-
+        let provider = self.fun_provider();
+        let s = ServiceBuilder::new().service(my_service_fn(service::h2::serve_http2, provider));
         loop {
             if let Ok((socket, _addr)) = listener.accept().await
                 && let Ok(socket) = acceptor.clone().accept(socket).await
             {
                 let io = TokioIo::new(socket);
-                let provider = self.fun_provider();
+                let s = s.clone();
                 tokio::spawn(async move {
-                    let s = ServiceBuilder::new()
-                        .service(my_service_fn(service::h2::serve_http2, provider));
                     let s = TowerToHyperService::new(s);
 
                     let _ = http2::Builder::new(TokioExecutor)
@@ -93,13 +92,13 @@ impl H2Server {
     }
 
     async fn run_plain(&self, listener: TcpListener) -> Result<(), Box<dyn Error>> {
+        let provider = self.fun_provider();
+        let s = ServiceBuilder::new().service(my_service_fn(service::h2::serve_http2, provider));
         loop {
             if let Ok((socket, _addr)) = listener.accept().await {
                 let io = TokioIo::new(socket);
-                let provider = self.fun_provider();
+                let s = s.clone();
                 tokio::spawn(async move {
-                    let s = ServiceBuilder::new()
-                        .service(my_service_fn(service::h2::serve_http2, provider));
                     let s = TowerToHyperService::new(s);
                     let _ = http2::Builder::new(TokioExecutor)
                         .enable_connect_protocol()

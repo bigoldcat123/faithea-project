@@ -50,15 +50,15 @@ impl H1Server {
 
     async fn run_tls(&self, server: TcpListener, cfg: &TlsConfig) -> Result<(), Box<dyn Error>> {
         let acceptor = cfg.tls_acceptor()?;
+        let provider = self.fun_provider();
+        let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
         loop {
             if let Ok((socket, _addr)) = server.accept().await
                 && let Ok(socket) = acceptor.clone().accept(socket).await
             {
-                let provider = self.fun_provider();
+                let s = s.clone();
                 tokio::spawn(async move {
                     let io = TokioIo::new(socket);
-                    let s = ServiceBuilder::new()
-                        .service(my_service_fn(service::h1::serve_http1, provider));
                     let s = TowerToHyperService::new(s);
                     let res = http1::Builder::new()
                         .serve_connection(io, s)
@@ -73,13 +73,13 @@ impl H1Server {
     }
 
     async fn run_plain(&self, server: TcpListener) -> Result<(), Box<dyn Error>> {
+        let provider = self.fun_provider();
+        let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
         loop {
             if let Ok((socket, _addr)) = server.accept().await {
-                let provider = self.fun_provider();
+                let s = s.clone();
                 tokio::spawn(async move {
                     let io = TokioIo::new(socket);
-                    let s = ServiceBuilder::new()
-                        .service(my_service_fn(service::h1::serve_http1, provider));
                     let s = TowerToHyperService::new(s);
 
                     let res = http1::Builder::new()
