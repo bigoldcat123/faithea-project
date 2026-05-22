@@ -100,11 +100,11 @@ impl BytesSource for HyperIncommingBytesSource {
                     buf.put(data);
                     Ok(len)
                 } else {
-                    return Err("(0)    ".into());
+                    Err("(0)    ".into())
                 }
             } else {
                 self.is_end = true;
-                return Ok(0);
+                Ok(0)
             }
         })
     }

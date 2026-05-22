@@ -54,7 +54,7 @@ pub async fn handle_websocket(
             Err(e) => log::error!("upgrade error: {}", e),
         };
     });
-    return Ok(response._inner);
+    Ok(response._inner)
 }
 async fn server_upgraded_io(upgrade: Upgraded, mut req: HttpRequest, provider: ServerFuncProvider) {
     let upgraded = TokioIo::new(upgrade);
@@ -153,7 +153,6 @@ where
     }
 }
 /// Service returned by [`service_fn`]
-
 pub struct MyServiceFn<F, R> {
     f: Arc<F>,
     provider: ServerFuncProvider,
@@ -164,7 +163,7 @@ impl<F, R> Clone for MyServiceFn<F, R> {
         Self {
             f: self.f.clone(),
             provider: self.provider.clone(),
-            _req: self._req.clone(),
+            _req: self._req,
         }
     }
 }
