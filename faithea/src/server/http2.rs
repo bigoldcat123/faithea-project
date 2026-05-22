@@ -24,24 +24,7 @@ pub struct H2Server {
     pub(crate) guards: Arc<GuardTire>,
     pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
-
-#[derive(Clone)]
-// An Executor that uses the tokio runtime.
-pub struct TokioExecutor;
-
-// Implement the `hyper::rt::Executor` trait for `TokioExecutor` so that it can be used to spawn
-// tasks in the hyper runtime.
-// An Executor allows us to manage execution of tasks which can help us improve the efficiency and
-// scalability of the server.
-impl<F> hyper::rt::Executor<F> for TokioExecutor
-where
-    F: std::future::Future + Send + 'static,
-    F::Output: Send + 'static,
-{
-    fn execute(&self, fut: F) {
-        tokio::task::spawn(fut);
-    }
-}
+use hyper_util::rt::TokioExecutor;
 
 impl H2Server {
     fn fun_provider(&self) -> ServerFuncProvider {
@@ -80,7 +63,8 @@ impl H2Server {
                 tokio::spawn(async move {
                     let s = TowerToHyperService::new(s);
 
-                    let _ = http2::Builder::new(TokioExecutor)
+
+                    let _ = http2::Builder::new(TokioExecutor::new())
                         .enable_connect_protocol()
                         .serve_connection(io, s)
                         .await;
@@ -100,7 +84,7 @@ impl H2Server {
                 let s = s.clone();
                 tokio::spawn(async move {
                     let s = TowerToHyperService::new(s);
-                    let _ = http2::Builder::new(TokioExecutor)
+                    let _ = http2::Builder::new(TokioExecutor::new())
                         .enable_connect_protocol()
                         .serve_connection(io, s)
                         .await;

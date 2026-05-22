@@ -29,6 +29,6 @@ log = "0.4.29"
 hyper = { version = "1.9.0", features = ["http1", "http2", "server"] }
 pin-project-lite = "0.2.17"
 tower = "0.5.3"
-hyper-util = { version = "0.1.20", features = ["service"] }
+hyper-util = { version = "0.1.20", features = ["service","tokio"] }
 tempfile = "3.27.0"
 # hyper-util = "0.1.20"
