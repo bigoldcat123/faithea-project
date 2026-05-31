@@ -13,7 +13,7 @@ pub struct WebSocketDataPayLoad {
 }
 
 impl WebSocketDataPayLoad {
-    pub fn text<D:Display>(payload: D) -> Self {
+    pub fn text<D: Display>(payload: D) -> Self {
         Self {
             _inner: payload.to_string().into(),
             r#type: WebSocketMessageType::Text,

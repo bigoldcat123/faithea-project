@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use faithea::{post};
 use faithea::data::Json;
+use faithea::post;
 use serde::{Deserialize, Serialize};
-
 
 // 1. 最外层：学生档案
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +78,6 @@ struct Meta {
     extra: HashMap<String, serde_json::Value>, // 任意扩展字段
 }
 #[post("/json")]
-async fn json_test(stu:Json<StuData>) {
+async fn json_test(stu: Json<StuData>) {
     stu
 }

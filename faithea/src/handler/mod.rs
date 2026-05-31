@@ -3,16 +3,26 @@ use std::collections::HashMap;
 use http::Method;
 
 use crate::{
-    handler::types::{Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit, WebSocketHandlerResultTrait}, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier
+    handler::types::{
+        Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
+        WebSocketHandlerResultTrait,
+    },
+    regulate_url_path,
+    request::HttpRequest,
+    route::{Route, RouteComponent},
+    server::HandlerModifier,
+    util::trie::Trie,
 };
 pub mod types;
-#[derive(Default)]
-pub struct HandlerTire {
-    /// Child nodes in the routing trie, keyed by route components
-    path: HashMap<RouteComponent, Box<Self>>,
-    /// Handler function stored at this node (if this is a terminal node)
-    f: HashMap<Method, Handler>,
-}
+
+pub type HandlerTire = Trie<HashMap<Method, Handler>, RouteComponent>;
+// #[derive(Default)]
+// pub struct HandlerTire {
+//     /// Child nodes in the routing trie, keyed by route components
+//     path: HashMap<RouteComponent, Box<Self>>,
+//     /// Handler function stored at this node (if this is a terminal node)
+//     f: HashMap<Method, Handler>,
+// }
 impl HandlerTire {
     /// m just format!("{}{}",route,pre_fix)
     /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
@@ -128,7 +138,7 @@ impl HandlerTire {
     pub fn websoekct_h2<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
         F: RawWebSocketHandlerTarit<R>,
-        R: WebSocketHandlerResultTrait
+        R: WebSocketHandlerResultTrait,
     {
         let url = regulate_url_path(url);
         let mut route = Route::from(url.as_str());
@@ -142,13 +152,14 @@ impl HandlerTire {
 
     fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Handler, method: Method) {
         if let Some(next) = url.pop() {
-            if !self.path.contains_key(&next) {
-                self.path.insert(next.clone(), Default::default());
+            if !self.next.contains_key(&next) {
+                self.next.insert(next.clone(), Default::default());
             }
+            assert!(self.next.get_mut(&next).is_some());
             if url.is_empty() {
-                self.path.get_mut(&next).unwrap().f.insert(method, f);
+                self.next.get_mut(&next).unwrap().value.insert(method, f);
             } else {
-                self.path.get_mut(&next).unwrap().add_route(url, f, method);
+                self.next.get_mut(&next).unwrap().add_route(url, f, method);
             }
         }
     }
@@ -184,14 +195,14 @@ impl HandlerTire {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
             for (component, child) in self
-                .path
+                .next
                 .iter()
                 .filter(|(comp, _)| comp.match_url(url_part))
             {
                 if idx + 1 < url_parts.len() {
                     if *component == RouteComponent::MultiSegWildCard {
                         // Multi-segment wildcard matches the rest of the path
-                        if let Some(f) = child.f.get(&method) {
+                        if let Some(f) = child.value.get(&method) {
                             let mut path = current_path.clone();
                             path.r.push(component.clone());
                             candidates.push((path, f));
@@ -202,7 +213,7 @@ impl HandlerTire {
                         path.r.push(component.clone());
                         child.get_candidates(url_parts, candidates, idx + 1, path, method.clone());
                     }
-                } else if let Some(f) = child.f.get(&method) {
+                } else if let Some(f) = child.value.get(&method) {
                     // Reached the end of the URL, add handler if present
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
@@ -217,7 +228,7 @@ mod test {
     use http::Method;
 
     use crate::{
-        handler::{HandlerTire, types:: HttpHandlerError},
+        handler::{HandlerTire, types::HttpHandlerError},
         request::HttpRequest,
         response::HttpResponse,
     };

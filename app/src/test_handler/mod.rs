@@ -1,6 +1,7 @@
 use faithea::{handlers, server::HandlerModifier};
 
 pub mod cookie;
+pub mod custom_res;
 pub mod from_request;
 pub mod hello_world;
 pub mod json;
@@ -9,7 +10,6 @@ pub mod path_param;
 pub mod redirect;
 pub mod search_param;
 pub mod stream;
-pub mod custom_res;
 
 // Re-export all handlers
 pub use cookie::cookie;
@@ -21,7 +21,6 @@ pub use path_param::path_param;
 pub use redirect::redirect;
 pub use search_param::search_param;
 pub use stream::stream;
-
 
 pub fn test_handlers() -> Vec<HandlerModifier> {
     handlers!(

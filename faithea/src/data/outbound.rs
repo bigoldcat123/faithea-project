@@ -10,7 +10,8 @@ use serde::Serialize;
 use crate::{
     data::Json,
     handler::types::HttpHandlerError,
-    map_fu, response::{HttpResponseModifier, ResponseBody},
+    map_fu,
+    response::{HttpResponseModifier, ResponseBody},
 };
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = HttpHandlerError;

@@ -18,6 +18,7 @@ impl HttpResponseModifier for SSE {
         Box::pin(async move {
             res.add_header(CONTENT_TYPE, "text/event-stream".try_into()?);
             res.add_header(CACHE_CONTROL, "no-cache".try_into()?);
-            Ok(()) })
+            Ok(())
+        })
     }
 }

@@ -1,10 +1,11 @@
-use std::{collections::HashMap, future::Future, pin::Pin};
+use std::{future::Future, pin::Pin};
 
 use crate::{
     regulate_url_path,
     request::HttpRequest,
     response::HttpResponse,
     route::{Route, RouteComponent},
+    util::trie::Trie,
 };
 type GuardResultOutput = Result<HttpRequest, HttpResponse>;
 pub trait GuardResultTrait: Future<Output = GuardResultOutput> + Send + 'static {}
@@ -17,21 +18,17 @@ impl<T: Fn(HttpRequest) -> Pin<Box<dyn GuardResultTrait>> + Send + Sync + 'stati
     for T
 {
 }
-pub trait RawGuardTrait<R:GuardResultTrait>:Fn(HttpRequest) -> R + Send + Sync + 'static {
-
-}
-impl<T: Fn(HttpRequest) -> R + Send + Sync + 'static, R:GuardResultTrait> RawGuardTrait<R> for T {
-
-}
+pub trait RawGuardTrait<R: GuardResultTrait>: Fn(HttpRequest) -> R + Send + Sync + 'static {}
+impl<T: Fn(HttpRequest) -> R + Send + Sync + 'static, R: GuardResultTrait> RawGuardTrait<R> for T {}
 pub type Guard = Box<dyn GuardTrait>;
-
-#[derive(Default)]
-pub struct GuardTire {
-    /// Child nodes in the trie, keyed by route components
-    path: HashMap<RouteComponent, Box<Self>>,
-    /// Guard function stored at this node (if this is a terminal node)
-    f: Vec<Guard>,
-}
+pub type GuardTire = Trie<Vec<Guard>, RouteComponent>;
+// #[derive(Default)]
+// pub struct GuardTire {
+//     /// Child nodes in the trie, keyed by route components
+//     path: HashMap<RouteComponent, Box<Self>>,
+//     /// Guard function stored at this node (if this is a terminal node)
+//     f: Vec<Guard>,
+// }
 
 impl GuardTire {
     pub fn add<F, R, P>(&mut self, url: P, f: F)
@@ -49,20 +46,20 @@ impl GuardTire {
     fn add_with_route_components<F, R>(&mut self, mut url: Route, f: F)
     where
         F: RawGuardTrait<R>,
-        R: GuardResultTrait
+        R: GuardResultTrait,
     {
         if let Some(next) = url.r.pop() {
-            if !self.path.contains_key(&next) {
-                self.path.insert(next.clone(), Default::default());
+            if !self.next.contains_key(&next) {
+                self.next.insert(next.clone(), Default::default());
             }
             if url.r.is_empty() {
-                self.path
+                self.next
                     .get_mut(&next)
                     .unwrap()
-                    .f
+                    .value
                     .push(Box::new(move |r: HttpRequest| Box::pin(f(r))))
             } else {
-                self.path
+                self.next
                     .get_mut(&next)
                     .unwrap()
                     .add_with_route_components(url, f);
@@ -109,7 +106,7 @@ impl GuardTire {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
             for (component, child) in self
-                .path
+                .next
                 .iter()
                 .filter(|(comp, _)| comp.match_url(url_part))
             {
@@ -120,7 +117,7 @@ impl GuardTire {
                     // Multi-segment wildcard matches the rest of the path
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
-                    for g in child.f.iter() {
+                    for g in child.value.iter() {
                         candidates.push((path.clone(), g));
                     }
                 } else if idx + 1 < url_parts.len() {
@@ -131,7 +128,7 @@ impl GuardTire {
                 } else {
                     let mut path = current_path.clone();
                     path.r.push(component.clone());
-                    for g in child.f.iter() {
+                    for g in child.value.iter() {
                         candidates.push((path.clone(), g));
                     }
                 }

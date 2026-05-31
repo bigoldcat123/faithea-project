@@ -1,16 +1,13 @@
 use std::path::PathBuf;
 
-use faithea::{ TryConvertInto};
+use faithea::TryConvertInto;
 use serde::{Deserialize, Serialize};
 
-
 #[test]
-fn base64() {
-}
+fn base64() {}
 
 #[test]
 fn u() {
-
     let mask = [0x01, 0x02, 0x03, 0x04];
     let value = b"hello";
     println!("lent: {}", value.len());
@@ -19,7 +16,6 @@ fn u() {
         let masked = (mask[i % 4] ^ value[i]) as u8;
         println!("masked: {}", masked);
     }
-
 }
 
 #[test]
@@ -68,6 +64,4 @@ fn path() {
 }
 
 #[test]
-fn b() {
-
-}
+fn b() {}

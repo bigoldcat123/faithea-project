@@ -11,7 +11,10 @@ use crate::{
     handler::HandlerTire,
     request::HttpRequest,
     response::HttpResponse,
-    server::{builder::{GlobalErrorHandler, TlsConfig}, process_request},
+    server::{
+        builder::{GlobalErrorHandler, TlsConfig},
+        process_request,
+    },
 };
 
 pub struct H2Server {
@@ -20,7 +23,7 @@ pub struct H2Server {
     pub(crate) handlers: Arc<HandlerTire>,
     /// Shared reference to guard middleware trie
     pub(crate) guards: Arc<GuardTire>,
-    pub(crate) error_handler:Option<Arc<GlobalErrorHandler>>
+    pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 
 impl H2Server {
@@ -41,13 +44,17 @@ impl H2Server {
                     if let Ok((socket, addr)) = listener.accept().await
                         && let Ok(socket) = acceptor.clone().accept(socket).await
                     {
-                        let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
+                        let _ = self
+                            .deal_with(socket, addr, self.error_handler.clone())
+                            .await;
                     }
                 }
             }
             None => loop {
                 if let Ok((socket, addr)) = listener.accept().await {
-                    let _ = self.deal_with(socket, addr,self.error_handler.clone()).await;
+                    let _ = self
+                        .deal_with(socket, addr, self.error_handler.clone())
+                        .await;
                 }
             },
         }
@@ -64,7 +71,7 @@ impl H2Server {
         let guards = self.guards.clone();
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
-            if let Err(e) = process(socket, guards, handlers,error_handler).await {
+            if let Err(e) = process(socket, guards, handlers, error_handler).await {
                 log::debug!("{:?}", e);
             }
         });
@@ -100,7 +107,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
         });
         tokio::spawn(async move {
             if let Ok(request) = HttpRequest::parse_h2_frame(request).await {
-                process_request(guards, handlers, request, tx,error_handler).await;
+                process_request(guards, handlers, request, tx, error_handler).await;
             }
         });
     }

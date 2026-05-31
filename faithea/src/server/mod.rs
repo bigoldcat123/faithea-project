@@ -12,17 +12,21 @@ use tokio::{
 };
 
 use crate::{
-    guard::GuardTire, handler::{
+    guard::GuardTire,
+    handler::{
         HandlerTire,
         types::{HttpHandler, WebSocketHandler},
-    }, map_str, request::{HttpRequest, RequestBody}, response::{HttpResponse, HttpResponseModifier, ResponseBody}, route::Route, server::{
+    },
+    map_str,
+    request::{HttpRequest, RequestBody},
+    response::{HttpResponse, HttpResponseModifier, ResponseBody},
+    route::Route,
+    server::{
         builder::{GlobalErrorHandler, HttpServerBuilder},
         http1::H1Server,
         http2::H2Server,
-    }, websocket::{
-        WebSocketIncommingMessageParser,
-        data::WebSocketDataPayLoad, socket::WebSocket,
-    }
+    },
+    websocket::{WebSocketIncommingMessageParser, data::WebSocketDataPayLoad, socket::WebSocket},
 };
 
 pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
@@ -176,14 +180,18 @@ fn get_ws_incomming_message_receiver(
     use RequestBody::*;
     match req_body {
         WebSocketStreamBodyHttp2(stream_body) => {
-            let (parser, incomming_message_receiver) =
-                WebSocketIncommingMessageParser::new(Http2BytesSource::new(stream_body), outcomming_message_sender);
+            let (parser, incomming_message_receiver) = WebSocketIncommingMessageParser::new(
+                Http2BytesSource::new(stream_body),
+                outcomming_message_sender,
+            );
             parser.start();
             incomming_message_receiver
         }
         WebSocketStreamBodyHttp1(reader) => {
-            let (parser, incomming_message_receiver) =
-                WebSocketIncommingMessageParser::new(Http1BytesSource::new(reader, 0, 0), outcomming_message_sender);
+            let (parser, incomming_message_receiver) = WebSocketIncommingMessageParser::new(
+                Http1BytesSource::new(reader, 0, 0),
+                outcomming_message_sender,
+            );
             parser.start();
             incomming_message_receiver
         }
@@ -193,22 +201,26 @@ fn get_ws_incomming_message_receiver(
     }
 }
 
-pub trait BytesSource:Send {
+pub trait BytesSource: Send {
     fn read_buf(
         &mut self,
         buf: &mut BytesMut,
     ) -> impl Future<Output = Result<usize, String>> + Send;
-    fn is_end(&self)-> bool;
+    fn is_end(&self) -> bool;
 }
 
 pub(crate) struct Http1BytesSource<SOURCE: AsyncRead + Unpin> {
     source: SOURCE,
-    len:usize,
-    current_len:usize
+    len: usize,
+    current_len: usize,
 }
 impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
-    pub(crate) fn new(source: SOURCE,len:usize,current_len:usize) -> Self {
-        Self { source ,current_len,len}
+    pub(crate) fn new(source: SOURCE, len: usize, current_len: usize) -> Self {
+        Self {
+            source,
+            current_len,
+            len,
+        }
     }
 }
 impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> {
@@ -220,18 +232,16 @@ impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> 
         self.current_len += res;
         Ok(res)
     }
-    fn is_end(&self)-> bool {
+    fn is_end(&self) -> bool {
         self.current_len >= self.len
     }
 }
 pub(crate) struct Http2BytesSource {
     source: RecvStream,
 }
-impl Http2BytesSource  {
-    pub(crate) fn new(source:RecvStream) -> Self{
-        Self{
-            source
-        }
+impl Http2BytesSource {
+    pub(crate) fn new(source: RecvStream) -> Self {
+        Self { source }
     }
 }
 impl BytesSource for Http2BytesSource {
@@ -242,13 +252,16 @@ impl BytesSource for Http2BytesSource {
             let len = d.len();
 
             buf.put(d);
-            self.source.flow_control().release_capacity(len).map_err(map_str!())?;
+            self.source
+                .flow_control()
+                .release_capacity(len)
+                .map_err(map_str!())?;
             Ok(len)
         } else {
             Ok(0)
         }
     }
-    fn is_end(&self)-> bool {
+    fn is_end(&self) -> bool {
         self.source.is_end_stream()
     }
 }

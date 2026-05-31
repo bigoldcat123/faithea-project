@@ -1,7 +1,5 @@
-use bytes::{Buf, BufMut,BytesMut};
-use tokio::{
-    sync::mpsc::{Receiver, Sender},
-};
+use bytes::{Buf, BufMut, BytesMut};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{server::BytesSource, websocket::data::WebSocketDataPayLoad};
 
@@ -22,7 +20,7 @@ const EXTENDED_LEN_64: usize = 127;
 /// Mask key length in bytes
 const MASK_KEY_LEN: usize = 4;
 
-#[derive(Debug,PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum WebSocketActorState {
     Head,
     Body {
@@ -57,7 +55,8 @@ impl From<u8> for WebSocketMessageType {
             0xA => WebSocketMessageType::Pong,
             _ => {
                 // unknown error close the connection.
-                WebSocketMessageType::Close},
+                WebSocketMessageType::Close
+            }
         }
     }
 }
@@ -131,14 +130,15 @@ impl ParserInnserState {
                             self.send_incomming_message().await;
                         }
                         _ => {
-                            log::info!("unknow what todo for {:?}",self.current_message_type)
+                            log::info!("unknow what todo for {:?}", self.current_message_type)
                         }
                     }
 
                     break;
                 }
                 WebSocketActorState::ConnectionClose => {
-                    let _ = self.outcomming_message_sender
+                    let _ = self
+                        .outcomming_message_sender
                         .send(WebSocketDataPayLoad::close(b"close"[..].into()))
                         .await;
                     return false;
@@ -265,7 +265,7 @@ pub struct WebSocketIncommingMessageParser<SOURCE> {
     incomming_message_stream_source: SOURCE,
     state: ParserInnserState,
 }
-impl <SOURCE:BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
+impl<SOURCE: BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
     pub fn new(
         incomming_message_stream_source: SOURCE,
         outcommint_message_sender: Sender<WebSocketDataPayLoad>,
@@ -282,7 +282,11 @@ impl <SOURCE:BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
     pub fn start(mut self) {
         tokio::spawn(async move {
             loop {
-                let _len = self.incomming_message_stream_source.read_buf(&mut self.state.buf).await.expect("other side closed");
+                let _len = self
+                    .incomming_message_stream_source
+                    .read_buf(&mut self.state.buf)
+                    .await
+                    .expect("other side closed");
                 if !self.state.process().await {
                     break;
                 }
@@ -291,13 +295,11 @@ impl <SOURCE:BytesSource + 'static> WebSocketIncommingMessageParser<SOURCE> {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
     use bytes::BytesMut;
+    use tokio::sync::mpsc;
 
     #[tokio::test]
     async fn test_parse_head_basic_text_frame() {
@@ -319,12 +321,15 @@ mod tests {
         let result = state.parse_head();
         assert!(result);
         assert_eq!(state.current_message_type, WebSocketMessageType::Text);
-        assert_eq!(state.machine_state, WebSocketActorState::Body {
-            len: 5,
-            mask: [0x01, 0x02, 0x03, 0x04],
-            msg_finished: true,
-            readed: 0,
-        });
+        assert_eq!(
+            state.machine_state,
+            WebSocketActorState::Body {
+                len: 5,
+                mask: [0x01, 0x02, 0x03, 0x04],
+                msg_finished: true,
+                readed: 0,
+            }
+        );
     }
 
     #[tokio::test]
@@ -381,12 +386,15 @@ mod tests {
 
         let result = state.parse_head();
         assert!(result);
-        assert_eq!(state.machine_state, WebSocketActorState::Body {
-            len: 256,
-            mask: [0x01, 0x02, 0x03, 0x04],
-            msg_finished: true,
-            readed: 0,
-        });
+        assert_eq!(
+            state.machine_state,
+            WebSocketActorState::Body {
+                len: 256,
+                mask: [0x01, 0x02, 0x03, 0x04],
+                msg_finished: true,
+                readed: 0,
+            }
+        );
     }
 
     #[tokio::test]
@@ -406,12 +414,15 @@ mod tests {
 
         let result = state.parse_head();
         assert!(result);
-        assert_eq!(state.machine_state, WebSocketActorState::Body {
-            len: 256,
-            mask: [0x01, 0x02, 0x03, 0x04],
-            msg_finished: true,
-            readed: 0,
-        });
+        assert_eq!(
+            state.machine_state,
+            WebSocketActorState::Body {
+                len: 256,
+                mask: [0x01, 0x02, 0x03, 0x04],
+                msg_finished: true,
+                readed: 0,
+            }
+        );
     }
 
     #[tokio::test]
@@ -477,12 +488,15 @@ mod tests {
         let result = state.parse_body(0, 5, mask, true); // 5-byte payload, only 2 bytes available
 
         assert!(!result); // Should return false since not complete
-        assert_eq!(state.machine_state, WebSocketActorState::Body {
-            readed: 2,
-            len: 5,
-            mask,
-            msg_finished: true,
-        });
+        assert_eq!(
+            state.machine_state,
+            WebSocketActorState::Body {
+                readed: 2,
+                len: 5,
+                mask,
+                msg_finished: true,
+            }
+        );
         assert_eq!(state.message.as_ref(), b"he"); // First 2 unmasked bytes
     }
 
@@ -507,12 +521,15 @@ mod tests {
         let result = state.parse_body(3, 5, mask, true); // 5-byte payload, 3 already read, 1 more available
 
         assert!(!result); // Should return false since not complete (only 4/5 bytes total)
-        assert_eq!(state.machine_state, WebSocketActorState::Body {
-            readed: 4,
-            len: 5,
-            mask,
-            msg_finished: true,
-        });
+        assert_eq!(
+            state.machine_state,
+            WebSocketActorState::Body {
+                readed: 4,
+                len: 5,
+                mask,
+                msg_finished: true,
+            }
+        );
         assert_eq!(state.message.as_ref(), b"hell"); // Should have "hel" + "l"
     }
 

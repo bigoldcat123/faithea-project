@@ -1,9 +1,9 @@
+use crate::{derive_macro::expand_multipart, utils::expand_macro};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ DeriveInput, ItemFn, LitStr, Path, Token, parse_macro_input, punctuated::Punctuated};
-use crate::{derive_macro::expand_multipart, utils::expand_macro} ;
-mod utils;
+use syn::{DeriveInput, ItemFn, LitStr, Path, Token, parse_macro_input, punctuated::Punctuated};
 mod derive_macro;
+mod utils;
 macro_rules! macro_define {
     ( $($method:ident),* ) => {
         $(
@@ -18,8 +18,7 @@ macro_rules! macro_define {
     };
 }
 
-macro_define!(get,post,delete,put);
-
+macro_define!(get, post, delete, put);
 
 /// Vec<HandlerModifier>
 #[proc_macro]
@@ -43,12 +42,11 @@ pub fn handlers(input: TokenStream) -> TokenStream {
     .into()
 }
 
-
-#[proc_macro_derive(MultipartData,attributes(faithea))]
+#[proc_macro_derive(MultipartData, attributes(faithea))]
 pub fn derive_multipart_data(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    match expand_multipart(& input) {
+    match expand_multipart(&input) {
         Ok(ts) => ts,
         Err(e) => e.to_compile_error().into(),
     }

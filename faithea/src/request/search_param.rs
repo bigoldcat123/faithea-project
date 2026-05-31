@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
-
 #[derive(Debug, Default)]
 pub(crate) struct SearchParam {
-    pub(crate)  _inner: HashMap<String, String>,
+    pub(crate) _inner: HashMap<String, String>,
 }
 
 impl SearchParam {
     pub(crate) fn from_query(query: Option<&str>) -> Self {
         let mut map = HashMap::new();
-        if let Some(search_params) =query {
+        if let Some(search_params) = query {
             for (k, v) in search_params.split("&").filter_map(|x| x.split_once("=")) {
                 if let Ok(ok) = urlencoding::decode(v) {
                     map.insert(k.into(), ok.to_string());
@@ -19,8 +18,6 @@ impl SearchParam {
         Self { _inner: map }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -33,7 +30,6 @@ mod tests {
             ])
         };
     }
-
 
     #[test]
     fn spaces_around_query() {
@@ -60,10 +56,10 @@ mod tests {
     fn search_param_test2() {
         let url = "a=a=10&c=200";
         let s = SearchParam::from_query(Some(url));
-        assert_eq!(s._inner, HashMap::from([
-            ("a".into(), "a=10".into()),
-            ("c".into(), "200".into())
-        ]))
+        assert_eq!(
+            s._inner,
+            HashMap::from([("a".into(), "a=10".into()), ("c".into(), "200".into())])
+        )
     }
 
     #[test]
@@ -108,5 +104,4 @@ mod tests {
         let s = SearchParam::from_query(Some(url));
         assert_eq!(s._inner, map! {});
     }
-
 }

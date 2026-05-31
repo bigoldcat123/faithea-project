@@ -1,8 +1,8 @@
 pub mod cookie;
-pub mod redirect;
 pub mod cors;
-pub mod stream;
+pub mod redirect;
 pub mod sse;
+pub mod stream;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
@@ -139,7 +139,7 @@ pub enum ResponseBody {
     #[default]
     Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
-    Stream(Receiver<Bytes>)
+    Stream(Receiver<Bytes>),
 }
 
 impl ResponseBody {

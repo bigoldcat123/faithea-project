@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 #[derive(Default, Debug)]
 pub struct Cookie<'a> {
     _inner: HashMap<&'a str, &'a str>,

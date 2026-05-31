@@ -291,9 +291,9 @@ async fn parse_line_header_frame<R: AsyncRead + Unpin>(
                 }
             }
             Err(e) => {
-                return Err(
-                    format!("reading bytes from socket error while parsing parse_line_header_frame -> {e:?}")
-                );
+                return Err(format!(
+                    "reading bytes from socket error while parsing parse_line_header_frame -> {e:?}"
+                ));
             }
         }
     }

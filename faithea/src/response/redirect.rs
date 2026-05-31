@@ -1,13 +1,10 @@
-
 use http::{HeaderValue, StatusCode, header::LOCATION};
 
 use crate::response::HttpResponseModifier;
 
+pub struct Redirect<P: AsRef<str>>(pub P);
 
-
-pub struct Redirect<P:AsRef<str>>(pub P);
-
-impl <P:AsRef<str>> HttpResponseModifier for Redirect<P> {
+impl<P: AsRef<str>> HttpResponseModifier for Redirect<P> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut super::HttpResponse,
