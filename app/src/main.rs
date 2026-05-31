@@ -13,7 +13,7 @@ async fn main() {
         .cors()
         .guard("/protected/**", async |req| Ok(req))
         .guard("/**", async |e| {
-            // println!("{e:?}",);
+            log::info!("{:?}", e.uri());
             Ok(e)
         })
         .websocket("/ws/{name}", ws)

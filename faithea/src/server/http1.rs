@@ -104,7 +104,7 @@ async fn process<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static>(
             error_handler.clone(),
         );
         let req = HttpRequest::parse_h1_frame(&mut reader, &mut buf).await?;
-        log::info!("{:#?}", req._inner.uri());
+
 
         if is_websocket_upgrade(&req) {
             handle_upgrade_to_websocket(guards, handlers, req, tx, reader, error_handler).await;
