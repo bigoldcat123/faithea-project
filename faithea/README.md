@@ -213,15 +213,15 @@ implememt `HttpResponseModifier` for your struct
 ```rust
 pub trait HttpResponseModifier {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>>;
+    ) -> HttpResponseModifierFuture<'a>;
 }
 impl HttpResponseModifier for MyStruct {
     fn modify<'a>(
-        &'a self,
+        &'a mut self,
         res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), FuError>> + 'a + Send + Sync>> {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             /// your code to modify response
             Ok(())

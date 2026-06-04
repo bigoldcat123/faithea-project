@@ -230,19 +230,15 @@ impl ResponseBody {
 //     }
 // }
 
+pub type HttpResponseModifierFuture<'a> =
+    std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>;
+
 pub trait HttpResponseModifier {
-    fn modify<'a>(
-        &'a mut self,
-        res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>;
+    fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a>;
 }
 
 impl HttpResponseModifier for HeaderMap {
-    fn modify<'a>(
-        &'a mut self,
-        res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             for (k, v) in self.drain() {
                 if let Some(k) = k {
@@ -259,11 +255,7 @@ impl HttpResponseModifier for StatusCode {
     //     res.status_line.info = self.info.to_string();
     //     Ok(())
     // }
-    fn modify<'a>(
-        &'a mut self,
-        res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             *res._innser.status_mut() = *self;
             Ok(())
@@ -271,16 +263,10 @@ impl HttpResponseModifier for StatusCode {
     }
 }
 impl<T: HttpResponseModifier + ?Sized + Send + Sync> HttpResponseModifier for Vec<Box<T>> {
-    fn modify<'a>(
-        &'a mut self,
-        res: &'a mut HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             for m in self {
-                let m: std::pin::Pin<
-                    Box<dyn Future<Output = Result<(), HttpHandlerError>> + Send + Sync>,
-                > = m.modify(res);
+                let m: HttpResponseModifierFuture<'_> = m.modify(res);
                 m.await?;
             }
             Ok(())

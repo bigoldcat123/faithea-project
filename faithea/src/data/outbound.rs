@@ -11,7 +11,7 @@ use crate::{
     data::Json,
     handler::types::HttpHandlerError,
     map_fu,
-    response::{HttpResponseModifier, ResponseBody},
+    response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody},
 };
 impl<T: Serialize> TryFrom<&Json<T>> for ResponseBody {
     type Error = HttpHandlerError;
@@ -32,8 +32,7 @@ impl<T: Serialize + Send + Sync> HttpResponseModifier for Json<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             use ResponseBody::*;
             res.add_header(
@@ -59,8 +58,7 @@ impl HttpResponseModifier for &str {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(
@@ -82,8 +80,7 @@ impl HttpResponseModifier for String {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
             res.add_header(
@@ -108,8 +105,7 @@ impl<T: AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
-    {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             let f = tokio::fs::File::open(self.0.as_ref()).await?;
             let meta = f.metadata().await?;

@@ -86,6 +86,9 @@ impl HttpRequest {
             // cookie:None
         }
     }
+    pub fn body(&mut self) -> &mut Option<RequestBody> {
+        self._inner.body_mut()
+    }
     pub fn from_req(req: Request<Option<RequestBody>>) -> Self {
         Self {
             _inner: req,

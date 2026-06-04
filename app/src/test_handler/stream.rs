@@ -14,11 +14,10 @@ async fn stream() {
     tokio::spawn(async move {
         let mut x = 10;
         while x > 0 {
-            tx.send(Bytes::copy_from_slice("data: hello\n".as_bytes()))
+            tx.send(Bytes::copy_from_slice(format!("data: hello {}\n",x).as_bytes()))
                 .await
                 .unwrap();
             x -= 1;
-            info!("??");
             sleep(Duration::from_millis(100)).await;
         }
         info!("ok");

@@ -13,6 +13,7 @@ pub struct Stu {
 
 impl<'a> TryFromRequest<'a> for Stu {
     fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+        // let body = _req.body().as_mut().unwrap();
         Ok(Stu {
             name: "from req".into(),
             age: 111,

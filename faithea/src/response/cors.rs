@@ -6,7 +6,7 @@ use http::{
     },
 };
 
-use crate::response::HttpResponseModifier;
+use crate::response::{HttpResponseModifier, HttpResponseModifierFuture};
 
 pub struct CORS;
 
@@ -14,14 +14,7 @@ impl HttpResponseModifier for CORS {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut super::HttpResponse,
-    ) -> std::pin::Pin<
-        Box<
-            dyn Future<Output = Result<(), crate::handler::types::HttpHandlerError>>
-                + 'a
-                + Send
-                + Sync,
-        >,
-    > {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             let mut header = HeaderMap::new();
             header.insert(ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());

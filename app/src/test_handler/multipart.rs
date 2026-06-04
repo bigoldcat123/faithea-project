@@ -39,7 +39,7 @@ pub async fn multipart(data: Multipart<StuInfo>) {
         .map(|x| (x.file_name.clone(), x.temp_path.clone()))
         .collect::<Vec<_>>();
     format!(
-        "name: {:?},age: {}, merried: {:?}, other_info:{:?},profile_len: {:?},  ",
+        "name: {:?},age: {}, merried: {:?}, other_info:{:?},file_info: {:?},  ",
         data.name, data.age, data.merried, data.other_info, f
     )
 }

@@ -1,7 +1,5 @@
 use faithea::{
-    data::Json,
-    get, res_modifiers,
-    response::{HttpResponseModifier, cors::CORS},
+    data::Json, get, header::{CONTENT_LENGTH, HeaderValue}, res_modifiers, response::{HttpResponseModifier, HttpResponseModifierFuture, cors::CORS}
 };
 use serde_json::json;
 
@@ -13,16 +11,10 @@ impl HttpResponseModifier for MyCustomType {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut faithea::response::HttpResponse,
-    ) -> std::pin::Pin<
-        Box<
-            dyn Future<Output = Result<(), faithea::handler::types::HttpHandlerError>>
-                + 'a
-                + Send
-                + Sync,
-        >,
-    > {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             res.add_header("some-custom-header", self.name.parse().unwrap());
+            res.add_header(CONTENT_LENGTH, HeaderValue::from_static("0"));
             Ok(())
         })
     }
@@ -30,6 +22,7 @@ impl HttpResponseModifier for MyCustomType {
 
 #[get("/custom_res")]
 async fn custom_res() {
+    log::info!("{}","hello");
     MyCustomType {
         name: "Hello".into(),
     }

@@ -3,7 +3,7 @@ use std::fmt::Display;
 use bytes::Bytes;
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE, InvalidHeaderValue};
 
-use crate::response::{HttpResponseModifier, ResponseBody};
+use crate::response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody};
 
 #[derive(Debug)]
 pub enum Error {
@@ -109,14 +109,7 @@ impl HttpResponseModifier for Error {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut crate::response::HttpResponse,
-    ) -> std::pin::Pin<
-        Box<
-            dyn Future<Output = Result<(), crate::handler::types::HttpHandlerError>>
-                + 'a
-                + Send
-                + Sync,
-        >,
-    > {
+    ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             res.add_header(CONTENT_TYPE, "text/plain".parse()?);
             let b = format!("{:?}", self).as_bytes().to_vec();
