@@ -11,6 +11,13 @@ describe("documentation content pipeline", () => {
       { slug: ["getting-started", "request-data"] },
       { slug: ["getting-started", "responses"] },
       { slug: ["getting-started", "error-handling"] },
+      { slug: ["advanced", "guards"] },
+      { slug: ["advanced", "custom-extractors"] },
+      { slug: ["advanced", "advanced-responses"] },
+      { slug: ["advanced", "static-files"] },
+      { slug: ["advanced", "streaming-sse"] },
+      { slug: ["advanced", "websockets"] },
+      { slug: ["advanced", "tls-http2"] },
     ]);
   });
 
@@ -37,6 +44,19 @@ describe("documentation content pipeline", () => {
         "request-data",
         "responses",
         "error-handling",
+      ]);
+    }
+    const advanced = tree[3];
+    expect(advanced.type).toBe("section");
+    if (advanced.type === "section") {
+      expect(advanced.children.map((node) => node.key)).toEqual([
+        "guards",
+        "custom-extractors",
+        "advanced-responses",
+        "static-files",
+        "streaming-sse",
+        "websockets",
+        "tls-http2",
       ]);
     }
   });
@@ -79,6 +99,45 @@ describe("documentation content pipeline", () => {
       "请求数据",
       "响应",
       "错误处理",
+    ]);
+    expect(guides[0]?.headings.map((heading) => heading.text)).toContain(
+      "通配符模式",
+    );
+    expect(guides[0]?.headings.map((heading) => heading.text)).toContain(
+      "路由优先级",
+    );
+    expect(guides[1]?.headings.map((heading) => heading.text)).toContain(
+      "Multipart 表单与文件",
+    );
+    expect(guides[1]?.headings.map((heading) => heading.text)).toContain(
+      "自定义 Multipart 字段",
+    );
+    expect(guides[1]?.html).toContain("MultiPartFile");
+  });
+
+  test("renders all localized advanced guides", async () => {
+    const slugs = [
+      "guards",
+      "custom-extractors",
+      "advanced-responses",
+      "static-files",
+      "streaming-sse",
+      "websockets",
+      "tls-http2",
+    ];
+    const guides = await Promise.all(
+      slugs.map((slug) => getDocPage(["advanced", slug], "zh-CN")),
+    );
+
+    expect(guides.every((page) => page && !page.missing)).toBe(true);
+    expect(guides.map((page) => page?.title)).toEqual([
+      "请求守卫",
+      "自定义请求提取器",
+      "高级响应",
+      "静态文件",
+      "流式响应与 SSE",
+      "WebSockets",
+      "TLS 与 HTTP/2",
     ]);
   });
 

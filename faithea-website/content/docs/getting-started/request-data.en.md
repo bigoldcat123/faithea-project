@@ -1,6 +1,6 @@
 ---
 title: Request Data
-description: Read path parameters, query parameters, JSON bodies, and request metadata.
+description: Read parameters, JSON bodies, multipart forms, files, and request metadata.
 ---
 
 Faithea extracts request data directly into handler arguments. The handler signature describes the data a route expects.
@@ -86,6 +86,82 @@ curl -X POST http://127.0.0.1:3000/users \
 ```
 
 Faithea parses the body before the handler runs. Returning the same `Json<T>` value sends it back as a JSON response.
+
+## Multipart forms and files
+
+Faithea parses multipart forms into typed Rust structures using `Multipart<T>` and the `MultipartData` derive macro:
+
+```rust
+use faithea::{
+    MultipartData, post,
+    data::inbound::multipart::{MultiPartFile, Multipart},
+};
+
+#[derive(MultipartData, Debug)]
+struct UploadForm {
+    title: String,
+    public: Option<bool>,
+    tags: Vec<String>,
+    files: Vec<MultiPartFile>,
+}
+
+#[post("/upload")]
+async fn upload(form: Multipart<UploadForm>) {
+    format!(
+        "title={}, tags={}, files={}",
+        form.title,
+        form.tags.len(),
+        form.files.len(),
+    )
+}
+```
+
+Use `Option<T>` for optional fields and `Vec<T>` for repeated fields or multiple files.
+
+Rename a form field when it differs from the Rust field name:
+
+```rust
+#[derive(MultipartData)]
+struct ProfileForm {
+    #[faithea(rename = "displayName")]
+    display_name: String,
+}
+```
+
+Send a multipart request with `curl`:
+
+```sh
+curl -X POST http://127.0.0.1:3000/upload \
+  -F "title=release" \
+  -F "public=true" \
+  -F "tags=rust" \
+  -F "tags=web" \
+  -F "files=@README.md"
+```
+
+Uploaded files are stored in temporary paths. `MultiPartFile` removes its temporary file when the value is dropped, so move or copy files you need to retain.
+
+## Custom multipart fields
+
+Implement `TryFromPart` when a multipart field needs custom conversion:
+
+```rust
+use faithea::{
+    data::inbound::multipart::{Part, TryFromPart},
+    handler::types::HttpHandlerError,
+};
+
+struct Label(String);
+
+impl TryFromPart for Label {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError> {
+        match part {
+            Part::Lit(value) => Ok(Label(value)),
+            Part::File(_) => Err(HttpHandlerError::before_handler_incompatible_request_body_type()),
+        }
+    }
+}
+```
 
 ## Request metadata
 

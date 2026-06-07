@@ -87,6 +87,36 @@ async fn main() {
 
 前缀会与每个 handler 路由组合。例如，`#[get("/users")]` 最终会成为 `GET /api/users`。
 
+## 通配符模式
+
+使用 `*` 匹配一个路径片段，使用 `**` 匹配后续全部路径：
+
+```rust
+#[get("/files/*")]
+async fn one_level() {
+    format!("one level: {}", _req.uri())
+}
+
+#[get("/assets/**")]
+async fn nested_assets() {
+    format!("nested asset: {}", _req.uri())
+}
+```
+
+`/files/*` 可以匹配 `/files/readme`，而 `/assets/**` 也能匹配 `/assets/icons/logo.svg` 等深层路径。
+
+通配符可以与挂载前缀组合。将 `nested_assets` 挂载到 `/api` 后，最终路由为 `/api/assets/**`。
+
+## 路由优先级
+
+当多个模式同时匹配时，Faithea 会优先选择更具体的路由：
+
+```text
+精确路径片段 > 路径参数 > * > **
+```
+
+可以为特殊情况定义精确路由，并使用通配符作为兜底。请谨慎使用范围较大的 `/**` 路由，因为它可能匹配原本应该返回 `404 Not Found` 的请求。
+
 ## 测试路由
 
 启动服务，然后从另一个终端发送请求：

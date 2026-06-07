@@ -87,6 +87,36 @@ async fn main() {
 
 The prefix is combined with each handler route. For example, `#[get("/users")]` becomes `GET /api/users`.
 
+## Wildcard patterns
+
+Use `*` to match one path segment and `**` to match the remaining path:
+
+```rust
+#[get("/files/*")]
+async fn one_level() {
+    format!("one level: {}", _req.uri())
+}
+
+#[get("/assets/**")]
+async fn nested_assets() {
+    format!("nested asset: {}", _req.uri())
+}
+```
+
+`/files/*` matches `/files/readme`, while `/assets/**` also matches deeply nested paths such as `/assets/icons/logo.svg`.
+
+Wildcards combine with mounted prefixes. Mounting `nested_assets` at `/api` exposes it at `/api/assets/**`.
+
+## Route precedence
+
+When several patterns match, Faithea prefers more specific routes:
+
+```text
+exact segment > path parameter > * > **
+```
+
+Define an exact route for special cases and keep a wildcard as the fallback. Use broad `/**` routes deliberately, because they can match requests that would otherwise become `404 Not Found`.
+
 ## Try the routes
 
 Start the server and send requests from another terminal:

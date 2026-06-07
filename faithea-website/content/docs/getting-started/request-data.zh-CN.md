@@ -1,6 +1,6 @@
 ---
 title: 请求数据
-description: 读取路径参数、查询参数、JSON 请求体和请求元数据。
+description: 读取参数、JSON 请求体、Multipart 表单、文件和请求元数据。
 ---
 
 Faithea 会将请求数据直接提取到 handler 参数中。Handler 函数签名描述了路由期望接收的数据。
@@ -86,6 +86,82 @@ curl -X POST http://127.0.0.1:3000/users \
 ```
 
 Faithea 会在 handler 运行前解析请求体。返回同一个 `Json<T>` 值会将它作为 JSON 响应发送。
+
+## Multipart 表单与文件
+
+Faithea 使用 `Multipart<T>` 和 `MultipartData` 派生宏，将 Multipart 表单解析为类型化 Rust 结构：
+
+```rust
+use faithea::{
+    MultipartData, post,
+    data::inbound::multipart::{MultiPartFile, Multipart},
+};
+
+#[derive(MultipartData, Debug)]
+struct UploadForm {
+    title: String,
+    public: Option<bool>,
+    tags: Vec<String>,
+    files: Vec<MultiPartFile>,
+}
+
+#[post("/upload")]
+async fn upload(form: Multipart<UploadForm>) {
+    format!(
+        "title={}, tags={}, files={}",
+        form.title,
+        form.tags.len(),
+        form.files.len(),
+    )
+}
+```
+
+使用 `Option<T>` 表示可选字段，使用 `Vec<T>` 表示重复字段或多个文件。
+
+当表单字段与 Rust 字段名称不同时，可以重命名字段：
+
+```rust
+#[derive(MultipartData)]
+struct ProfileForm {
+    #[faithea(rename = "displayName")]
+    display_name: String,
+}
+```
+
+使用 `curl` 发送 Multipart 请求：
+
+```sh
+curl -X POST http://127.0.0.1:3000/upload \
+  -F "title=release" \
+  -F "public=true" \
+  -F "tags=rust" \
+  -F "tags=web" \
+  -F "files=@README.md"
+```
+
+上传文件会存储在临时路径中。`MultiPartFile` 被释放时会删除临时文件，因此需要保留的文件必须及时移动或复制。
+
+## 自定义 Multipart 字段
+
+Multipart 字段需要自定义转换时，实现 `TryFromPart`：
+
+```rust
+use faithea::{
+    data::inbound::multipart::{Part, TryFromPart},
+    handler::types::HttpHandlerError,
+};
+
+struct Label(String);
+
+impl TryFromPart for Label {
+    fn try_from_part(part: Part) -> Result<Self, HttpHandlerError> {
+        match part {
+            Part::Lit(value) => Ok(Label(value)),
+            Part::File(_) => Err(HttpHandlerError::before_handler_incompatible_request_body_type()),
+        }
+    }
+}
+```
 
 ## 请求元数据
 
