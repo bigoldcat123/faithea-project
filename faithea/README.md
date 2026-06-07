@@ -191,6 +191,19 @@ pub async fn ws(
         )
 ```
 
+3. reverse proxy
+```rust
+HttpServer::builder()
+    .proxy("/api/**", "http://localhost:7799/api/v1")
+    .build()
+    .run()
+    .await;
+```
+
+The unmatched `/**` path and incoming query string are appended to the target.
+For example, `/api/users?active=true` is forwarded to
+`http://localhost:7799/api/v1/users?active=true`.
+
 # Tips
 1. make your type **compatible** with searchParam and **pathParam**
 ```rust
