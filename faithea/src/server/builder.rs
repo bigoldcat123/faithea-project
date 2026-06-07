@@ -113,6 +113,14 @@ impl HttpServerBuilder {
         self
     }
 
+    /// Proxies matching requests to `target`.
+    ///
+    /// A trailing `/**` appends the unmatched path to the target URL.
+    pub fn proxy(mut self, route: &str, target: &str) -> Self {
+        self.handlers.proxy(route, target);
+        self
+    }
+
     pub fn port(mut self, p: u16) -> Self {
         self.addr.set_port(p);
         self

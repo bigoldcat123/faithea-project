@@ -7,6 +7,7 @@ use crate::{
         Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
         WebSocketHandlerResultTrait,
     },
+    proxy::Proxy,
     regulate_url_path,
     request::HttpRequest,
     route::{Route, RouteComponent},
@@ -114,6 +115,33 @@ impl HandlerTire {
             Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
             Method::OPTIONS,
         );
+    }
+
+    pub(crate) fn proxy<P: AsRef<str>>(&mut self, url: P, target: &str) {
+        let url = regulate_url_path(url);
+        let proxy = Proxy::new(target);
+        for method in [
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::HEAD,
+            Method::OPTIONS,
+            Method::TRACE,
+        ] {
+            let mut route = Route::from(url.as_str());
+            route.r.reverse();
+            let proxy = proxy.clone();
+            self.add_route(
+                route.r,
+                Handler::Http(Box::new(move |req| {
+                    let proxy = proxy.clone();
+                    Box::pin(async move { Ok(proxy.forward(req).await) })
+                })),
+                method,
+            );
+        }
     }
     // Fn(
     //         Receiver<WebSocketDataPayLoad>,
@@ -262,5 +290,24 @@ mod test {
             "Route { r: [Exact(\"\"), Exact(\"url\"), PathParam(\"abc\"), PathParam(\"efg\")] }",
             format!("{:?}", matched_route)
         );
+    }
+
+    #[test]
+    fn proxy_registers_common_http_methods() {
+        let mut handlers = HandlerTire::default();
+        handlers.proxy("/api/**", "http://localhost:7799/api/v1");
+
+        for method in [
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::HEAD,
+            Method::OPTIONS,
+            Method::TRACE,
+        ] {
+            assert!(handlers.get_handler("/api/users", method).is_some());
+        }
     }
 }
