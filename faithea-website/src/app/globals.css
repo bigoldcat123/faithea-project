@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --color-ink: #111714;
@@ -67,6 +68,33 @@ html {
     black 70%,
     transparent
   );
+}
+
+.docs-prose figure[data-rehype-pretty-code-figure] {
+  margin-block: 2rem;
+}
+
+.docs-prose figure[data-rehype-pretty-code-figure] pre {
+  overflow-x: auto;
+  border: 1px solid #344039;
+  border-radius: 4px;
+  padding: 1.25rem;
+  box-shadow: 6px 6px 0 var(--color-amber);
+}
+
+.docs-prose figure[data-rehype-pretty-code-figure] code {
+  display: grid;
+  min-width: max-content;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 0.8rem;
+}
+
+.docs-prose h2 a,
+.docs-prose h3 a {
+  color: inherit;
+  text-decoration: none;
 }
 
 @keyframes reveal {

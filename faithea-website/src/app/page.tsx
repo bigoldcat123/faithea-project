@@ -1,57 +1,64 @@
 import Link from "next/link";
+import { localizedPath, type Locale } from "@/lib/i18n";
 
-const features = [
-  {
-    number: "01",
-    title: "Macro-first routing",
-    description:
-      "Declare intent where it belongs. Route macros keep handlers compact, readable, and close to the HTTP contract.",
-    code: '#[get("/users/{id}")]',
+const homeContent = {
+  en: {
+    eyebrow: "Lightweight async HTTP for Rust",
+    hero: ["Build fast.", "Stay close to Rust."],
+    lede: "Faithea is a compact, Tokio-powered HTTP framework designed for developers who want expressive routing and control without the machinery.",
+    readDocs: "Read the docs",
+    crates: "View on crates.io",
+    commandNote: "one dependency, then build",
+    capabilities: ["Path & query params", "JSON extraction", "Multipart forms", "WebSocket", "Server-sent events", "CORS", "TLS / HTTPS", "Custom extractors"],
+    whyLabel: "[ 01 / WHY FAITHEA ]",
+    whyTitle: ["Small surface.", "Serious capability."],
+    whyBody: "The essentials for modern HTTP services, shaped into APIs that remain understandable as your project grows.",
+    features: [
+      { number: "01", title: "Macro-first routing", description: "Declare intent where it belongs. Route macros keep handlers compact, readable, and close to the HTTP contract.", code: '#[get("/users/{id}")]' },
+      { number: "02", title: "Async by default", description: "Built on Tokio for non-blocking I/O and predictable concurrency, without hiding the runtime behind heavy abstractions.", code: "async fn find_user(id: String)" },
+      { number: "03", title: "Composable responses", description: "Return strings, JSON, files, or your own response modifiers. Faithea turns focused values into complete responses.", code: 'res_modifiers!("ready", CORS)' },
+    ],
+    approachLabel: "[ 02 / THE APPROACH ]",
+    approachTitle: "Explicit where it matters. Effortless where it should be.",
+    principles: [
+      { number: "01", title: "Learn it quickly", body: "A focused API and familiar Rust types keep the path from first route to working service short." },
+      { number: "02", title: "Extend it naturally", body: "Custom request extractors and response modifiers let your own types participate directly." },
+      { number: "03", title: "Ship with confidence", body: "Rust's type system, Tokio's proven runtime, and fewer hidden behaviors make services easier to reason about." },
+    ],
+    readyLabel: "[ READY WHEN YOU ARE ]",
+    readyTitle: "Your next service can be simpler.",
+    readyBody: "Add Faithea, write a handler, and let Rust do what it does best.",
+    start: "Start building",
   },
-  {
-    number: "02",
-    title: "Async by default",
-    description:
-      "Built on Tokio for non-blocking I/O and predictable concurrency, without hiding the runtime behind heavy abstractions.",
-    code: "async fn find_user(id: String)",
+  "zh-CN": {
+    eyebrow: "轻量、异步的 Rust HTTP 框架",
+    hero: ["快速构建。", "保持 Rust 本色。"],
+    lede: "Faithea 是一个由 Tokio 驱动的紧凑型 HTTP 框架，为希望获得清晰路由与充分控制、又不想背负复杂机制的开发者而设计。",
+    readDocs: "阅读文档",
+    crates: "在 crates.io 查看",
+    commandNote: "一个依赖，即刻开始",
+    capabilities: ["路径与查询参数", "JSON 提取", "Multipart 表单", "WebSocket", "服务端事件", "CORS", "TLS / HTTPS", "自定义提取器"],
+    whyLabel: "[ 01 / 为什么选择 FAITHEA ]",
+    whyTitle: ["表面精简。", "能力认真。"],
+    whyBody: "现代 HTTP 服务所需的核心能力，被塑造成随着项目增长依然容易理解的 API。",
+    features: [
+      { number: "01", title: "宏优先路由", description: "让意图停留在它应在的位置。路由宏让处理器紧凑、清晰，并贴近 HTTP 契约。", code: '#[get("/users/{id}")]' },
+      { number: "02", title: "默认异步", description: "基于 Tokio 实现非阻塞 I/O 与可预测并发，同时不让厚重抽象遮住运行时。", code: "async fn find_user(id: String)" },
+      { number: "03", title: "可组合响应", description: "返回字符串、JSON、文件或自定义响应修改器，让专注的值自然成为完整响应。", code: 'res_modifiers!("ready", CORS)' },
+    ],
+    approachLabel: "[ 02 / 设计方式 ]",
+    approachTitle: "重要之处保持明确，该轻松之处自然轻松。",
+    principles: [
+      { number: "01", title: "快速掌握", body: "聚焦的 API 与熟悉的 Rust 类型，让第一条路由到可运行服务的路径足够短。" },
+      { number: "02", title: "自然扩展", body: "自定义请求提取器和响应修改器，让你自己的类型直接参与其中。" },
+      { number: "03", title: "放心交付", body: "Rust 类型系统、成熟的 Tokio 运行时与更少的隐藏行为，让服务更容易推理。" },
+    ],
+    readyLabel: "[ 随时可以开始 ]",
+    readyTitle: "你的下一个服务可以更简单。",
+    readyBody: "添加 Faithea，编写处理器，然后让 Rust 发挥所长。",
+    start: "开始构建",
   },
-  {
-    number: "03",
-    title: "Composable responses",
-    description:
-      "Return strings, JSON, files, or your own response modifiers. Faithea turns focused values into complete responses.",
-    code: 'res_modifiers!("ready", CORS)',
-  },
-];
-
-const capabilities = [
-  "Path & query params",
-  "JSON extraction",
-  "Multipart forms",
-  "WebSocket",
-  "Server-sent events",
-  "CORS",
-  "TLS / HTTPS",
-  "Custom extractors",
-];
-
-const principles = [
-  {
-    number: "01",
-    title: "Learn it quickly",
-    body: "A focused API and familiar Rust types keep the path from first route to working service short.",
-  },
-  {
-    number: "02",
-    title: "Extend it naturally",
-    body: "Custom request extractors and response modifiers let your own types participate directly.",
-  },
-  {
-    number: "03",
-    title: "Ship with confidence",
-    body: "Rust's type system, Tokio's proven runtime, and fewer hidden behaviors make services easier to reason about.",
-  },
-];
+} as const;
 
 const codeLines = [
   <>
@@ -132,7 +139,9 @@ function MetricCard({
   );
 }
 
-export default function Home() {
+export function HomePage({ locale }: { locale: Locale }) {
+  const content = homeContent[locale];
+  const docsHref = localizedPath(locale, "/docs");
   return (
     <main>
       <section
@@ -141,23 +150,21 @@ export default function Home() {
         <div className="relative z-10">
           <div className="animate-reveal font-mono mb-6 flex items-center gap-2.5 text-[11px] font-extrabold tracking-[0.1em] uppercase [animation-delay:70ms]">
             <span className="size-[9px] rounded-full bg-[#62c24b] shadow-[0_0_0_4px_rgb(98_194_75/18%)]" />
-            Lightweight async HTTP for Rust
+            {content.eyebrow}
           </div>
           <h1
             className={`${displayHeading} animate-reveal max-w-[660px] text-[clamp(68px,8.2vw,122px)] [animation-delay:140ms] [word-spacing:0.08em] max-sm:text-[clamp(61px,19vw,90px)]`}
           >
-            Build fast.
+            {content.hero[0]}
             <br />
-            <span className="outline-serif">Stay close to Rust.</span>
+            <span className="outline-serif">{content.hero[1]}</span>
           </h1>
           <p className="animate-reveal mt-8 max-w-[580px] text-lg leading-[1.65] text-ink-soft [animation-delay:240ms] max-sm:text-base">
-            Faithea is a compact, Tokio-powered HTTP framework designed for
-            developers who want expressive routing and control without the
-            machinery.
+            {content.lede}
           </p>
           <div className="animate-reveal mt-8 flex flex-wrap gap-3 [animation-delay:340ms]">
-            <Link className={primaryButton} href="/docs">
-              Read the docs <ArrowIcon />
+            <Link className={primaryButton} href={docsHref}>
+              {content.readDocs} <ArrowIcon />
             </Link>
             <a
               className={`${button} bg-paper-light`}
@@ -165,14 +172,14 @@ export default function Home() {
               rel="noreferrer"
               target="_blank"
             >
-              View on crates.io
+              {content.crates}
             </a>
           </div>
           <div className="animate-reveal font-mono mt-10 grid max-w-[460px] grid-cols-[auto_auto_1fr] items-center gap-3 border-t border-line pt-4 text-xs [animation-delay:340ms] max-sm:grid-cols-[auto_1fr]">
             <span className="font-black text-[#629a35]">$</span>
             <code>cargo add faithea</code>
             <span className="justify-self-end text-[9px] tracking-[0.08em] text-[#778078] uppercase max-sm:hidden">
-              one dependency, then build
+              {content.commandNote}
             </span>
           </div>
         </div>
@@ -232,7 +239,7 @@ export default function Home() {
         aria-label="Faithea capabilities"
       >
         <div className="animate-ticker flex w-max">
-          {[...capabilities, ...capabilities].map((capability, index) => (
+          {[...content.capabilities, ...content.capabilities].map((capability, index) => (
             <span
               className="inline-flex items-center gap-7 pr-7"
               key={`${capability}-${index}`}
@@ -249,21 +256,20 @@ export default function Home() {
         id="features"
       >
         <div className="sticky top-[130px] self-start max-lg:static">
-          <span className={label}>[ 01 / WHY FAITHEA ]</span>
+          <span className={label}>{content.whyLabel}</span>
           <h2
             className={`${displayHeading} text-[clamp(53px,6.5vw,88px)]`}
           >
-            Small surface.
+            {content.whyTitle[0]}
             <br />
-            <em className="outline-serif">Serious capability.</em>
+            <em className="outline-serif">{content.whyTitle[1]}</em>
           </h2>
           <p className="mt-8 max-w-[410px] leading-[1.7] text-ink-soft">
-            The essentials for modern HTTP services, shaped into APIs that
-            remain understandable as your project grows.
+            {content.whyBody}
           </p>
         </div>
         <div className="border-t border-ink">
-          {features.map((feature) => (
+          {content.features.map((feature) => (
             <article
               className="grid grid-cols-[50px_1fr] gap-[18px] border-b border-ink py-[34px] pr-1 transition-[padding] duration-200 hover:pl-3"
               key={feature.number}
@@ -292,15 +298,15 @@ export default function Home() {
           className={`${shell} grid grid-cols-[1fr_1.4fr] gap-[90px] py-[110px] max-lg:grid-cols-1 max-sm:gap-14 max-sm:py-[82px]`}
         >
           <div>
-            <span className={`${label} text-mint`}>[ 02 / THE APPROACH ]</span>
+            <span className={`${label} text-mint`}>{content.approachLabel}</span>
             <h2
               className={`${displayHeading} max-w-[540px] text-[clamp(58px,7vw,96px)]`}
             >
-              Explicit where it matters. Effortless where it should be.
+              {content.approachTitle}
             </h2>
           </div>
           <div className="grid grid-cols-3 self-end border-t border-[#59665d] max-sm:grid-cols-1">
-            {principles.map((principle, index) => (
+            {content.principles.map((principle, index) => (
               <article
                 className={`min-h-[270px] border-r border-[#59665d] px-[22px] py-[22px_16px] max-sm:min-h-0 max-sm:border-x-0 max-sm:border-b max-sm:px-0 max-sm:py-6 ${
                   index === 0 ? "border-l max-sm:border-l-0" : ""
@@ -326,14 +332,14 @@ export default function Home() {
         className={`${shell} grid grid-cols-[1.2fr_0.8fr] items-end gap-16 py-[126px] max-sm:grid-cols-1 max-sm:gap-14 max-sm:py-[82px]`}
       >
         <div>
-          <span className={label}>[ READY WHEN YOU ARE ]</span>
+          <span className={label}>{content.readyLabel}</span>
           <h2
             className={`${displayHeading} max-w-[700px] text-[clamp(64px,8vw,112px)]`}
           >
-            Your next service can be simpler.
+            {content.readyTitle}
           </h2>
           <p className="max-w-[470px] text-[17px] leading-[1.6] text-ink-soft">
-            Add Faithea, write a handler, and let Rust do what it does best.
+            {content.readyBody}
           </p>
         </div>
         <div className="grid gap-4">
@@ -341,11 +347,15 @@ export default function Home() {
             <span className="font-black text-[#63923d]">$</span>
             <code>cargo add faithea</code>
           </div>
-          <Link className={primaryButton} href="/docs">
-            Start building <ArrowIcon />
+          <Link className={primaryButton} href={docsHref}>
+            {content.start} <ArrowIcon />
           </Link>
         </div>
       </section>
     </main>
   );
+}
+
+export default function Home() {
+  return <HomePage locale="en" />;
 }
