@@ -24,7 +24,6 @@ async fn main() {
             "/static/**",
             "/Users/dadigua/Desktop/graduation/front-end-app",
         )
-        .static_map("/**", "/Users/dadigua/Desktop/c/pppp/out")
         .tls(
             "/Users/dadigua/Desktop/graduation/key.pem",
             "/Users/dadigua/Desktop/graduation/cert.pem",

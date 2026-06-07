@@ -1,0 +1,15 @@
+[package]
+name = "website-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+faithea = {path='../faithea'}
+# http-server-macro = {path='../http-server-macro'},"rt-multi-thread"
+tokio = { version = "1.48.0", features = ["rt","rt-multi-thread"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+# sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio"] }
+bytes = "1.11.0"
+env_logger = "0.11.8"
+log = "0.4.29"
