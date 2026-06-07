@@ -14,4 +14,8 @@ bytes = "1.11.0"
 env_logger = "0.11.8"
 log = "0.4.29"
 
+[dev-dependencies]
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "multipart"] }
+tokio = { version = "1.48.0", features = ["macros", "net", "rt-multi-thread", "time"] }
+
 # "macros","net","sync","io-util","fs"
