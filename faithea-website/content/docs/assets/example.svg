@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420">
-  <rect width="960" height="420" fill="#111714"/>
-  <path d="M0 70h960M0 140h960M0 210h960M0 280h960M0 350h960M120 0v420M240 0v420M360 0v420M480 0v420M600 0v420M720 0v420M840 0v420" stroke="#36423b"/>
-  <circle cx="735" cy="210" r="112" fill="#ffb84d"/>
-  <path d="M675 125h130l-60 78h70L665 310l58-83h-76z" fill="#111714"/>
-  <text x="64" y="120" fill="#b8f36b" font-family="monospace" font-size="22" letter-spacing="4">STATIC SIGNAL / 01</text>
-  <text x="64" y="226" fill="#faf9f5" font-family="sans-serif" font-size="68" font-weight="900">MARKDOWN</text>
-  <text x="64" y="282" fill="#faf9f5" font-family="sans-serif" font-size="68" font-weight="900">CAN LOOK SHARP.</text>
-</svg>

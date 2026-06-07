@@ -1,8 +1,0 @@
-{
-  "title": {
-    "en": "Examples",
-    "zh-CN": "示例"
-  },
-  "order": ["markdown", "english-only"],
-  "defaultOpen": true
-}

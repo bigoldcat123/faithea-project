@@ -1,20 +1,14 @@
 ---
-title: A Small Documentation Garden
-description: A compact demonstration of the Markdown documentation system.
+title: Faithea Documentation
+description: Learn the ideas, essentials, and advanced capabilities of Faithea.
 ---
 
-This is a deliberately small documentation garden. It exists to show how pages, folders, languages, links, and local assets fit together.
+Welcome to the Faithea documentation.
 
-## What is included
+The documentation is organized into three sections:
 
-- A directory-powered sidebar
-- English and Simplified Chinese pages
-- Static code highlighting
-- Tables, task lists, images, and relative links
-- A visible fallback when a translation is missing
+- **Introduction** explains what Faithea is and the ideas behind it.
+- **Getting Started** will guide you through building your first service.
+- **Advanced** will cover deeper framework capabilities and patterns.
 
-## Where to wander next
-
-Open the [Markdown showcase](./examples/markdown.md) to inspect the supported content styles, or visit the [English-only note](./examples/english-only.md) and switch languages to see the translation fallback.
-
-> Everything on these pages is generated at build time and can be hosted as static files.
+Begin with [Welcome](./introduction/welcome.md).

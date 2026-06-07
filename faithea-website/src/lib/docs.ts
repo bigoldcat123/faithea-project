@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
@@ -191,7 +191,11 @@ function buildTree(directory: string, segments: string[], locale: Locale): DocTr
         children: buildTree(childPath, [...segments, entry.name], locale),
       };
     })
-    .filter((section) => section.children.length > 0);
+    .filter(
+      (section) =>
+        section.children.length > 0 ||
+        existsSync(path.join(directory, section.key, "_meta.json")),
+    );
 
   return orderItems([...directPages, ...sections], meta.order);
 }

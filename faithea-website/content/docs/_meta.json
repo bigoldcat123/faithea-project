@@ -3,6 +3,6 @@
     "en": "Documentation",
     "zh-CN": "文档"
   },
-  "order": ["index", "examples"],
+  "order": ["index", "introduction", "getting-started", "advanced"],
   "defaultOpen": true
 }

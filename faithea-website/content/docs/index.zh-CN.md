@@ -1,20 +1,14 @@
 ---
-title: 一座小型文档花园
-description: Markdown 文档系统的简洁演示。
+title: Faithea 文档
+description: 了解 Faithea 的设计理念、基础用法与高级能力。
 ---
 
-这是一座刻意保持简单的文档花园，用来展示页面、目录、多语言、链接和本地资源如何协同工作。
+欢迎阅读 Faithea 文档。
 
-## 包含内容
+文档分为三个部分：
 
-- 根据目录自动生成的侧边栏
-- 英文与简体中文页面
-- 静态代码高亮
-- 表格、任务列表、图片与相对链接
-- 缺少翻译时的明确提示
+- **Introduction**：介绍 Faithea 是什么，以及框架背后的设计理念。
+- **Getting Started**：将引导你构建第一个服务。
+- **Advanced**：将介绍更深入的框架能力与使用模式。
 
-## 接下来去哪里
-
-打开 [Markdown 展示页](./examples/markdown.md) 查看支持的内容样式，或者访问 [仅英文页面](./examples/english-only.md)，然后切换语言查看缺少翻译时的处理方式。
-
-> 这些页面全部在构建时生成，可以作为纯静态文件部署。
+从 [欢迎页](./introduction/welcome.md) 开始。

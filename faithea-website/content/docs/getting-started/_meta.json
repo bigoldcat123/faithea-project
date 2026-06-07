@@ -1,0 +1,8 @@
+{
+  "title": {
+    "en": "Getting Started",
+    "zh-CN": "快速开始"
+  },
+  "order": ["installation", "basic-usage"],
+  "defaultOpen": true
+}
