@@ -5,7 +5,7 @@ use crate::{
     data::outbound::StaticFile,
     request::HttpRequest,
     res_modifiers,
-    response::{HttpResponseModifier, redirect::Redirect},
+    response::HttpResponseModifier,
 };
 
 /// # how to use
@@ -26,9 +26,9 @@ pub async fn static_map<P: AsRef<str>>(
     {
         let file_path = format!("{}/{}", path.as_ref(), multi_seg_param);
         if Path::new(&file_path).is_dir() {
-            let redirect_path = format!("{}/index.html", _req.uri().path());
-            let r = Redirect(redirect_path);
-            res_modifiers!(r)
+            let redirect_path = format!("{}index.html", file_path);
+            let a: StaticFile<String> = StaticFile(redirect_path);
+            res_modifiers!(a)
         } else {
             let a: StaticFile<String> = StaticFile(file_path);
             res_modifiers!(a)
