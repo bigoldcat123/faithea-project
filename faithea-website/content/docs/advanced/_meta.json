@@ -1,0 +1,16 @@
+{
+  "title": {
+    "en": "Advanced",
+    "zh-CN": "高级"
+  },
+  "order": [
+    "guards",
+    "custom-extractors",
+    "advanced-responses",
+    "static-files",
+    "streaming-sse",
+    "websockets",
+    "tls-http2"
+  ],
+  "defaultOpen": true
+}

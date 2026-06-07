@@ -1,0 +1,47 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "Faithea home" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: faithea
+      - navigation "Primary navigation" [ref=e8]:
+        - link "Home" [ref=e9] [cursor=pointer]:
+          - /url: /
+        - link "Docs" [ref=e10] [cursor=pointer]:
+          - /url: /docs
+        - link "Blog" [ref=e11] [cursor=pointer]:
+          - /url: /blog
+      - link "crates.io" [ref=e12] [cursor=pointer]:
+        - /url: https://crates.io/crates/faithea
+        - text: crates.io
+        - generic [ref=e13]: ↗
+  - main [ref=e14]:
+    - generic [ref=e16]:
+      - generic [ref=e17]: "[ DOCUMENTATION ]"
+      - paragraph [ref=e18]: The field guide is being written.
+      - heading "Clear docs for clear APIs." [level=1] [ref=e19]:
+        - text: Clear docs for
+        - emphasis [ref=e20]: clear APIs.
+      - paragraph [ref=e21]: Installation, routing, request extraction, response modifiers, and deployment guides will live here.
+      - generic [ref=e22]:
+        - link "Back to home" [ref=e23] [cursor=pointer]:
+          - /url: /
+        - code [ref=e24]: cargo add faithea
+  - contentinfo [ref=e25]:
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - generic [ref=e28]: F
+        - generic [ref=e29]: faithea
+      - paragraph [ref=e30]: Lightweight async HTTP for Rust.
+      - generic [ref=e31]:
+        - link "Docs" [ref=e32] [cursor=pointer]:
+          - /url: /docs
+        - link "Blog" [ref=e33] [cursor=pointer]:
+          - /url: /blog
+        - link "crates.io" [ref=e34] [cursor=pointer]:
+          - /url: https://crates.io/crates/faithea
+  - button "Open Next.js Dev Tools" [ref=e40] [cursor=pointer]:
+    - img [ref=e41]
+  - alert [ref=e44]

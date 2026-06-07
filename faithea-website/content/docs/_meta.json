@@ -1,0 +1,8 @@
+{
+  "title": {
+    "en": "Documentation",
+    "zh-CN": "文档"
+  },
+  "order": ["index", "introduction", "getting-started", "advanced"],
+  "defaultOpen": true
+}

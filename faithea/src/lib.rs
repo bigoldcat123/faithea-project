@@ -35,6 +35,7 @@ pub mod util;
 use crate::handler::types::HttpHandlerError;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
+pub use http::StatusCode;
 pub mod error;
 pub mod websocket;
 
