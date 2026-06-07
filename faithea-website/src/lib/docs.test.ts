@@ -7,6 +7,10 @@ describe("documentation content pipeline", () => {
       { slug: ["introduction", "welcome"] },
       { slug: ["getting-started", "installation"] },
       { slug: ["getting-started", "basic-usage"] },
+      { slug: ["getting-started", "routing"] },
+      { slug: ["getting-started", "request-data"] },
+      { slug: ["getting-started", "responses"] },
+      { slug: ["getting-started", "error-handling"] },
     ]);
   });
 
@@ -29,6 +33,10 @@ describe("documentation content pipeline", () => {
       expect(gettingStarted.children.map((node) => node.key)).toEqual([
         "installation",
         "basic-usage",
+        "routing",
+        "request-data",
+        "responses",
+        "error-handling",
       ]);
     }
   });
@@ -56,6 +64,22 @@ describe("documentation content pipeline", () => {
     expect(page?.title).toBe("基本用法");
     expect(page?.html).toContain("handlers!");
     expect(page?.headings.map((heading) => heading.text)).toContain("发送请求");
+  });
+
+  test("renders all localized core getting started guides", async () => {
+    const guides = await Promise.all(
+      ["routing", "request-data", "responses", "error-handling"].map((slug) =>
+        getDocPage(["getting-started", slug], "zh-CN"),
+      ),
+    );
+
+    expect(guides.every((page) => page && !page.missing)).toBe(true);
+    expect(guides.map((page) => page?.title)).toEqual([
+      "路由",
+      "请求数据",
+      "响应",
+      "错误处理",
+    ]);
   });
 
   test("rewrites document and asset links relative to the Markdown directory", () => {

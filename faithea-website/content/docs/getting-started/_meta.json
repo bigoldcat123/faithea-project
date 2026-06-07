@@ -3,6 +3,13 @@
     "en": "Getting Started",
     "zh-CN": "快速开始"
   },
-  "order": ["installation", "basic-usage"],
+  "order": [
+    "installation",
+    "basic-usage",
+    "routing",
+    "request-data",
+    "responses",
+    "error-handling"
+  ],
   "defaultOpen": true
 }
