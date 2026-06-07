@@ -1,0 +1,206 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "Faithea home" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]:
+          - generic [ref=e6]: F
+          - generic [ref=e7]: faithea
+      - navigation "Primary navigation" [ref=e8]:
+        - link "Home" [ref=e9] [cursor=pointer]:
+          - /url: /
+        - link "Docs" [ref=e10] [cursor=pointer]:
+          - /url: /docs
+        - link "Blog" [ref=e11] [cursor=pointer]:
+          - /url: /blog
+      - link "crates.io" [ref=e12] [cursor=pointer]:
+        - /url: https://crates.io/crates/faithea
+        - text: crates.io
+        - generic [ref=e13]: ↗
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]: Lightweight async HTTP for Rust
+        - heading "Build fast. Stay close to Rust." [level=1] [ref=e19]:
+          - text: Build fast.
+          - text: Stay close to Rust.
+        - paragraph [ref=e20]: Faithea is a compact, Tokio-powered HTTP framework designed for developers who want expressive routing and control without the machinery.
+        - generic [ref=e21]:
+          - link "Read the docs" [ref=e22] [cursor=pointer]:
+            - /url: /docs
+            - text: Read the docs
+            - img [ref=e23]
+          - link "View on crates.io" [ref=e25] [cursor=pointer]:
+            - /url: https://crates.io/crates/faithea
+        - generic [ref=e26]:
+          - generic [ref=e27]: $
+          - code [ref=e28]: cargo add faithea
+          - generic [ref=e29]: one dependency, then build
+      - generic "Faithea code example" [ref=e30]:
+        - img [ref=e34]
+        - generic [ref=e36]:
+          - generic [ref=e37]:
+            - generic [ref=e42]: src/main.rs
+            - generic [ref=e43]: ● compiled
+          - code [ref=e45]:
+            - generic [ref=e46]:
+              - generic [ref=e47]: "01"
+              - generic [ref=e48]: "usefaithea::{get, HttpServer};"
+            - generic [ref=e50]: "02"
+            - generic [ref=e52]:
+              - generic [ref=e53]: "03"
+              - generic [ref=e54]: "#[get(\"/hello/{name}\")]"
+            - generic [ref=e55]:
+              - generic [ref=e56]: "04"
+              - generic [ref=e57]: "async fn hello(name: String) {"
+            - generic [ref=e58]:
+              - generic [ref=e59]: "05"
+              - generic [ref=e60]: "format!(\"Hello, {name}!\")"
+            - generic [ref=e61]:
+              - generic [ref=e62]: "06"
+              - generic [ref=e63]: "}"
+            - generic [ref=e65]: "07"
+            - generic [ref=e67]:
+              - generic [ref=e68]: "08"
+              - generic [ref=e69]: "#[tokio::main]"
+            - generic [ref=e70]:
+              - generic [ref=e71]: "09"
+              - generic [ref=e72]: "async fn main() {"
+            - generic [ref=e73]:
+              - generic [ref=e74]: "10"
+              - generic [ref=e75]: HttpServer::builder()
+            - generic [ref=e76]:
+              - generic [ref=e77]: "11"
+              - generic [ref=e78]: .mount("/", handlers!(hello))
+            - generic [ref=e79]:
+              - generic [ref=e80]: "12"
+              - generic [ref=e81]: .build().run().await;
+            - generic [ref=e82]:
+              - generic [ref=e83]: "13"
+              - generic [ref=e84]: "}"
+        - generic [ref=e85]:
+          - generic [ref=e86]: Runtime
+          - strong [ref=e87]: Tokio
+        - generic [ref=e88]:
+          - generic [ref=e89]: Philosophy
+          - strong [ref=e90]: Less magic
+    - region "Faithea capabilities" [ref=e91]:
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - text: Path & query params
+          - generic [ref=e94]: +
+        - generic [ref=e95]:
+          - text: JSON extraction
+          - generic [ref=e96]: +
+        - generic [ref=e97]:
+          - text: Multipart forms
+          - generic [ref=e98]: +
+        - generic [ref=e99]:
+          - text: WebSocket
+          - generic [ref=e100]: +
+        - generic [ref=e101]:
+          - text: Server-sent events
+          - generic [ref=e102]: +
+        - generic [ref=e103]:
+          - text: CORS
+          - generic [ref=e104]: +
+        - generic [ref=e105]:
+          - text: TLS / HTTPS
+          - generic [ref=e106]: +
+        - generic [ref=e107]:
+          - text: Custom extractors
+          - generic [ref=e108]: +
+        - generic [ref=e109]:
+          - text: Path & query params
+          - generic [ref=e110]: +
+        - generic [ref=e111]:
+          - text: JSON extraction
+          - generic [ref=e112]: +
+        - generic [ref=e113]:
+          - text: Multipart forms
+          - generic [ref=e114]: +
+        - generic [ref=e115]:
+          - text: WebSocket
+          - generic [ref=e116]: +
+        - generic [ref=e117]:
+          - text: Server-sent events
+          - generic [ref=e118]: +
+        - generic [ref=e119]:
+          - text: CORS
+          - generic [ref=e120]: +
+        - generic [ref=e121]:
+          - text: TLS / HTTPS
+          - generic [ref=e122]: +
+        - generic [ref=e123]:
+          - text: Custom extractors
+          - generic [ref=e124]: +
+    - generic [ref=e125]:
+      - generic [ref=e126]:
+        - generic [ref=e127]: "[ 01 / WHY FAITHEA ]"
+        - heading "Small surface. Serious capability." [level=2] [ref=e128]:
+          - text: Small surface.
+          - emphasis [ref=e129]: Serious capability.
+        - paragraph [ref=e130]: The essentials for modern HTTP services, shaped into APIs that remain understandable as your project grows.
+      - generic [ref=e131]:
+        - article [ref=e132]:
+          - generic [ref=e133]: "01"
+          - generic [ref=e134]:
+            - heading "Macro-first routing" [level=3] [ref=e135]
+            - paragraph [ref=e136]: Declare intent where it belongs. Route macros keep handlers compact, readable, and close to the HTTP contract.
+          - code [ref=e137]: "#[get(\"/users/{id}\")]"
+        - article [ref=e138]:
+          - generic [ref=e139]: "02"
+          - generic [ref=e140]:
+            - heading "Async by default" [level=3] [ref=e141]
+            - paragraph [ref=e142]: Built on Tokio for non-blocking I/O and predictable concurrency, without hiding the runtime behind heavy abstractions.
+          - code [ref=e143]: "async fn find_user(id: String)"
+        - article [ref=e144]:
+          - generic [ref=e145]: "03"
+          - generic [ref=e146]:
+            - heading "Composable responses" [level=3] [ref=e147]
+            - paragraph [ref=e148]: Return strings, JSON, files, or your own response modifiers. Faithea turns focused values into complete responses.
+          - code [ref=e149]: res_modifiers!("ready", CORS)
+    - generic [ref=e151]:
+      - generic [ref=e152]:
+        - generic [ref=e153]: "[ 02 / THE APPROACH ]"
+        - heading "Explicit where it matters. Effortless where it should be." [level=2] [ref=e154]
+      - generic [ref=e155]:
+        - article [ref=e156]:
+          - generic [ref=e157]: "01"
+          - heading "Learn it quickly" [level=3] [ref=e158]
+          - paragraph [ref=e159]: A focused API and familiar Rust types keep the path from first route to working service short.
+        - article [ref=e160]:
+          - generic [ref=e161]: "02"
+          - heading "Extend it naturally" [level=3] [ref=e162]
+          - paragraph [ref=e163]: Custom request extractors and response modifiers let your own types participate directly.
+        - article [ref=e164]:
+          - generic [ref=e165]: "03"
+          - heading "Ship with confidence" [level=3] [ref=e166]
+          - paragraph [ref=e167]: Rust's type system, Tokio's proven runtime, and fewer hidden behaviors make services easier to reason about.
+    - generic [ref=e168]:
+      - generic [ref=e169]:
+        - generic [ref=e170]: "[ READY WHEN YOU ARE ]"
+        - heading "Your next service can be simpler." [level=2] [ref=e171]
+        - paragraph [ref=e172]: Add Faithea, write a handler, and let Rust do what it does best.
+      - generic [ref=e173]:
+        - generic [ref=e174]:
+          - generic [ref=e175]: $
+          - code [ref=e176]: cargo add faithea
+        - link "Start building" [ref=e177] [cursor=pointer]:
+          - /url: /docs
+          - text: Start building
+          - img [ref=e178]
+  - contentinfo [ref=e180]:
+    - generic [ref=e181]:
+      - generic [ref=e182]:
+        - generic [ref=e183]: F
+        - generic [ref=e184]: faithea
+      - paragraph [ref=e185]: Lightweight async HTTP for Rust.
+      - generic [ref=e186]:
+        - link "Docs" [ref=e187] [cursor=pointer]:
+          - /url: /docs
+        - link "Blog" [ref=e188] [cursor=pointer]:
+          - /url: /blog
+        - link "crates.io" [ref=e189] [cursor=pointer]:
+          - /url: https://crates.io/crates/faithea
+  - alert [ref=e190]
