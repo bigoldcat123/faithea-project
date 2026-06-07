@@ -549,7 +549,7 @@ mod tests {
         state.buf = data;
 
         let mask = [0x01, 0x02, 0x03, 0x04];
-        let result = state.parse_body(0, 5, mask, true); // Complete 5-byte payload
+        let result = state.parse_body(0, 5, mask, false); // Complete 5-byte payload
 
         assert!(result);
         assert_eq!(state.machine_state, WebSocketActorState::Head); // Should return to Head for continuation
