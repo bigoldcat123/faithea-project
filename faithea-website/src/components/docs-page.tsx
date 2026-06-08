@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DocsProse } from "./docs-prose";
 import { DocsSidebar } from "./docs-sidebar";
 import { DocsToc } from "./docs-toc";
 import type { DocPageData, DocTreeNode } from "@/lib/docs";
@@ -51,10 +52,7 @@ export function DocsPageView({
             </Link>
           </section>
         ) : (
-          <div
-            className="docs-prose prose max-w-none prose-headings:font-display prose-headings:font-black prose-headings:tracking-[-0.035em] prose-headings:text-ink prose-headings:uppercase prose-p:leading-7 prose-p:text-ink-soft prose-a:font-bold prose-a:text-ink prose-strong:text-ink prose-code:font-mono prose-code:text-ink prose-img:border prose-img:border-ink prose-img:shadow-[8px_8px_0_var(--color-amber)]"
-            dangerouslySetInnerHTML={{ __html: page.html ?? "" }}
-          />
+          <DocsProse html={page.html ?? ""} />
         )}
 
         <nav className="mt-16 grid grid-cols-2 gap-4 border-t border-line pt-8 max-sm:grid-cols-1">

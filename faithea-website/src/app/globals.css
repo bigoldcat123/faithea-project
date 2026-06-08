@@ -72,13 +72,14 @@ html {
 
 .docs-prose figure[data-rehype-pretty-code-figure] {
   margin-block: 2rem;
+  position: relative;
 }
 
 .docs-prose figure[data-rehype-pretty-code-figure] pre {
   overflow-x: auto;
   border: 1px solid #344039;
   border-radius: 4px;
-  padding: 1.25rem;
+  padding: 3rem 1.25rem 1.25rem;
   box-shadow: 6px 6px 0 var(--color-amber);
 }
 
@@ -89,6 +90,45 @@ html {
   padding: 0;
   color: inherit;
   font-size: 0.8rem;
+}
+
+.docs-prose .code-copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1;
+  border: 1px solid #607067;
+  background: #101713;
+  color: var(--color-mint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  padding: 0.48rem 0.62rem;
+  text-transform: uppercase;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.docs-prose .code-copy-button:hover {
+  border-color: var(--color-mint);
+  transform: translate(-1px, -1px);
+}
+
+.docs-prose .code-copy-button:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+.docs-prose .code-copy-button.is-copied {
+  background: var(--color-mint);
+  border-color: var(--color-mint);
+  color: var(--color-ink);
 }
 
 .docs-prose h2 a,
