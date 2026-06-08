@@ -50,6 +50,21 @@ async fn me(user: FromRequest<CurrentUser>) {
 
 Faithea calls `TryFromRequest` before the handler. When extraction fails, the error follows the normal global error-handling flow.
 
+## Test the extractor
+
+First send a request without the Authorization header. It fails before reaching the handler:
+
+```sh
+curl -i http://127.0.0.1:3000/me
+```
+
+Then include the Authorization header. The request is extracted into `CurrentUser` and returned as JSON:
+
+```sh
+curl -i http://127.0.0.1:3000/me \
+  -H "authorization: Bearer secret"
+```
+
 ## Good extractor responsibilities
 
 Custom extractors work well for authenticated users, request IDs, validated headers, and other typed request context.

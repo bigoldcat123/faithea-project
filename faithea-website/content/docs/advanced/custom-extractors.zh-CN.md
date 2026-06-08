@@ -50,6 +50,21 @@ async fn me(user: FromRequest<CurrentUser>) {
 
 Faithea 会在 handler 前调用 `TryFromRequest`。提取失败时，错误会进入普通的全局错误处理流程。
 
+## 测试提取器
+
+先发送一个没有 Authorization Header 的请求，它会在进入 handler 前失败：
+
+```sh
+curl -i http://127.0.0.1:3000/me
+```
+
+再带上 Authorization Header，请求会被提取为 `CurrentUser` 并返回 JSON：
+
+```sh
+curl -i http://127.0.0.1:3000/me \
+  -H "authorization: Bearer secret"
+```
+
 ## 合适的提取职责
 
 自定义提取器适合封装当前登录用户、请求 ID、经过验证的 Header 和其他类型化请求上下文。
