@@ -58,4 +58,19 @@ Use an exact path for one endpoint or `/**` to cover a route group.
 
 Multiple matching guards run as a chain. Each guard receives the request returned by the previous guard. Any guard can stop the chain by returning a response.
 
+## Test the guard
+
+First send a request without the authentication header. The guard rejects it:
+
+```sh
+curl -i http://127.0.0.1:3000/dashboard
+```
+
+Then include the correct Authorization header. The request continues to the handler:
+
+```sh
+curl -i http://127.0.0.1:3000/dashboard \
+  -H "authorization: Bearer secret"
+```
+
 Keep guards focused on cross-cutting request checks such as authentication, authorization, logging, or request policy.

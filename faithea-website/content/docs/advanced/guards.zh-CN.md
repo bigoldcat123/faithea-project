@@ -58,4 +58,19 @@ Guard 支持与 handler 相同的路由模式：
 
 多个匹配的 Guard 会组成一条链。每个 Guard 都会接收上一个 Guard 返回的请求，任意 Guard 都可以通过返回响应停止链。
 
+## 测试 Guard
+
+先发送一个没有认证 Header 的请求，它会被 Guard 拒绝：
+
+```sh
+curl -i http://127.0.0.1:3000/dashboard
+```
+
+再带上正确的 Authorization Header，请求会继续进入 handler：
+
+```sh
+curl -i http://127.0.0.1:3000/dashboard \
+  -H "authorization: Bearer secret"
+```
+
 Guard 适合处理认证、授权、日志和请求策略等跨路由检查。
