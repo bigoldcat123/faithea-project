@@ -5,9 +5,13 @@ description: Return text, JSON, status codes, and headers from handlers.
 
 A Faithea handler returns one or more response modifiers. Each modifier changes part of the outgoing HTTP response.
 
+Handler functions do not need an explicit return type. The route macro supplies the response modifier type.
+
 ## Text responses
 
-Return `&str` or `String` for a plain-text response:
+Return `&str` or `String` for a plain-text response.
+
+### Define routes
 
 ```rust
 use faithea::get;
@@ -23,11 +27,33 @@ async fn greet(name: String) {
 }
 ```
 
-Handler functions do not need an explicit return type. The route macro supplies the response modifier type.
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(health, greet),
+)
+```
+
+### Test with curl
+
+```sh
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3000/api/greet/Ada
+```
 
 ## JSON responses
 
-Values wrapped in `Json<T>` are serialized as JSON. The inner value must implement `Serialize`:
+Values wrapped in `Json<T>` are serialized as JSON. The inner value must implement `Serialize`.
+
+Add Serde when your project does not already use it:
+
+```sh
+cargo add serde --features derive
+```
+
+### Define routes
 
 ```rust
 use faithea::{data::Json, get};
@@ -44,15 +70,32 @@ async fn health_json() {
 }
 ```
 
-Add Serde when your project does not already use it:
+### Mount routes
 
-```sh
-cargo add serde --features derive
+```rust
+.mount(
+    "/api",
+    handlers!(health_json),
+)
 ```
 
-## Combine response modifiers
+### Test with curl
 
-Use `res_modifiers!` when one handler needs to change several response properties:
+```sh
+curl -i http://127.0.0.1:3000/api/health.json
+```
+
+## Status codes and headers
+
+Use `res_modifiers!` when one handler needs to change several response properties. Modifiers are applied in order.
+
+This example needs the `http` crate for `StatusCode`:
+
+```sh
+cargo add http
+```
+
+### Define routes
 
 ```rust
 use faithea::{
@@ -76,13 +119,24 @@ async fn created() {
 }
 ```
 
-This example needs the `http` crate for `StatusCode`:
+Here the handler sets the status code, adds a custom header, and writes the response body.
 
-```sh
-cargo add http
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(created),
+)
 ```
 
-The modifiers are applied in order. Here they set the status code, add a custom header, and write the response body.
+### Test with curl
+
+Use `-i` to inspect the status line and response headers:
+
+```sh
+curl -i http://127.0.0.1:3000/api/created
+```
 
 ## Supported response concepts
 

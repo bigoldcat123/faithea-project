@@ -5,9 +5,13 @@ description: 从 handler 返回文本、JSON、状态码和 Header。
 
 Faithea handler 会返回一个或多个响应修改器。每个修改器负责改变 HTTP 响应的一部分。
 
+Handler 函数不需要显式声明返回类型。路由宏会补充响应修改器类型。
+
 ## 文本响应
 
-返回 `&str` 或 `String`，即可生成纯文本响应：
+返回 `&str` 或 `String`，即可生成纯文本响应。
+
+### 定义路由
 
 ```rust
 use faithea::get;
@@ -23,11 +27,33 @@ async fn greet(name: String) {
 }
 ```
 
-Handler 函数不需要显式声明返回类型。路由宏会补充响应修改器类型。
+### 挂载路由
+
+```rust
+.mount(
+    "/api",
+    handlers!(health, greet),
+)
+```
+
+### 测试 curl
+
+```sh
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3000/api/greet/Ada
+```
 
 ## JSON 响应
 
-使用 `Json<T>` 包装的值会被序列化为 JSON。内部值必须实现 `Serialize`：
+使用 `Json<T>` 包装的值会被序列化为 JSON。内部值必须实现 `Serialize`。
+
+如果项目还没有使用 Serde，请添加依赖：
+
+```sh
+cargo add serde --features derive
+```
+
+### 定义路由
 
 ```rust
 use faithea::{data::Json, get};
@@ -44,15 +70,32 @@ async fn health_json() {
 }
 ```
 
-如果项目还没有使用 Serde，请添加依赖：
+### 挂载路由
 
-```sh
-cargo add serde --features derive
+```rust
+.mount(
+    "/api",
+    handlers!(health_json),
+)
 ```
 
-## 组合响应修改器
+### 测试 curl
 
-当一个 handler 需要修改多个响应属性时，使用 `res_modifiers!`：
+```sh
+curl -i http://127.0.0.1:3000/api/health.json
+```
+
+## 状态码和 Header
+
+当一个 handler 需要修改多个响应属性时，使用 `res_modifiers!`。修改器会按顺序应用。
+
+这个示例需要通过 `http` crate 使用 `StatusCode`：
+
+```sh
+cargo add http
+```
+
+### 定义路由
 
 ```rust
 use faithea::{
@@ -76,13 +119,24 @@ async fn created() {
 }
 ```
 
-这个示例需要通过 `http` crate 使用 `StatusCode`：
+这里依次设置状态码、添加自定义 Header，并写入响应体。
 
-```sh
-cargo add http
+### 挂载路由
+
+```rust
+.mount(
+    "/api",
+    handlers!(created),
+)
 ```
 
-修改器会按顺序应用。这里依次设置状态码、添加自定义 Header，并写入响应体。
+### 测试 curl
+
+使用 `-i` 查看状态行与响应 Header：
+
+```sh
+curl -i http://127.0.0.1:3000/api/created
+```
 
 ## 支持的响应概念
 
