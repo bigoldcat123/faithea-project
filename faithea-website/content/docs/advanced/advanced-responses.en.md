@@ -7,7 +7,9 @@ Every Faithea response is assembled from types that implement `HttpResponseModif
 
 ## Redirect responses
 
-Return `Redirect` to send a permanent redirect:
+Return `Redirect` to send a permanent redirect. This example redirects `/old-page` to `/new-page`.
+
+### Define routes
 
 ```rust
 use faithea::{get, response::redirect::Redirect};
@@ -16,56 +18,143 @@ use faithea::{get, response::redirect::Redirect};
 async fn old_page() {
     Redirect("/new-page")
 }
+
+#[get("/new-page")]
+async fn new_page() {
+    "new page"
+}
+```
+
+### Test with curl
+
+Use `-i` to inspect the redirect status code and `location` header:
+
+```sh
+curl -i http://127.0.0.1:3000/old-page
+```
+
+Use `-L` to let curl follow the redirect:
+
+```sh
+curl -i -L http://127.0.0.1:3000/old-page
 ```
 
 ## Set a cookie
 
-Build a response cookie and combine it with a body:
+Cookies are response headers. Build a `HeaderMap`, set `SET_COOKIE`, then combine those headers with a body.
+
+You can inspect request cookies inside a handler with `_req.cookies()`.
+
+### Define routes
 
 ```rust
 use faithea::{
-    get, res_modifiers,
-    response::cookie::{Cookie, CookieType},
+    HeaderMap,
+    get,
+    header::{HeaderValue, SET_COOKIE},
+    res_modifiers,
 };
 
 #[get("/login")]
 async fn login() {
-    let mut cookie = Cookie::default();
-    cookie.push(CookieType::KeyValue("session".into(), "abc123".into()));
-    cookie.push(CookieType::Attribute("HttpOnly".into()));
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        SET_COOKIE,
+        HeaderValue::from_static("session=abc123; HttpOnly; Path=/"),
+    );
 
-    res_modifiers!(cookie, "logged in")
+    res_modifiers!(headers, "logged in")
+}
+
+#[get("/profile")]
+async fn profile() {
+    format!("{:?}", _req.cookies())
 }
 ```
 
-Use `_req.cookies()` inside a handler to inspect request cookies.
+### Test with curl
+
+First call the login route and save the response cookie to `cookies.txt`:
+
+```sh
+curl -i -c cookies.txt http://127.0.0.1:3000/login
+```
+
+Then send the saved cookie to an endpoint that reads session data:
+
+```sh
+curl -i -b cookies.txt http://127.0.0.1:3000/profile
+```
 
 ## Create a response modifier
 
-Implement `HttpResponseModifier` for reusable response behavior:
+In the previous guide, `YamlBody<T>` parsed YAML request bodies. Now we can implement `HttpResponseModifier` for the same wrapper so handlers can return YAML responses directly.
+
+Add the dependencies first:
+
+```sh
+cargo add bytes
+cargo add serde --features derive
+cargo add serde_yaml
+```
+
+### Define the response modifier
+
+`HttpResponseModifier` can update response headers, status, and body. Here we serialize the inner value to YAML, set `content-type` and `content-length`, then write the body.
 
 ```rust
+use bytes::Bytes;
 use faithea::{
     get,
-    header::HeaderValue,
-    response::{HttpResponse, HttpResponseModifier, HttpResponseModifierFuture},
+    handler::types::HttpHandlerError,
+    response::{HttpResponse, HttpResponseModifier, HttpResponseModifierFuture, ResponseBody},
 };
+use serde::Serialize;
 
-struct RequestId(&'static str);
+struct YamlBody<T>(T);
 
-impl HttpResponseModifier for RequestId {
+impl<T: Serialize + Send + Sync> HttpResponseModifier for YamlBody<T> {
     fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
-            res.add_header("x-request-id", HeaderValue::from_static(self.0));
+            let body = serde_yaml::to_string(&self.0)
+                .map_err(|_| HttpHandlerError::after_handler_incompatible_body_type())?;
+
+            res.add_header("content-type", "application/x-yaml".parse()?);
+            res.add_header("content-length", body.len().to_string().parse()?);
+            res.set_body(ResponseBody::Simple(Bytes::from(body)));
+
             Ok(())
         })
     }
 }
-
-#[get("/custom")]
-async fn custom() {
-    faithea::res_modifiers!(RequestId("req-42"), "custom response")
-}
 ```
 
 Modifiers are applied in order. A custom modifier should update only the response properties it owns.
+
+### Use the response modifier
+
+```rust
+#[derive(Serialize)]
+struct DeployConfig {
+    service: String,
+    replicas: u8,
+    public: bool,
+}
+
+#[get("/deploy-config.yaml")]
+async fn deploy_config_yaml() {
+    YamlBody(DeployConfig {
+        service: "api".into(),
+        replicas: 3,
+        public: true,
+    })
+}
+```
+
+### Test with curl
+
+```sh
+curl -i http://127.0.0.1:3000/deploy-config.yaml
+```
+
+The response body is YAML, and the response headers include `content-type: application/x-yaml`.
