@@ -7,7 +7,9 @@ Faithea extracts request data directly into handler arguments. The handler signa
 
 ## Path parameters
 
-Path parameters use the same name in the route and handler:
+Path parameters use the same name in the route and handler. Faithea converts the URL value into the declared Rust type before calling the handler.
+
+### Define routes
 
 ```rust
 use faithea::get;
@@ -18,13 +20,32 @@ async fn get_user(id: u64) {
 }
 ```
 
-Faithea converts the URL value into the declared Rust type before calling the handler.
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(get_user),
+)
+```
+
+### Test with curl
+
+```sh
+curl http://127.0.0.1:3000/api/users/42
+```
 
 ## Query parameters
 
-Mark query parameters with `#[search_param]`:
+Mark query parameters with `#[search_param]`. A required parameter produces an error when it is missing or invalid. Wrap a parameter in `Option<T>` when it is optional.
+
+Use `#[search_param("Name")]` when the query-string key differs from the Rust argument name.
+
+### Define routes
 
 ```rust
+use faithea::get;
+
 #[get("/users")]
 async fn list_users(
     #[search_param] page: u32,
@@ -32,26 +53,32 @@ async fn list_users(
 ) {
     format!("page={page}, keyword={keyword:?}")
 }
-```
 
-Call the route with:
-
-```sh
-curl "http://127.0.0.1:3000/users?page=2&keyword=rust"
-```
-
-A required parameter produces an error when it is missing or invalid. Wrap a parameter in `Option<T>` when it is optional.
-
-Use `#[search_param("Name")]` when the query-string key differs from the Rust argument name:
-
-```rust
 #[get("/search")]
 async fn search(#[search_param("Name")] name: String) {
     name
 }
 ```
 
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(list_users, search),
+)
+```
+
+### Test with curl
+
+```sh
+curl "http://127.0.0.1:3000/api/users?page=2&keyword=rust"
+curl "http://127.0.0.1:3000/api/search?Name=Ada"
+```
+
 ## JSON bodies
+
+Wrap a type in `Json<T>` to parse a JSON request body. Faithea parses the body before the handler runs. Returning the same `Json<T>` value sends it back as a JSON response.
 
 Add Serde to derive request and response serialization:
 
@@ -59,7 +86,7 @@ Add Serde to derive request and response serialization:
 cargo add serde --features derive
 ```
 
-Wrap a type in `Json<T>` to parse a JSON request body:
+### Define routes
 
 ```rust
 use faithea::{data::Json, post};
@@ -77,19 +104,32 @@ async fn create_user(user: Json<CreateUser>) {
 }
 ```
 
-Send a JSON request:
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(create_user),
+)
+```
+
+### Test with curl
 
 ```sh
-curl -X POST http://127.0.0.1:3000/users \
+curl -X POST http://127.0.0.1:3000/api/users \
   -H "content-type: application/json" \
   -d '{"name":"Ada","age":36}'
 ```
 
-Faithea parses the body before the handler runs. Returning the same `Json<T>` value sends it back as a JSON response.
-
 ## Multipart forms and files
 
-Faithea parses multipart forms into typed Rust structures using `Multipart<T>` and the `MultipartData` derive macro:
+Faithea parses multipart forms into typed Rust structures using `Multipart<T>` and the `MultipartData` derive macro.
+
+Use `Option<T>` for optional fields and `Vec<T>` for repeated fields or multiple files. Rename a form field with `#[faithea(rename = "...")]` when it differs from the Rust field name.
+
+Uploaded files are stored in temporary paths. `MultiPartFile` removes its temporary file when the value is dropped, so move or copy files you need to retain.
+
+### Define routes
 
 ```rust
 use faithea::{
@@ -99,7 +139,8 @@ use faithea::{
 
 #[derive(MultipartData, Debug)]
 struct UploadForm {
-    title: String,
+    #[faithea(rename = "displayName")]
+    display_name: String,
     public: Option<bool>,
     tags: Vec<String>,
     files: Vec<MultiPartFile>,
@@ -108,46 +149,52 @@ struct UploadForm {
 #[post("/upload")]
 async fn upload(form: Multipart<UploadForm>) {
     format!(
-        "title={}, tags={}, files={}",
-        form.title,
+        "displayName={}, tags={}, files={}",
+        form.display_name,
         form.tags.len(),
         form.files.len(),
     )
 }
 ```
 
-Use `Option<T>` for optional fields and `Vec<T>` for repeated fields or multiple files.
-
-Rename a form field when it differs from the Rust field name:
+### Mount routes
 
 ```rust
-#[derive(MultipartData)]
-struct ProfileForm {
-    #[faithea(rename = "displayName")]
-    display_name: String,
-}
+.mount(
+    "/api",
+    handlers!(upload),
+)
 ```
 
-Send a multipart request with `curl`:
+### Test with curl
+
+Create a 5M mock upload file first:
 
 ```sh
-curl -X POST http://127.0.0.1:3000/upload \
-  -F "title=release" \
+dd if=/dev/zero of=mock-upload.bin bs=1m count=5
+```
+
+Then send the multipart request:
+
+```sh
+curl -X POST http://127.0.0.1:3000/api/upload \
+  -F "displayName=Ada" \
   -F "public=true" \
   -F "tags=rust" \
   -F "tags=web" \
-  -F "files=@README.md"
+  -F "files=@mock-upload.bin"
 ```
-
-Uploaded files are stored in temporary paths. `MultiPartFile` removes its temporary file when the value is dropped, so move or copy files you need to retain.
 
 ## Custom multipart fields
 
-Implement `TryFromPart` when a multipart field needs custom conversion:
+Implement `TryFromPart` when a multipart field needs custom conversion. Any type that implements `TryFromPart` can be placed inside a `MultipartData` struct.
+
+### Define routes
 
 ```rust
 use faithea::{
-    data::inbound::multipart::{Part, TryFromPart},
+    MultipartData, post,
+    data::inbound::multipart::{Multipart, Part, TryFromPart},
     handler::types::HttpHandlerError,
 };
 
@@ -161,19 +208,64 @@ impl TryFromPart for Label {
         }
     }
 }
+
+#[derive(MultipartData)]
+struct LabelForm {
+    label: Label,
+}
+
+#[post("/labels")]
+async fn create_label(form: Multipart<LabelForm>) {
+    format!("label={}", form.label.0)
+}
+```
+
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(create_label),
+)
+```
+
+### Test with curl
+
+```sh
+curl -X POST http://127.0.0.1:3000/api/labels \
+  -F "label=release"
 ```
 
 ## Request metadata
 
-Every route handler has access to an injected `_req` value. Use it when you need the URI, headers, cookies, or lower-level request information:
+Every route handler has access to an injected `_req` value. Use it when you need the URI, headers, cookies, or lower-level request information.
+
+The `_req` argument is supplied by the route macro, so it does not appear in the function signature you write.
+
+### Define routes
 
 ```rust
+use faithea::get;
+
 #[get("/request-info")]
 async fn request_info() {
     format!("uri: {}", _req.uri())
 }
 ```
 
-The `_req` argument is supplied by the route macro, so it does not appear in the function signature you write.
+### Mount routes
+
+```rust
+.mount(
+    "/api",
+    handlers!(request_info),
+)
+```
+
+### Test with curl
+
+```sh
+curl "http://127.0.0.1:3000/api/request-info?debug=true"
+```
 
 Continue with [Responses](./responses.md) to control response bodies, headers, and status codes.
