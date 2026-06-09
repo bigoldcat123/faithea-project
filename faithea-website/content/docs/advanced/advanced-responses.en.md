@@ -41,29 +41,23 @@ curl -i -L http://127.0.0.1:3000/old-page
 
 ## Set a cookie
 
-Cookies are response headers. Build a `HeaderMap`, set `SET_COOKIE`, then combine those headers with a body.
-
-You can inspect request cookies inside a handler with `_req.cookies()`.
+Use the `Cookie` response modifier from `response::cookie` and combine it with a body. You can inspect request cookies inside a handler with `_req.cookies()`.
 
 ### Define routes
 
 ```rust
 use faithea::{
-    HeaderMap,
-    get,
-    header::{HeaderValue, SET_COOKIE},
-    res_modifiers,
+    get, res_modifiers,
+    response::cookie::{Cookie, CookieType},
 };
 
 #[get("/login")]
 async fn login() {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        SET_COOKIE,
-        HeaderValue::from_static("session=abc123; HttpOnly; Path=/"),
-    );
+    let mut cookie = Cookie::default();
+    cookie.push(CookieType::KeyValue("session".into(), "abc123".into()));
+    cookie.push(CookieType::Attribute("HttpOnly".into()));
 
-    res_modifiers!(headers, "logged in")
+    res_modifiers!(cookie, "logged in")
 }
 
 #[get("/profile")]

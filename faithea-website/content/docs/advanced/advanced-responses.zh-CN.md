@@ -41,29 +41,23 @@ curl -i -L http://127.0.0.1:3000/old-page
 
 ## 设置 Cookie
 
-Cookie 本质上就是响应里的 `set-cookie` Header。可以直接构建 `HeaderMap`，设置 `SET_COOKIE`，再将 Header 与响应体组合。
-
-随后可以在 handler 中使用 `_req.cookies()` 检查请求 Cookie。
+使用 `response::cookie` 下的 `Cookie` 响应修改器构建响应 Cookie，并将它与响应体组合。随后可以在 handler 中使用 `_req.cookies()` 检查请求 Cookie。
 
 ### 定义路由
 
 ```rust
 use faithea::{
-    HeaderMap,
-    get,
-    header::{HeaderValue, SET_COOKIE},
-    res_modifiers,
+    get, res_modifiers,
+    response::cookie::{Cookie, CookieType},
 };
 
 #[get("/login")]
 async fn login() {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        SET_COOKIE,
-        HeaderValue::from_static("session=abc123; HttpOnly; Path=/"),
-    );
+    let mut cookie = Cookie::default();
+    cookie.push(CookieType::KeyValue("session".into(), "abc123".into()));
+    cookie.push(CookieType::Attribute("HttpOnly".into()));
 
-    res_modifiers!(headers, "logged in")
+    res_modifiers!(cookie, "logged in")
 }
 
 #[get("/profile")]
