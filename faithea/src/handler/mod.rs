@@ -177,7 +177,6 @@ impl HandlerTire {
             Method::CONNECT,
         );
     }
-
     fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Handler, method: Method) {
         if let Some(next) = url.pop() {
             if !self.next.contains_key(&next) {
