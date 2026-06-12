@@ -14,7 +14,14 @@ impl HttpResponseModifier for CORS {
     fn modify<'a>(
         &'a mut self,
         res: &'a mut super::HttpResponse,
-    ) -> HttpResponseModifierFuture<'a> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn Future<Output = Result<(), crate::handler::types::HttpHandlerError>>
+                + 'a
+                + Send
+                + Sync,
+        >,
+    > {
         Box::pin(async move {
             let mut header = HeaderMap::new();
             header.insert(ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());

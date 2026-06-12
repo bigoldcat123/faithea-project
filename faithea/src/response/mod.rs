@@ -3,16 +3,19 @@ pub mod cors;
 pub mod redirect;
 pub mod sse;
 pub mod stream;
+use std::{pin::pin, task::Poll};
+
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{Bytes, BytesMut};
 use h2::{SendStream, server::SendResponse};
 use http::{
-    HeaderMap, HeaderValue, Response, StatusCode,
+    HeaderMap, HeaderValue, Method, Response, StatusCode,
     header::{
         CONNECTION, CONTENT_LENGTH, IntoHeaderName, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY,
         UPGRADE,
     },
 };
+use hyper::body::{Body, Frame};
 use sha1::{Digest, Sha1};
 use tokio::{
     fs::File,
@@ -20,39 +23,43 @@ use tokio::{
     sync::mpsc::Receiver,
 };
 
-use crate::{
-    handler::types::HttpHandlerError, request::HttpRequest, websocket::data::WebSocketDataPayLoad,
-};
+use faithea_websocket::WebSocketDataPayLoad;
+
+use crate::{handler::types::HttpHandlerError, request::HttpRequest};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
     // status_line: ResponseStatusLine,
     // headers: HttpHeader,
     // pub body: ResponseBody,
-    pub(crate) _innser: Response<ResponseBody>,
+    pub(crate) _inner: Response<ResponseBody>,
 }
 impl HttpResponse {
     pub fn new() -> Self {
         let _innser = Response::builder()
             // .version(Version::HTTP_2)
-            .body(ResponseBody::Empty)
+            .body(ResponseBody::Simple(None))
             .expect("impossible!!");
-        Self { _innser }
+        Self { _inner: _innser }
     }
     pub fn websocket_response(req: &HttpRequest) -> Self {
-        let mut res = Self::new();
-        *res._innser.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
-        let upgrade = req.get_header(UPGRADE).unwrap();
-        res._innser.headers_mut().insert(UPGRADE, upgrade.clone());
-        res._innser
-            .headers_mut()
-            .insert(CONNECTION, "Upgrade".parse().unwrap());
-        let key = req.get_header(SEC_WEBSOCKET_KEY).unwrap().to_str().unwrap();
-        let accept = Self::cal_sec_websocket_accept(key);
-        res._innser
-            .headers_mut()
-            .insert(SEC_WEBSOCKET_ACCEPT, accept.parse().unwrap());
-        res
+        if req._inner.method() == Method::CONNECT {
+            HttpResponse::new()
+        } else {
+            let mut res = Self::new();
+            *res._inner.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+            let upgrade = req.get_header(UPGRADE).unwrap();
+            res._inner.headers_mut().insert(UPGRADE, upgrade.clone());
+            res._inner
+                .headers_mut()
+                .insert(CONNECTION, "Upgrade".parse().unwrap());
+            let key = req.get_header(SEC_WEBSOCKET_KEY).unwrap().to_str().unwrap();
+            let accept = Self::cal_sec_websocket_accept(key);
+            res._inner
+                .headers_mut()
+                .insert(SEC_WEBSOCKET_ACCEPT, accept.parse().unwrap());
+            res
+        }
     }
     fn cal_sec_websocket_accept(key: &str) -> String {
         let mut hasher = Sha1::new();
@@ -64,32 +71,32 @@ impl HttpResponse {
 
     pub fn not_found() -> Self {
         let mut r = Self::new();
-        *r._innser.status_mut() = StatusCode::NOT_FOUND;
+        *r._inner.status_mut() = StatusCode::NOT_FOUND;
 
         // r.status_line.info = "Not Found".to_string();
-        r._innser
+        r._inner
             .headers_mut()
             .insert(CONTENT_LENGTH, HeaderValue::from_static("9"));
-        r.set_body(ResponseBody::Simple("not found".into()));
+        r.set_body(ResponseBody::Simple(Some("not found".into())));
         r
     }
     pub fn error(err_message: String) -> Self {
         let mut r = Self::new();
-        *r._innser.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        *r._inner.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         let body: Bytes = err_message.into();
-        r._innser.headers_mut().insert(
+        r._inner.headers_mut().insert(
             CONTENT_LENGTH,
             HeaderValue::from_maybe_shared(body.len().to_string()).expect("impossible!"),
         );
-        r.set_body(ResponseBody::Simple(body));
+        r.set_body(ResponseBody::Simple(Some(body)));
         r
     }
     pub fn set_body(&mut self, body: ResponseBody) {
-        *self._innser.body_mut() = body
+        *self._inner.body_mut() = body
     }
 
     pub fn add_header<K: IntoHeaderName>(&mut self, key: K, value: HeaderValue) {
-        self._innser.headers_mut().insert(key, value);
+        self._inner.headers_mut().insert(key, value);
     }
 
     pub async fn write_line_header_bytes<W: AsyncWrite + Unpin>(
@@ -97,10 +104,10 @@ impl HttpResponse {
         socket: &mut W,
     ) -> Result<(), std::io::Error> {
         // line
-        let line_bytes = format!("{:?} {}\r\n", self._innser.version(), self._innser.status());
+        let line_bytes = format!("{:?} {}\r\n", self._inner.version(), self._inner.status());
         socket.write_all(line_bytes.as_bytes()).await?;
         // header
-        for (k, v) in self._innser.headers().iter() {
+        for (k, v) in self._inner.headers().iter() {
             socket.write_all(k.as_str().as_bytes()).await?;
             socket.write_all(": ".as_bytes()).await?;
             socket.write_all(v.as_bytes()).await?;
@@ -115,13 +122,13 @@ impl HttpResponse {
         socket: &mut W,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.write_line_header_bytes(socket).await?;
-        self._innser.body_mut().serialize_to_h1_socket(socket).await
+        self._inner.body_mut().serialize_to_h1_socket(socket).await
     }
     pub async fn serialize_to_socket_h2(
         self,
         respond: &mut SendResponse<Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut h, b) = self._innser.into_parts();
+        let (mut h, b) = self._inner.into_parts();
         h.headers.remove(CONTENT_LENGTH);
         h.headers.remove(CONNECTION);
         let body_stream = respond.send_response(Response::from_parts(h, ()), false)?;
@@ -129,35 +136,30 @@ impl HttpResponse {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub enum ResponseBody {
     /// In-memory byte data for small responses.
-    Simple(Bytes),
+    Simple(Option<Bytes>),
     /// File handle for streaming large responses efficiently.
     File(File),
-    /// No body content.
-    #[default]
-    Empty,
     WsBody(Receiver<WebSocketDataPayLoad>),
     Stream(Receiver<Bytes>),
 }
 
-impl ResponseBody {
-    // fn is_empty_body(&self) -> bool {
-    //     if let ResponseBody::Empty = self {
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
+impl Default for ResponseBody {
+    fn default() -> Self {
+        Self::Simple(None)
+    }
+}
 
+impl ResponseBody {
     async fn seriliaze_to_h2_stream(
         self,
         mut body_stream: SendStream<Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use ResponseBody::*;
         match self {
-            Simple(b) => {
+            Simple(Some(b)) => {
                 body_stream.reserve_capacity(b.len());
                 body_stream.send_data(b, true)?;
             }
@@ -183,7 +185,9 @@ impl ResponseBody {
             WsBody(mut receiver) => {
                 tokio::spawn(async move {
                     while let Some(b) = receiver.recv().await {
-                        let _ = b.serialize_to_stream(&mut body_stream).await;
+                        let frame = b.into_frame_bytes();
+                        body_stream.reserve_capacity(frame.len());
+                        let _ = body_stream.send_data(frame, false);
                     }
                 });
             }
@@ -198,7 +202,7 @@ impl ResponseBody {
     ) -> Result<(), Box<dyn std::error::Error>> {
         use self::ResponseBody::*;
         match self {
-            Simple(b) => {
+            Simple(Some(b)) => {
                 socket.write_all_buf(b).await?;
             }
             File(f) => {
@@ -212,13 +216,65 @@ impl ResponseBody {
             }
             WsBody(receiver) => {
                 while let Some(_payload) = receiver.recv().await {
-                    _payload.serialize_to_socket(socket).await?;
+                    let mut frame = _payload.into_frame_bytes();
+                    socket.write_all_buf(&mut frame).await?;
+                    socket.flush().await?;
                 }
             }
             _ => {}
         }
         socket.flush().await?;
         Ok(())
+    }
+}
+
+impl Body for ResponseBody {
+    type Data = Bytes;
+    type Error = crate::error::Error;
+    // fn is_end_stream(&self) -> bool {
+
+    // }
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        match *self {
+            ResponseBody::Simple(ref mut bytes) => {
+                if let Some(bytes) = bytes.take() {
+                    Poll::Ready(Some(Ok(Frame::data(bytes))))
+                } else {
+                    Poll::Ready(None)
+                }
+            }
+            ResponseBody::File(ref mut file) => {
+                let mut buf = BytesMut::with_capacity(2048);
+                pin!(file.read_buf(&mut buf)).poll(cx).map(|res| {
+                    if let Ok(size) = res {
+                        if size != 0 {
+                            Some(Ok(Frame::data(buf.freeze())))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+            }
+            ResponseBody::Stream(ref mut steam) => match steam.poll_recv(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(data) => Poll::Ready(data.map(|data| Ok(Frame::data(data)))),
+            },
+            ResponseBody::WsBody(ref mut steam) => match steam.poll_recv(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(data) => {
+                    if let Some(data) = data {
+                        Poll::Ready(Some(Ok(Frame::data(data.into_frame_bytes()))))
+                    } else {
+                        Poll::Ready(None)
+                    }
+                }
+            },
+        }
     }
 }
 
@@ -257,7 +313,7 @@ impl HttpResponseModifier for StatusCode {
     // }
     fn modify<'a>(&'a mut self, res: &'a mut HttpResponse) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
-            *res._innser.status_mut() = *self;
+            *res._inner.status_mut() = *self;
             Ok(())
         })
     }

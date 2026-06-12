@@ -19,6 +19,8 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
+use faithea_websocket::WebSocket;
+
 use crate::{
     ResponseModifier,
     guard::{GuardResultTrait, GuardTire, RawGuardTrait},
@@ -27,7 +29,6 @@ use crate::{
     response::{HttpResponse, HttpResponseModifier},
     server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
     util::static_map,
-    websocket::socket::WebSocket,
 };
 pub trait GlobaleHandlerResponseRaw: Future<Output = ResponseModifier> + Send + 'static {}
 impl<T: Future<Output = ResponseModifier> + Send + 'static> GlobaleHandlerResponseRaw for T {}
@@ -116,10 +117,10 @@ impl HttpServerBuilder {
     /// Proxies matching requests to `target`.
     ///
     /// A trailing `/**` appends the unmatched path to the target URL.
-    pub fn proxy(mut self, route: &str, target: &str) -> Self {
-        self.handlers.proxy(route, target);
-        self
-    }
+    // pub fn proxy(mut self, route: &str, target: &str) -> Self {
+    //     self.handlers.proxy(route, target);
+    //     self
+    // }
 
     pub fn port(mut self, p: u16) -> Self {
         self.addr.set_port(p);

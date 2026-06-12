@@ -1,9 +1,10 @@
 use std::pin::Pin;
 
+use faithea_websocket::WebSocket;
+
 use crate::{
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
-    websocket::socket::WebSocket,
 };
 
 pub trait HttphandlerErrorTrait: HttpResponseModifier + Send + Sync {}

@@ -3,18 +3,13 @@ pub mod cookie;
 // pub mod method;
 pub mod path_param;
 pub mod search_param;
-use std::{fmt::Debug, path::PathBuf, str::FromStr};
+use std::{fmt::Debug, path::PathBuf};
 
 use bytes::{Buf, Bytes, BytesMut};
-use h2::RecvStream;
 use http::{
-    HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version,
-    header::{
-        AsHeaderName, CONNECTION, CONTENT_LENGTH, COOKIE, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION,
-        UPGRADE,
-    },
+    HeaderMap, HeaderValue, Request, Uri,
+    header::{AsHeaderName, COOKIE},
 };
-use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
     TryConvertFrom,
@@ -25,15 +20,13 @@ use crate::{
         content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
     },
     route::{Route, RouteComponent},
-    server::{BytesSource, Http1BytesSource, Http2BytesSource},
+    server::BytesSource,
 };
 
 pub enum RequestBody {
     Simple(Bytes),
     MultiPart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
-    WebSocketStreamBodyHttp2(RecvStream),
-    WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static + Unpin>),
 }
 impl Debug for RequestBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,11 +34,6 @@ impl Debug for RequestBody {
             Self::Simple(_) => write!(f, "Simple(Bytes)")?,
             Self::MultiPart(_) => write!(f, "MultiPart(MultipartDataMap)")?,
             Self::Stream(_) => write!(f, "Stream(PathBuf)")?,
-            Self::WebSocketStreamBodyHttp2(_) => write!(f, "WebSocketStreamBody(RecvStream)")?,
-            Self::WebSocketStreamBodyHttp1(_) => write!(
-                f,
-                "WebSocketStreamBodyHttp1(Box<dyn AsyncRead + Send + Sync + 'static>)"
-            )?,
         }
         Ok(())
     }
@@ -176,77 +164,6 @@ impl HttpRequest {
             None
         }
     }
-    pub(crate) async fn parse_h1_frame<R: AsyncRead + Unpin + Send>(
-        r: &mut R,
-        buf: &mut BytesMut,
-    ) -> Result<HttpRequest, String> {
-        parse_http_frame(r, buf).await
-    }
-    pub(crate) async fn parse_h2_frame(
-        stream_req: Request<RecvStream>,
-    ) -> Result<HttpRequest, String> {
-        let (p, body_stream) = stream_req.into_parts();
-        if p.method == Method::CONNECT {
-            return Ok(HttpRequest::new(
-                p,
-                Some(RequestBody::WebSocketStreamBodyHttp2(body_stream)),
-            ));
-        }
-        let bs = Http2BytesSource::new(body_stream);
-        let mut buf = BytesMut::with_capacity(4096);
-        let body = parse_body_frame(bs, &mut buf, &p.headers).await?;
-        let req = HttpRequest::new(p, Some(body));
-
-        Ok(req)
-    }
-}
-// async fn parse_simple_h2_body(mut body_stream: RecvStream) -> Result<RequestBody, String> {
-//     let mut buf = BytesMut::with_capacity(1024);
-//     while let Some(chunk) = body_stream.data().await {
-//         let chunk = chunk.map_err(map_str!())?;
-//         // let s = chunk
-//         //     .chunk()
-//         //     .iter()
-//         //     .map(|b| format!("0x{:02x}", b))
-//         //     .collect::<Vec<_>>()
-//         //     .join(", ");
-//         let len = chunk.len();
-//         buf.put(chunk);
-//         body_stream
-//             .flow_control()
-//             .release_capacity(len)
-//             .map_err(map_str!())?;
-//     }
-//     Ok(RequestBody::Simple(buf.freeze()))
-// }
-
-pub fn is_websocket_upgrade(req: &HttpRequest) -> bool {
-    req.get_header(UPGRADE).is_some()
-        && req.get_header(CONNECTION).is_some()
-        && req.get_header(SEC_WEBSOCKET_KEY).is_some()
-        && req.get_header(SEC_WEBSOCKET_VERSION).is_some()
-}
-
-async fn parse_http_frame<R: AsyncRead + Unpin + Send>(
-    r: &mut R,
-    buf: &mut BytesMut,
-) -> Result<HttpRequest, String> {
-    let mut builder = http::Request::builder();
-    builder = parse_line_header_frame(r, buf, builder).await?;
-    let mut req = HttpRequest::from_req(builder.body(None).map_err(map_str!())?);
-    if let Some(len) = req.get_header(CONTENT_LENGTH) {
-        let len = len
-            .to_str()
-            .map_err(map_str!())?
-            .parse::<usize>()
-            .map_err(map_str!())?;
-        let bs = Http1BytesSource::new(r, len, buf.remaining());
-        let body = parse_body_frame(bs, buf, req._inner.headers()).await?;
-        // let body = buf.split_to(len).freeze();
-        *req._inner.body_mut() = Some(body);
-    }
-    // println!("{:?}", req);
-    Ok(req)
 }
 
 pub async fn parse_body_frame<SOURCE: BytesSource>(
@@ -272,91 +189,9 @@ async fn parse_simple_body<R: BytesSource>(
             let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
-        let _len = r.read_buf(buf).await.map_err(map_str!())?;
+        let _len = r.read_buf2(buf).await.map_err(map_str!())?;
     }
 }
-async fn parse_line_header_frame<R: AsyncRead + Unpin>(
-    r: &mut R,
-    buf: &mut BytesMut,
-    builder: http::request::Builder,
-) -> Result<http::request::Builder, String> {
-    loop {
-        match r.read_buf(buf).await {
-            Ok(read_len) => {
-                if read_len == 0 {
-                    return Err("other side closed".to_string());
-                }
-                let (check_header_is_ok, position) = check_header(buf.chunk());
-                if check_header_is_ok {
-                    let b = parse_line_header(&buf[..position], builder)?;
-                    buf.advance(position);
-                    return Ok(b);
-                }
-            }
-            Err(e) => {
-                return Err(format!(
-                    "reading bytes from socket error while parsing parse_line_header_frame -> {e:?}"
-                ));
-            }
-        }
-    }
-}
-fn parse_line(builder: http::request::Builder, s: &str) -> Result<http::request::Builder, String> {
-    let mut head_line = s.split_whitespace();
-    let method = head_line.next().ok_or("method parsing error".to_string())?;
-    let method: http::Method = method.try_into().map_err(map_str!())?;
-
-    let uri = head_line.next().ok_or("uri parsing error".to_string())?;
-    let uri = Uri::from_str(uri).map_err(map_str!())?;
-
-    let version = head_line
-        .next()
-        .ok_or("version parsing error no headline".to_string())?;
-    let v = match version {
-        "HTTP/1.1" => Version::HTTP_11,
-        "HTTP/1.0" => Version::HTTP_10,
-        _ => return Err("version parsing error".to_string()),
-    };
-    Ok(builder.method(method).uri(uri).version(v))
-}
-
-fn parse_line_header(
-    raw_header: &[u8],
-    builder: http::request::Builder,
-) -> Result<http::request::Builder, String> {
-    let raw_header = str::from_utf8(raw_header).map_err(map_str!())?;
-    let mut raw_header = raw_header.split("\r\n");
-    let mut builder = parse_line(
-        builder,
-        raw_header
-            .next()
-            .ok_or("parse req line error-> no req line")?,
-    )?;
-    let header_map = builder.headers_mut().unwrap();
-
-    for h in raw_header {
-        if !h.is_empty() {
-            if let Some((k, v)) = h.split_once(":") {
-                let value = v.trim().parse().map_err(map_str!())?;
-                let name = HeaderName::from_str(k.trim()).unwrap();
-                header_map.insert(name, value);
-            } else {
-                Err("header parsing error".to_string())?
-            }
-        }
-    }
-    Ok(builder)
-}
-
-fn check_header(c: &[u8]) -> (bool, usize) {
-    for i in 0..=c.len() - 4 {
-        if &c[i..i + 4] == b"\r\n\r\n" {
-            return (true, i + 4);
-        }
-    }
-    (false, 0)
-}
-
 macro_rules! impl_convert_from_param {
     ($($t:ty),*) => {
         $(
@@ -456,24 +291,7 @@ impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
 
 #[cfg(test)]
 mod tests {
-    use http::Request;
-
-    use crate::{TryConvertInto, handler::types::HttpHandlerError, request::parse_line_header};
-
-    #[test]
-    fn parse_http1_line() {
-        let b = Request::builder();
-        let a = parse_line_header(
-            b"GET /hello HTTP/1.1\r\nauth:abc:caonima\r\nlen:123\r\n\r\n",
-            b,
-        )
-        .unwrap();
-        let r = a.body(()).unwrap();
-        let a = r.headers().get("auth").unwrap();
-        assert_eq!(a, "abc:caonima");
-        let a = r.headers().get("len").unwrap();
-        assert_eq!(a, "123");
-    }
+    use crate::{TryConvertInto, handler::types::HttpHandlerError};
 
     #[test]
     fn number_test() {

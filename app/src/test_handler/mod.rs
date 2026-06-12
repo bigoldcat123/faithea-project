@@ -22,8 +22,6 @@ pub use redirect::redirect;
 pub use search_param::search_param;
 pub use stream::stream;
 
-use crate::test_handler::custom_res::{custom_res, custom_res2};
-
 pub fn test_handlers() -> Vec<HandlerModifier> {
     handlers!(
         json_test,
@@ -35,7 +33,7 @@ pub fn test_handlers() -> Vec<HandlerModifier> {
         from_request,
         redirect,
         stream,
-        custom_res,
-        custom_res2
+        // custom_res,
+        // custom_res2
     )
 }

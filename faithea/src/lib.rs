@@ -37,7 +37,20 @@ pub use faithea_macro::*;
 pub use http::HeaderMap;
 pub use http::StatusCode;
 pub mod error;
-pub mod websocket;
+pub mod io;
+pub mod service;
+pub use faithea_websocket;
+pub mod websocket {
+    pub use faithea_websocket::*;
+
+    pub mod data {
+        pub use faithea_websocket::WebSocketDataPayLoad;
+    }
+
+    pub mod socket {
+        pub use faithea_websocket::WebSocket;
+    }
+}
 
 #[macro_export]
 macro_rules! map_str {

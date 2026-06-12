@@ -6,13 +6,7 @@ use crate::{
     handler::types::{
         Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
         WebSocketHandlerResultTrait,
-    },
-    proxy::Proxy,
-    regulate_url_path,
-    request::HttpRequest,
-    route::{Route, RouteComponent},
-    server::HandlerModifier,
-    util::trie::Trie,
+    }, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier, util::trie::Trie
 };
 pub mod types;
 
@@ -117,32 +111,32 @@ impl HandlerTire {
         );
     }
 
-    pub(crate) fn proxy<P: AsRef<str>>(&mut self, url: P, target: &str) {
-        let url = regulate_url_path(url);
-        let proxy = Proxy::new(target);
-        for method in [
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::PATCH,
-            Method::HEAD,
-            Method::OPTIONS,
-            Method::TRACE,
-        ] {
-            let mut route = Route::from(url.as_str());
-            route.r.reverse();
-            let proxy = proxy.clone();
-            self.add_route(
-                route.r,
-                Handler::Http(Box::new(move |req| {
-                    let proxy = proxy.clone();
-                    Box::pin(async move { Ok(proxy.forward(req).await) })
-                })),
-                method,
-            );
-        }
-    }
+    // pub(crate) fn proxy<P: AsRef<str>>(&mut self, url: P, target: &str) {
+    //     let url = regulate_url_path(url);
+    //     let proxy = Proxy::new(target);
+    //     for method in [
+    //         Method::GET,
+    //         Method::POST,
+    //         Method::PUT,
+    //         Method::DELETE,
+    //         Method::PATCH,
+    //         Method::HEAD,
+    //         Method::OPTIONS,
+    //         Method::TRACE,
+    //     ] {
+    //         let mut route = Route::from(url.as_str());
+    //         route.r.reverse();
+    //         let proxy = proxy.clone();
+    //         self.add_route(
+    //             route.r,
+    //             Handler::Http(Box::new(move |req| {
+    //                 let proxy = proxy.clone();
+    //                 Box::pin(async move { Ok(proxy.forward(req).await) })
+    //             })),
+    //             method,
+    //         );
+    //     }
+    // }
     // Fn(
     //         Receiver<WebSocketDataPayLoad>,
     //         Sender<WebSocketDataPayLoad>,
@@ -291,22 +285,22 @@ mod test {
         );
     }
 
-    #[test]
-    fn proxy_registers_common_http_methods() {
-        let mut handlers = HandlerTire::default();
-        handlers.proxy("/api/**", "http://localhost:7799/api/v1");
+    // #[test]
+    // fn proxy_registers_common_http_methods() {
+    //     let mut handlers = HandlerTire::default();
+    //     handlers.proxy("/api/**", "http://localhost:7799/api/v1");
 
-        for method in [
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::PATCH,
-            Method::HEAD,
-            Method::OPTIONS,
-            Method::TRACE,
-        ] {
-            assert!(handlers.get_handler("/api/users", method).is_some());
-        }
-    }
+    //     for method in [
+    //         Method::GET,
+    //         Method::POST,
+    //         Method::PUT,
+    //         Method::DELETE,
+    //         Method::PATCH,
+    //         Method::HEAD,
+    //         Method::OPTIONS,
+    //         Method::TRACE,
+    //     ] {
+    //         assert!(handlers.get_handler("/api/users", method).is_some());
+    //     }
+    // }
 }

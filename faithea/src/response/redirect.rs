@@ -12,7 +12,7 @@ impl<P: AsRef<str>> HttpResponseModifier for Redirect<P> {
         let p = self.0.as_ref().to_string();
         Box::pin(async move {
             res.add_header(LOCATION, HeaderValue::try_from(p)?);
-            *res._innser.status_mut() = StatusCode::PERMANENT_REDIRECT;
+            *res._inner.status_mut() = StatusCode::PERMANENT_REDIRECT;
             Ok(())
         })
     }

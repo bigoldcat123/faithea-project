@@ -5,7 +5,7 @@ use crate::{
     data::outbound::StaticFile,
     request::HttpRequest,
     res_modifiers,
-    response::HttpResponseModifier,
+    response::{HttpResponseModifier, redirect::Redirect},
 };
 
 /// # how to use

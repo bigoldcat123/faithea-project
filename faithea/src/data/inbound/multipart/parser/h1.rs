@@ -55,12 +55,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 Body => {
                     self.parse_body().await?;
                 }
-                End => {
-                    return {
-                        log::debug!("END");
-                        Ok(RequestBody::MultiPart(self.generate_multipart()))
-                    };
-                }
+                End => return Ok(RequestBody::MultiPart(self.generate_multipart())),
             }
         }
     }
@@ -79,20 +74,20 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     async fn parse_file_body(&mut self) -> Result<MultiPartFile, String> {
         let file_name = self.header_info.file_name.take();
         let mime_type = self.header_info.mime_type.take();
+        let temp_file = tempfile::Builder::new()
+            .prefix("faithea-multipart-")
+            .tempfile()
+            .map_err(map_str!())?;
+        let temp_path = temp_file.path().to_string_lossy().into_owned();
         let multipart_file = MultiPartFile {
-            temp_path: format!(
-                "/Users/dadigua/Desktop/graduation/temp{}",
-                rand::random::<u64>()
-            ),
+            temp_path,
             file_name,
             mime_type,
         };
-        let mut f = tokio::fs::File::create(&multipart_file.temp_path)
-            .await
-            .map_err(|x| x.to_string())?;
+        let mut f = tokio::fs::File::from_std(temp_file.into_file());
         loop {
             while self.buf.len() < self.boundary.len() + 7 {
-                let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
                 // if read_len == 0 {
                 //     return Err("Unexpected EOF".to_string());
                 // }
@@ -141,7 +136,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         let mut simple_body = BytesMut::new();
         loop {
             while self.buf.len() <= self.boundary.len() + 6 {
-                let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+                let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
                 // if read_len == 0 {
                 //     return Err("Unexpected EOF".to_string());
                 // }
@@ -164,7 +159,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     }
 
     fn body_ends(&self) -> bool {
-        log::debug!("{} {}", self.buf.len(), self.r.is_end());
         &self.buf[..] == b"\r\n" && self.r.is_end()
     }
 
@@ -211,7 +205,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         self.state
     }
     async fn parse_body(&mut self) -> Result<(), String> {
-        log::debug!("parse_body");
         let key_name = self
             .header_info
             .name
@@ -242,7 +235,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         self.map.take().unwrap()
     }
     async fn parse_header(&mut self) -> Result<(), String> {
-        log::debug!("parse_header");
         let header_len;
         loop {
             let (inner_is_ok, inner_header_len) = self.check_mutipart_header();
@@ -250,7 +242,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 header_len = inner_header_len;
                 break;
             }
-            let read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+            let read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
             if read_len == 0 {
                 self.state = MultiPartBodyParserState::End;
                 return Ok(());
@@ -267,10 +259,9 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         Ok(())
     }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), String> {
-        log::debug!("remove_mutipart_body_prefix");
         // remove pre_fix
         while self.buf.len() < self.boundary.len() + 2 {
-            let _read_len = self.r.read_buf(self.buf).await.map_err(map_str!())?;
+            let _read_len = self.r.read_buf2(self.buf).await.map_err(map_str!())?;
             // if read_len == 0 {
             //     return Err("Unexpected EOF".to_string());
             // }
