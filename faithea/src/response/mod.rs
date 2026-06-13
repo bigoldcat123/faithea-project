@@ -7,7 +7,7 @@ use std::{pin::pin, task::Poll};
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::{Bytes, BytesMut};
-use h2::{SendStream, server::SendResponse};
+// use h2::{SendStream, server::SendResponse};
 use http::{
     HeaderMap, HeaderValue, Method, Response, StatusCode,
     header::{
@@ -124,16 +124,16 @@ impl HttpResponse {
         self.write_line_header_bytes(socket).await?;
         self._inner.body_mut().serialize_to_h1_socket(socket).await
     }
-    pub async fn serialize_to_socket_h2(
-        self,
-        respond: &mut SendResponse<Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut h, b) = self._inner.into_parts();
-        h.headers.remove(CONTENT_LENGTH);
-        h.headers.remove(CONNECTION);
-        let body_stream = respond.send_response(Response::from_parts(h, ()), false)?;
-        b.seriliaze_to_h2_stream(body_stream).await
-    }
+    // pub async fn serialize_to_socket_h2(
+    //     self,
+    //     respond: &mut SendResponse<Bytes>,
+    // ) -> Result<(), Box<dyn std::error::Error>> {
+    //     let (mut h, b) = self._inner.into_parts();
+    //     h.headers.remove(CONTENT_LENGTH);
+    //     h.headers.remove(CONNECTION);
+    //     let body_stream = respond.send_response(Response::from_parts(h, ()), false)?;
+    //     b.seriliaze_to_h2_stream(body_stream).await
+    // }
 }
 
 #[derive(Debug)]
@@ -153,49 +153,49 @@ impl Default for ResponseBody {
 }
 
 impl ResponseBody {
-    async fn seriliaze_to_h2_stream(
-        self,
-        mut body_stream: SendStream<Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        use ResponseBody::*;
-        match self {
-            Simple(Some(b)) => {
-                body_stream.reserve_capacity(b.len());
-                body_stream.send_data(b, true)?;
-            }
-            Stream(mut r) => {
-                while let Some(r) = r.recv().await {
-                    body_stream.reserve_capacity(r.len());
-                    body_stream.send_data(r, false)?;
-                }
-                body_stream.send_data(Bytes::new(), true)?;
-            }
-            File(mut f) => {
-                let mut buf = BytesMut::with_capacity(4096);
-                while let Ok(n) = f.read_buf(&mut buf).await {
-                    if n == 0 {
-                        body_stream.send_data(buf.freeze(), true)?;
-                        break;
-                    }
-                    body_stream.reserve_capacity(n);
-                    body_stream.send_data(buf.split_to(n).freeze(), false)?;
-                }
-            }
+    // async fn seriliaze_to_h2_stream(
+    //     self,
+    //     mut body_stream: SendStream<Bytes>,
+    // ) -> Result<(), Box<dyn std::error::Error>> {
+    //     use ResponseBody::*;
+    //     match self {
+    //         Simple(Some(b)) => {
+    //             body_stream.reserve_capacity(b.len());
+    //             body_stream.send_data(b, true)?;
+    //         }
+    //         Stream(mut r) => {
+    //             while let Some(r) = r.recv().await {
+    //                 body_stream.reserve_capacity(r.len());
+    //                 body_stream.send_data(r, false)?;
+    //             }
+    //             body_stream.send_data(Bytes::new(), true)?;
+    //         }
+    //         File(mut f) => {
+    //             let mut buf = BytesMut::with_capacity(4096);
+    //             while let Ok(n) = f.read_buf(&mut buf).await {
+    //                 if n == 0 {
+    //                     body_stream.send_data(buf.freeze(), true)?;
+    //                     break;
+    //                 }
+    //                 body_stream.reserve_capacity(n);
+    //                 body_stream.send_data(buf.split_to(n).freeze(), false)?;
+    //             }
+    //         }
 
-            WsBody(mut receiver) => {
-                tokio::spawn(async move {
-                    while let Some(b) = receiver.recv().await {
-                        let frame = b.into_frame_bytes();
-                        body_stream.reserve_capacity(frame.len());
-                        let _ = body_stream.send_data(frame, false);
-                    }
-                });
-            }
-            _ => {}
-        }
+    //         WsBody(mut receiver) => {
+    //             tokio::spawn(async move {
+    //                 while let Some(b) = receiver.recv().await {
+    //                     let frame = b.into_frame_bytes();
+    //                     body_stream.reserve_capacity(frame.len());
+    //                     let _ = body_stream.send_data(frame, false);
+    //                 }
+    //             });
+    //         }
+    //         _ => {}
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
     async fn serialize_to_h1_socket<W: AsyncWrite + Unpin>(
         &mut self,
         socket: &mut W,

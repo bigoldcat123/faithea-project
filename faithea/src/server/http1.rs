@@ -1,4 +1,8 @@
-use std::{error::Error, net::SocketAddr, sync::Arc};
+use std::{
+    error::Error,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use hyper::server::conn::http1;
 use hyper_util::service::TowerToHyperService;
@@ -37,7 +41,12 @@ impl H1Server {
             "HTTP{} server starting on http{}://{}",
             if self.tls.is_some() { "S" } else { "" },
             if self.tls.is_some() { "s" } else { "" },
-            self.addr
+            if self.addr == SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), self.addr.port())
+            {
+                SocketAddr::new(local_ip_address::local_ip().unwrap(), self.addr.port())
+            } else {
+                self.addr
+            }
         );
         log::info!("Press Ctrl+C to stop the server");
         let server = TcpListener::bind(self.addr).await?;

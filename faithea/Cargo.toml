@@ -20,7 +20,7 @@ faithea-macro = {path = '../faithea-macro',version = '0.1.5'}
 http = "1.4.0"
 tokio-rustls = "0.26.4"
 rustls = {version = "0.23.35",features = ["ring"]}
-h2 = "0.4.12"
+# h2 = "0.4.12"
 base64 = "0.22.1"
 sha1 = "0.10.6"
 log = "0.4.29"
@@ -30,3 +30,4 @@ tower = "0.5.3"
 hyper-util = { version = "0.1.20", features = ["service","tokio"] }
 tempfile = "3.27.0"
 reqwest = { version = "0.12.24", default-features = false, features = ["multipart", "rustls-tls"] }
+local-ip-address = "0.6.13"
