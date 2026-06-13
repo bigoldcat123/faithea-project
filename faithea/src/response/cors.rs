@@ -6,7 +6,7 @@ use http::{
     },
 };
 
-use crate::response::{HttpResponseModifier, HttpResponseModifierFuture};
+use crate::response::HttpResponseModifier;
 
 pub struct CORS;
 
