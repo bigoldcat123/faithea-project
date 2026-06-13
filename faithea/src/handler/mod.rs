@@ -6,7 +6,13 @@ use crate::{
     handler::types::{
         Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
         WebSocketHandlerResultTrait,
-    }, regulate_url_path, request::HttpRequest, route::{Route, RouteComponent}, server::HandlerModifier, util::trie::Trie
+    },
+    regulate_url_path,
+    request::HttpRequest,
+    response::HttpResponse,
+    route::{Route, RouteComponent},
+    server::HandlerModifier,
+    util::trie::Trie,
 };
 pub mod types;
 
@@ -179,6 +185,13 @@ impl HandlerTire {
             assert!(self.next.get_mut(&next).is_some());
             if url.is_empty() {
                 self.next.get_mut(&next).unwrap().value.insert(method, f);
+                let handler: Handler =
+                    Handler::Http(Box::new(|_| Box::pin(async { Ok(HttpResponse::new()) })));
+                self.next
+                    .get_mut(&next)
+                    .unwrap()
+                    .value
+                    .insert(Method::HEAD, handler);
             } else {
                 self.next.get_mut(&next).unwrap().add_route(url, f, method);
             }

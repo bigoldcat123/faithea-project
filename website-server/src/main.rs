@@ -4,7 +4,7 @@ async fn main() {
     faithea::server::HttpServer::builder()
         .static_map(
             "/**",
-            "/Users/dadigua/Desktop/graduation/faithea-website/out",
+            "./faithea-website/out",
         )
         .port(8080)
         .build()
