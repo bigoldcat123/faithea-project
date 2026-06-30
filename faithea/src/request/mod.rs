@@ -247,9 +247,7 @@ impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
     type Error = HttpHandlerError;
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, Self::Error> {
         if let Some(value) = value {
-            T::try_from_param(value)
-                .map_err(Into::<ParseHandlerParamError>::into)
-                .map_err(Into::<BeforeHandlerError>::into)
+            T::try_from_param(value).map_err(Into::<BeforeHandlerError>::into)
                 .map_err(Into::<Self::Error>::into)
         } else {
             Err(Into::<Self::Error>::into(Into::<BeforeHandlerError>::into(
@@ -263,9 +261,7 @@ impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, Self::Error> {
         if let Some(value) = value {
             T::try_from_param(value)
-                .map(|x| Some(x))
-                .map_err(Into::<ParseHandlerParamError>::into)
-                .map_err(Into::<BeforeHandlerError>::into)
+                .map(|x| Some(x)).map_err(Into::<BeforeHandlerError>::into)
                 .map_err(Into::<Self::Error>::into)
         } else {
             Ok(None)
@@ -303,7 +299,7 @@ mod tests {
     fn option_test() {
         let s = Some(&"true".to_string());
         let a: Result<bool, HttpHandlerError> = s.try_convert_into();
-        assert_eq!(a.is_ok(), true);
+        assert!(a.is_ok());
         fn a2(_: bool) {}
         a2(s.try_convert_into().map_err(|_| "").unwrap());
     }

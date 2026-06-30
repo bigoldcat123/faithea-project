@@ -49,7 +49,7 @@ impl Exact {
         let path_str = format!("{}/{}", p.as_ref(), seg.as_ref());
         let path = Path::new(&path_str);
         if path.exists() && path.is_file() {
-            return Ok(res_modifiers!(StaticFile(path_str)));
+            Ok(res_modifiers!(StaticFile(path_str)))
         } else {
             Index::parse(p, seg)
         }
@@ -70,15 +70,15 @@ impl Index {
 
         let path = Path::new(&path_str);
         if path.exists() && path.is_file() {
-            return Ok(res_modifiers!(StaticFile(path_str)));
+            Ok(res_modifiers!(StaticFile(path_str)))
         } else {
-            HTML::parse(p, seg)
+            Html::parse(p, seg)
         }
     }
 }
 
-struct HTML;
-impl HTML {
+struct Html;
+impl Html {
     fn parse<P: AsRef<str>, S: AsRef<str>>(
         path: P,
         seg: S,
@@ -91,7 +91,7 @@ impl HTML {
 
         let path = Path::new(&path_str);
         if path.exists() && path.is_file() {
-            return Ok(res_modifiers!(StaticFile(path_str)));
+            Ok(res_modifiers!(StaticFile(path_str)))
         } else {
             Err(Error::BeforeHandler(
                 BeforeHandlerError::ParseHandlerParamError(

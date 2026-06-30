@@ -50,7 +50,7 @@ mod tests {
     fn search_param_test() {
         let url = "";
         let s = SearchParam::from_query(Some(url));
-        assert_eq!(s._inner.is_empty(), true)
+        assert!(s._inner.is_empty())
     }
     #[test]
     fn search_param_test2() {

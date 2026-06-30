@@ -5,9 +5,7 @@ use std::{
 };
 
 use crate::{
-    TryConvertFrom,
-    error::{BeforeHandlerError, MultipartError},
-    handler::types::HttpHandlerError,
+    error::MultipartError,
     request::{HttpRequest, RequestBody, TryFromRequest, error::ParseHandlerParamError},
 };
 
@@ -23,7 +21,7 @@ pub enum Part {
     Lit(String),
     File(MultiPartFile),
 }
-pub trait TryFromPart: Sized {
+pub(crate) trait TryFromPart: Sized {
     fn try_from_part(part: Part) -> Result<Self, MultipartError>;
 }
 pub trait TryFromParts: Sized {
@@ -203,7 +201,7 @@ impl<'a, T: TryFromMultipartDataMap> TryFromRequest<'a> for Multipart<T> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::TryConvertInto;
+
 
     use super::*;
 

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{error::MultipartError, request::{ConvertError, error}};
+use crate::{error::MultipartError, request::ConvertError};
 
 #[derive(Debug, Error)]
 pub enum ParseHandlerParamError {

@@ -108,7 +108,7 @@ mod tests {
     fn create() {
         use super::RouteComponent::*;
         let r = "/hello/abc/*/{efg}/**";
-        let a = Route::try_from(r).unwrap();
+        let a = Route::from(r);
         assert_eq!(
             Route {
                 r: vec![

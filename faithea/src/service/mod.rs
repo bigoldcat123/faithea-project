@@ -108,7 +108,7 @@ async fn handle_request(
         req.process_search_param();
         match handler {
             Handler::Http(http_handler) => {
-                process_http_request(&http_handler, req, error_handler).await
+                process_http_request(http_handler, req, error_handler).await
             }
             _ => unreachable!(),
         }

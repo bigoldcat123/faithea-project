@@ -13,7 +13,7 @@ fn u() {
     println!("lent: {}", value.len());
 
     for i in 0..value.len() {
-        let masked = (mask[i % 4] ^ value[i]) as u8;
+        let masked = mask[i % 4] ^ value[i];
         println!("masked: {}", masked);
     }
 }
