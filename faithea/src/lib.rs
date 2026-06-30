@@ -32,7 +32,6 @@ pub mod response;
 pub mod route;
 pub mod server;
 pub mod util;
-use crate::handler::types::HttpHandlerError;
 pub use faithea_macro::*;
 pub use http::HeaderMap;
 pub use http::StatusCode;
@@ -65,38 +64,6 @@ macro_rules! map_fu {
         |_| $crate::error::Error::Unknown
     };
 }
-// impl ConvertFromRefString<i32> for  &String {
-//     fn convert(self) -> Result<i32,String> {
-//         self.parse::<i32>().map_err(|_|"convert error!".to_string())
-//     }
-// }
-
-// #[deprecated]
-// #[macro_export]
-// macro_rules! impl_convert_from_ref_string {
-//     ($($t:ty),*) => {
-//         $(
-//             impl <'a> $crate::request::ConvertFromRefString<'a,$t> for  &String {
-//                 fn convert(self) -> Result<$t,String> {
-//                     self.parse::<$t>().map_err(|_|format!("can not convert {} to {}",self,stringify!($t)))
-//                 }
-//             }
-//         )*
-//     };
-// }
-
-// impl From<&HttpHeader> for Bytes {
-//     fn from(value: &HttpHeader) -> Self {
-//         let mut b = BytesMut::with_capacity(256);
-//         for (k, v) in value.headers.iter() {
-//             b.put(format!("{k}:{v}\r\n").as_bytes());
-//         }
-//         b.put("\r\n".as_bytes());
-
-//         b.freeze()
-//     }
-// }
-
 pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
     let a: &str = s.as_ref();
     let mut v = a.into();
@@ -109,8 +76,46 @@ pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
     v.to_string()
 }
 
+pub type ResponseModifier = Vec<Box<dyn crate::response::HttpResponseModifier + Send + Sync>>;
+
+#[macro_export]
+macro_rules! res_modifiers {
+    ($($e:expr),* $(,)?) => {
+        {
+            let a:$crate::ResponseModifier = vec![
+               $( Box::new($e),)*
+            ];
+            a
+        }
+    };
+}
+/// this is core trait for handler param analysis
+pub trait TryConvertFrom<T>: Sized {
+    type Error: std::error::Error;
+    fn try_convert_from(value: T) -> Result<Self, Self::Error>;
+}
+/// please impl `TryConvertFrom`
+pub trait TryConvertInto<O> {
+    type Error: std::error::Error;
+    fn try_convert_into(self) -> Result<O, Self::Error>;
+}
+
+impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
+    type Error = T::Error;
+    fn try_convert_into(self) -> Result<T, Self::Error> {
+        T::try_convert_from(self)
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use http::{HeaderMap, StatusCode};
+    #[test]
+    fn macro_test() {
+        let s = StatusCode::OK;
+        let h = HeaderMap::new();
+        let _ = res_modifiers!(s, h);
+    }
     // use http::{HeaderMap, header::{ACCEPT, CONNECTION, HOST, USER_AGENT}};
 
     // #[test]
@@ -138,43 +143,4 @@ mod test {
     //     assert_eq!(got, expected);
     //     assert!(s.ends_with("\r\n\r\n"));
     // }
-}
-
-pub type ResponseModifier = Vec<Box<dyn crate::response::HttpResponseModifier + Send + Sync>>;
-
-#[macro_export]
-macro_rules! res_modifiers {
-    ($($e:expr),* $(,)?) => {
-        {
-            let a:$crate::ResponseModifier = vec![
-               $( Box::new($e),)*
-            ];
-            a
-        }
-    };
-}
-
-pub trait TryConvertFrom<T>: Sized {
-    fn try_convert_from(value: T) -> Result<Self, HttpHandlerError>;
-}
-/// please impl `TryConvertFrom`
-pub trait TryConvertInto<O> {
-    fn try_convert_into(self) -> Result<O, HttpHandlerError>;
-}
-
-impl<O, T: TryConvertFrom<O>> TryConvertInto<T> for O {
-    fn try_convert_into(self) -> Result<T, HttpHandlerError> {
-        T::try_convert_from(self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use http::{HeaderMap, StatusCode};
-    #[test]
-    fn macro_test() {
-        let s = StatusCode::OK;
-        let h = HeaderMap::new();
-        let _ = res_modifiers!(s, h);
-    }
 }

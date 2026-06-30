@@ -1,4 +1,7 @@
-use faithea::{get, handler::types::HttpHandlerError, request::TryFromParam};
+use faithea::{
+    get,
+    request::{ConvertError, TryFromParam},
+};
 
 #[derive(Debug)]
 pub struct MyAge {
@@ -6,10 +9,11 @@ pub struct MyAge {
 }
 
 impl TryFromParam<'_> for MyAge {
-    fn try_from_param(value: &str) -> Result<Self, HttpHandlerError> {
-        let a = value
-            .parse::<i32>()
-            .map_err(|_| HttpHandlerError::before_handler_invalid_param("cause"))?;
+    fn try_from_param(value: &str) -> Result<Self, ConvertError> {
+        let a = value.parse::<i32>().map_err(|_| ConvertError {
+            from: value.into(),
+            to: "MyAge".into(),
+        })?;
         Ok(Self { age: a })
     }
 }

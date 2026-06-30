@@ -17,9 +17,9 @@ async fn main() {
             Ok(e)
         })
         .websocket("/ws/{name}", ws)
-        .globale_error_handler(async |e: faithea::error::Error| {
-            res_modifiers!(format!("some error~~ {:?}", e))
-        })
+        // .globale_error_handler(async |e: faithea::error::Error| {
+        //     res_modifiers!(format!("some error~~ {}", e))
+        // })
         .static_map(
             "/static/**",
             "/Users/dadigua/Desktop/faithea-project/front-end-app",

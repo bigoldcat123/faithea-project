@@ -48,6 +48,7 @@ impl_try_from_part_for_parse_from_str!(
 );
 
 impl<T: TryFromPart> TryConvertFrom<Option<Vec<Part>>> for T {
+    type Error = HttpHandlerError;
     fn try_convert_from(value: Option<Vec<Part>>) -> Result<Self, HttpHandlerError> {
         if let Some(mut value) = value {
             if let Some(value) = value.pop() {
@@ -62,6 +63,7 @@ impl<T: TryFromPart> TryConvertFrom<Option<Vec<Part>>> for T {
 }
 
 impl<T: TryFromPart> TryConvertFrom<Option<Vec<Part>>> for Option<T> {
+    type Error = HttpHandlerError;
     fn try_convert_from(value: Option<Vec<Part>>) -> Result<Self, HttpHandlerError> {
         match T::try_convert_from(value) {
             Ok(r) => Ok(Some(r)),
@@ -76,6 +78,7 @@ impl<T: TryFromPart> TryConvertFrom<Option<Vec<Part>>> for Option<T> {
 }
 
 impl<T: TryFromPart> TryConvertFrom<Option<Vec<Part>>> for Vec<T> {
+    type Error = HttpHandlerError;
     fn try_convert_from(value: Option<Vec<Part>>) -> Result<Self, HttpHandlerError> {
         if let Some(value) = value {
             Ok(value

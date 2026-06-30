@@ -1,16 +1,23 @@
-use std::fmt::Display;
-
 use bytes::Bytes;
 use http::header::{CONTENT_LENGTH, CONTENT_TYPE, InvalidHeaderValue};
+use thiserror::Error;
 
-use crate::response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody};
+use crate::{
+    request::ConvertError,
+    response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
+    #[error("this error is not supported 😼")]
     Unknown,
-    AfterHandler(ModifierError),
-    BeforeHandler(BeforeHandlerError),
-    InvalidJsonStr(serde_json::Error),
+    #[error("after handler: {0}")]
+    AfterHandler(#[from] ModifierError),
+    #[error("BeforeHandlerError: {0}")]
+    BeforeHandler(#[from] BeforeHandlerError),
+    #[error("{0}")]
+    InvalidJsonStr(#[from] serde_json::Error),
 }
 impl Error {
     pub fn before_handler_incompatible_request_body_type() -> Self {
@@ -60,12 +67,19 @@ impl Error {
         Self::AfterHandler(ModifierError::FileNotExists(file_path))
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BeforeHandlerError {
+    #[error("ParseParamError: {0}")]
+    ParseParamError(#[from] ConvertError),
+    #[error("")]
     InvalidParam(String),
+    #[error("")]
     ParamNotExist,
+    #[error("")]
     EmpeyRequestBody,
+    #[error("")]
     IncompatibleBodyType,
+    #[error("")]
     MultipartError(MultipartError),
 }
 #[derive(Debug)]
@@ -74,22 +88,20 @@ pub enum MultipartError {
     CanNotParseFromPart(String),
     IncompatibleType(String),
 }
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ModifierError {
+    #[error("InvalidHeaderValue")]
     InvalidHeaderValue,
+    #[error("IncompatibleBodyType")]
     IncompatibleBodyType,
-    IoError(std::io::Error),
+    #[error("io error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("file not exist: {0}")]
     FileNotExists(String),
 }
 impl From<InvalidHeaderValue> for Error {
     fn from(_: InvalidHeaderValue) -> Self {
         Self::AfterHandler(ModifierError::InvalidHeaderValue)
-    }
-}
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Self {
-        log::error!("serde_json::Error -> {}", value);
-        Self::InvalidJsonStr(value)
     }
 }
 impl From<std::io::Error> for Error {
@@ -99,12 +111,12 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "")
-    }
-}
-impl std::error::Error for Error {}
+// impl Display for Error {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "")
+//     }
+// }
+// impl std::error::Error for Error {}
 impl HttpResponseModifier for Error {
     fn modify<'a>(
         &'a mut self,
@@ -112,7 +124,7 @@ impl HttpResponseModifier for Error {
     ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             res.add_header(CONTENT_TYPE, "text/plain".parse()?);
-            let b = format!("{:?}", self).as_bytes().to_vec();
+            let b = format!("{}", self).as_bytes().to_vec();
             let b = Bytes::from(b);
             res.add_header(CONTENT_LENGTH, b.len().to_string().parse()?);
             res.set_body(ResponseBody::Simple(Some(b)));
