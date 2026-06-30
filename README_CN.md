@@ -18,16 +18,20 @@
 - 🌍 **CORS支持** - 内置跨域资源共享支持
 - 🔒 **TLS/HTTPS** - 完整的加密连接支持
 - ⚠️ **全局错误处理** - 统一的错误处理机制
+- 📡 **SSE流式传输** - 内置服务端推送事件（Server-Sent Events）支持
+- 📁 **静态文件服务** - 通过通配符路径提供静态文件
+- 🍪 **Cookie支持** - 解析和处理Cookie
+- 🔀 **重定向支持** - 内置HTTP重定向响应
 
 ## 📦 项目结构
 
 ```
-graduation/
+faithea-project/
 ├── faithea/              # 核心HTTP框架库
 │   ├── src/
 │   │   ├── server/      # HTTP/1.1和HTTP/2服务器实现
 │   │   ├── handler/     # 请求处理器和路由系统
-│   │   ├── websocket/   # WebSocket实现
+│   │   ├── websocket/   # WebSocket重导出
 │   │   ├── data/        # 数据提取和转换（JSON, Multipart等）
 │   │   ├── guard/       # 中间件Guard系统
 │   │   ├── request/     # HTTP请求解析
@@ -36,10 +40,15 @@ graduation/
 │   └── Cargo.toml
 ├── faithea-macro/       # 过程宏库（路由装饰器等）
 │   └── Cargo.toml
+├── faithea-websocket/   # WebSocket实现
+│   └── Cargo.toml
+├── faithea-io-core/     # 异步IO抽象
+│   └── Cargo.toml
 ├── app/                 # 示例应用
 │   ├── src/
 │   │   ├── main.rs      # 示例服务器
 │   │   ├── ws/          # WebSocket示例
+│   │   ├── test_handler/# 所有handler示例
 │   │   └── util/        # 工具函数
 │   └── Cargo.toml
 └── Cargo.toml           # Workspace配置
@@ -53,8 +62,8 @@ graduation/
 
 ```toml
 [dependencies]
-faithea = "0.1.6"
-tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
+faithea = "0.1.9"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -95,7 +104,7 @@ cargo run
 使用宏轻松定义路由：
 
 ```rust
-use faithea::{get, post, put, delete, handlers};
+use faithea::{get, post, put, delete, handlers, HttpServer};
 
 #[get("/")]
 async fn index() {
@@ -129,7 +138,7 @@ async fn main() {
 
 ```rust
 use serde::{Deserialize, Serialize};
-use faithea::{post, data::Json};
+use faithea::{data::Json, post};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct User {
@@ -138,31 +147,55 @@ struct User {
 }
 
 #[post("/users")]
-async fn create_user(Json(user): Json<User>) -> Json<User> {
-    Json(user)
+async fn create_user(user: Json<User>) {
+    user
 }
 ```
+
+> **注意：** `Json<T>` 实现了 `Deref<Target = T>`，可直接使用 `user.name` 访问字段，无需解构。
 
 ### Multipart 文件上传
 
 ```rust
 use faithea::{
-    data::inbound::multipart::{MultiPartFile, Multipart},
-    MultipartData, post,
+    data::inbound::multipart::{MultiPartFile, Multipart, Part, TryFromParts},
+    error::MultipartError, MultipartData, post,
 };
+
+#[derive(Debug)]
+struct CustomPart {
+    pub value: String,
+}
+
+impl TryFromParts for CustomPart {
+    fn try_from_parts(part: Option<Vec<Part>>) -> Result<Self, MultipartError> {
+        if let Some(mut part) = part
+            && let Some(Part::Lit(s)) = part.pop()
+        {
+            Ok(Self { value: s })
+        } else {
+            Err(MultipartError::FieldNotExist)
+        }
+    }
+}
 
 #[derive(MultipartData)]
 struct UploadData {
-    pub username: String,
+    #[faithea(rename = "otherInfo")]
+    pub other_info: CustomPart,
+    pub name: Vec<String>,
+    pub age: i32,
+    pub merried: Option<bool>,
     pub profile: Vec<MultiPartFile>,
 }
 
 #[post("/upload")]
-async fn upload(Multipart(data): Multipart<UploadData>) -> String {
+async fn upload(data: Multipart<UploadData>) {
     format!(
-        "Uploaded {} files for user {}",
-        data.profile.len(),
-        data.username
+        "name: {:?}, age: {}, files: {}",
+        data.name,
+        data.age,
+        data.profile.len()
     )
 }
 ```
@@ -170,38 +203,52 @@ async fn upload(Multipart(data): Multipart<UploadData>) -> String {
 ### 查询参数和路径参数
 
 ```rust
-use faithea::{get, TryFromParam};
+use faithea::{
+    get,
+    request::{ConvertError, TryFromParam, error::ParseHandlerParamError},
+};
 
 #[derive(Debug)]
-struct Age {
+struct MyAge {
     value: i32,
 }
 
-impl TryFromParam<'_> for Age {
-    fn try_from_param(value: &String) -> Result<Self, HttpHandlerError> {
-        Ok(Age {
-            value: value.parse()?,
-        })
+impl TryFromParam<'_> for MyAge {
+    fn try_from_param(value: &str) -> Result<Self, ParseHandlerParamError> {
+        let a = value.parse::<i32>().map_err(|_| ConvertError {
+            from: value.into(),
+            to: "MyAge".into(),
+        })?;
+        Ok(Self { value: a })
     }
 }
 
 #[get("/search")]
 async fn search(
-    #[search_param] name: String,
-    #[search_param] age: Option<String>
-) -> String {
-    format!("Searching for {}, age: {:?}", name, age)
+    #[search_param("Name")] name: &str,
+    #[search_param] age: Option<String>,
+) {
+    format!("搜索：{}, 年龄：{:?}", name, age)
 }
 
-#[get("/users/{id}")]
-async fn get_user(id: String, age: Age) -> String {
-    format!("User {}, age {}", id, age.value)
+#[get("/users/{name}/{age}")]
+async fn get_user(name: String, age: MyAge) {
+    format!("用户 {}, 年龄 {:?}", name, age.value)
 }
 ```
+
+> **注意：** `#[search_param("Name")]` 允许查询参数键名与Rust变量名不同。单独使用 `#[search_param]` 则以变量名作为键名。`&str` 现在是支持的参数类型。
 
 ### WebSocket 支持
 
 ```rust
+use std::{collections::HashMap, sync::LazyLock};
+use faithea::{
+    request::HttpRequest,
+    websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
+};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{Mutex, mpsc::Sender};
 
 static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -214,29 +261,132 @@ struct WsDataMessage {
     content: String,
 }
 
-pub async fn ws(
-    websocket: WebSocket,
-    req: HttpRequest,
-) {
-    let  (mut r,s) = websocket.split();
+pub async fn ws(websocket: WebSocket, req: HttpRequest) {
+    let (mut r, s) = websocket.split();
     let name = req.get_pathparam("name").unwrap();
     {
         let mut map = WS_SENDERS.lock().await;
         map.insert(name.clone(), s.clone());
     }
     while let Some(msg) = r.recv().await {
-        let data = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()).unwrap();
-        let map = WS_SENDERS.lock().await;
-        if let Some(sender) = map.get(&data.to) {
-            let a:String = serde_json::to_string(&data).unwrap();
-            sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
+        if let Ok(data) = serde_json::from_slice::<WsDataMessage>(msg.as_bytes()) {
+            let map = WS_SENDERS.lock().await;
+            if let Some(sender) = map.get(&data.to) {
+                let a: String = serde_json::to_string(&data).unwrap();
+                sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
+            }
         }
     }
 }
+
 // 在main中注册：
 HttpServer::builder()
-    .websocket("/ws/{name}", ws_handler)
+    .websocket("/ws/{name}", ws)
     // ...其他配置
+```
+
+### SSE 流式传输
+
+```rust
+use std::time::Duration;
+use bytes::Bytes;
+use faithea::{get, res_modifiers, response::{sse::SSE, stream::Stream}};
+use tokio::time::sleep;
+
+#[get("/stream")]
+async fn stream() {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Bytes>(10);
+    tokio::spawn(async move {
+        for _ in 0..10 {
+            tx.send(Bytes::from("data: hello\n")).await.unwrap();
+            sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    res_modifiers!(Stream::new(rx), SSE)
+}
+```
+
+### 静态文件服务
+
+使用 `.static_map()` 构建器方法：
+
+```rust
+HttpServer::builder()
+    .static_map(
+        "/static/**",
+        "/path/to/static/directory",
+    )
+```
+
+或者使用独立的工具函数：
+
+```rust
+use faithea::{get, util::static_map};
+
+#[get("/**")]
+pub async fn file_map() {
+    static_map(_req, "/path/to/static/directory").await
+}
+```
+
+### Cookie 处理
+
+```rust
+use faithea::get;
+
+#[get("/cookie")]
+async fn cookie() {
+    format!("{:?}", _req.cookies())
+}
+```
+
+`_req` 参数由路由宏自动注入，提供对完整 `HttpRequest` 的访问。
+
+### 重定向
+
+```rust
+use faithea::{get, response::redirect::Redirect};
+
+#[get("/redirect")]
+async fn redirect() {
+    Redirect("https://www.example.com")
+}
+```
+
+### 自定义数据提取（FromRequest）
+
+为自定义类型实现 `TryFromRequest`：
+
+```rust
+use serde::{Deserialize, Serialize};
+use faithea::{
+    data::inbound::FromRequest,
+    data::Json,
+    post,
+    request::{HttpRequest, TryFromRequest, error::ParseHandlerParamError},
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyData {
+    name: String,
+    age: i32,
+}
+
+impl<'a> TryFromRequest<'a> for MyData {
+    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
+        // 自定义提取逻辑 — 读取请求头、请求体等
+        Ok(MyData {
+            name: "来自请求".into(),
+            age: 42,
+        })
+    }
+}
+
+#[post("/fromRequest")]
+async fn from_request(data: FromRequest<MyData>) {
+    Json(data.into_inner())
+}
 ```
 
 ### 中间件 Guards
@@ -249,7 +399,7 @@ async fn main() {
     HttpServer::builder()
         .guard("/api/**", async |req| {
             // 验证API密钥
-            if req.headers().get("Authorization").is_some() {
+            if req.get_header("Authorization").is_some() {
                 Ok(req)
             } else {
                 Err(HttpResponse::unauthorized())
@@ -264,10 +414,10 @@ async fn main() {
 ### 全局错误处理
 
 ```rust
-use faithea::HttpServer;
+use faithea::{HttpServer, res_modifiers};
 
 HttpServer::builder()
-    .globale_error_handler(async |e: Error| {
+    .globale_error_handler(async |e: faithea::error::Error| {
         res_modifiers!(format!("Error: {:?}", e))
     })
     // ...其他配置
@@ -284,13 +434,49 @@ HttpServer::builder()
     // ...其他配置
 ```
 
+### 自定义响应修改器
+
+你可以为自己的类型实现 `HttpResponseModifier`：
+
+```rust
+use faithea::{
+    get, res_modifiers,
+    header::{CONTENT_LENGTH, HeaderValue},
+    response::{HttpResponse, HttpResponseModifier, HttpResponseModifierFuture, cors::CORS},
+};
+
+struct CustomHeader {
+    name: String,
+}
+
+impl HttpResponseModifier for CustomHeader {
+    fn modify<'a>(
+        &'a mut self,
+        res: &'a mut HttpResponse,
+    ) -> HttpResponseModifierFuture<'a> {
+        Box::pin(async move {
+            res.add_header("x-custom-header", self.name.parse().unwrap());
+            Ok(())
+        })
+    }
+}
+
+#[get("/custom")]
+async fn custom_res() {
+    res_modifiers!(
+        CustomHeader { name: "Hello".into() },
+        CORS,
+    )
+}
+```
+
 ## 🔧 技术栈
 
 - **[Tokio](https://tokio.rs/)** - 异步运行时
 - **[Serde](https://serde.rs/)** - 序列化/反序列化
 - **[http](https://github.com/hyperium/http)** - HTTP类型定义
 - **[rustls](https://github.com/rustls/rustls)** - TLS实现
-- **[h2](https://github.com/hyperium/h2)** - HTTP/2实现
+- **[hyper](https://github.com/hyperium/hyper)** - HTTP/1.1和HTTP/2服务
 
 ## 📝 示例项目
 
@@ -299,6 +485,9 @@ HttpServer::builder()
 - **数据处理**：JSON、Multipart等数据格式处理
 - **WebSocket**：实时通信示例
 - **中间件**：认证和Guard示例
+- **SSE和流式传输**：服务端推送事件和流式响应
+- **静态文件**：通配符路由的静态文件服务
+- **自定义提取器**：FromRequest和自定义响应修改器
 
 ## 🤝 贡献
 
