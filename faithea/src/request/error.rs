@@ -17,6 +17,6 @@ pub enum ParseHandlerParamError {
 
 #[derive(Debug,Error)]
 pub enum ParseHttpRequestError {
-    #[error("")]
+    #[error("parse body error")]
     ParseBodyError
 }

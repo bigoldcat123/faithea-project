@@ -104,7 +104,13 @@ impl_try_from_part_for_parse_from_str!(
 impl<T: TryFromParts + TryFromPart> TryFromParts for Option<T> {
     fn try_from_parts(parts: Option<Vec<Part>>) -> Result<Self, MultipartError> {
         match parts {
-            Some(mut p) => Ok(Some(TryFromPart::try_from_part(p.pop().unwrap())?)),
+            Some(mut p) => {
+                if let Some(p) = p.pop() {
+                    Ok(Some(TryFromPart::try_from_part(p)?))
+                } else {
+                    Ok(None)
+                }
+            }
             None => Ok(None),
         }
     }
@@ -201,7 +207,6 @@ impl<'a, T: TryFromMultipartDataMap> TryFromRequest<'a> for Multipart<T> {
 }
 #[cfg(test)]
 mod tests {
-
 
     use super::*;
 
