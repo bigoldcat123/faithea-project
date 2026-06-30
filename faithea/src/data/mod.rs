@@ -2,8 +2,9 @@ use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    handler::types::HttpHandlerError,
-    request::{HttpRequest, RequestBody, TryFromRequest},
+    request::{
+        ConvertError, HttpRequest, RequestBody, TryFromRequest, error::ParseHandlerParamError,
+    },
 };
 
 pub mod inbound;
@@ -12,11 +13,18 @@ pub mod outbound;
 #[derive(Serialize, Debug)]
 pub struct Json<T>(pub T);
 impl<'a, T: Deserialize<'a>> TryFromRequest<'a> for Json<T> {
-    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
         if let Some(RequestBody::Simple(body)) = req._inner.body() {
-            Ok(Self(serde_json::from_slice::<T>(body.chunk())?))
+            Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(
+                |_| {
+                    ParseHandlerParamError::ConvertError(ConvertError {
+                        from: format!("{:?}",body),
+                        to: "Json Data".into(),
+                    })
+                },
+            )?))
         } else {
-            Err(crate::error::Error::before_handler_empty_request_body())
+            Err(ParseHandlerParamError::BodyNotExist)
         }
     }
 }

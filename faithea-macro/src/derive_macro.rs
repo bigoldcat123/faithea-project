@@ -38,10 +38,18 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
         let field_ident = f.ident.as_ref().unwrap();
         let field_name = extra_rename(&f.attrs).unwrap_or(field_ident.to_string());
         quote! {
-            #field_ident: data
+            #field_ident:
+            TryFromParts::try_from_parts(data
                 .remove(#field_name)
-                .try_convert_into()?
+                )?
+
         }
+        // TryFromPart
+        // quote! {
+        //     #field_ident: data
+        //         .remove(#field_name)
+        //         .try_convert_into()?
+        // }
     });
 
     Ok(quote! {
@@ -51,8 +59,9 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
                     String,
                     Vec<faithea::data::inbound::multipart::Part>,
                 >,
-            ) -> Result<Self, faithea::handler::types::HttpHandlerError> {
+            ) -> Result<Self, faithea::error::MultipartError> {
                 use faithea::TryConvertInto;
+                use faithea::data::inbound::multipart::TryFromParts;
                 Ok(Self {
                     #(#assigns,)*
                 })

@@ -1,6 +1,6 @@
 use faithea::{
     get,
-    request::{ConvertError, TryFromParam},
+    request::{ConvertError, TryFromParam, error::ParseHandlerParamError},
 };
 
 #[derive(Debug)]
@@ -9,7 +9,7 @@ pub struct MyAge {
 }
 
 impl TryFromParam<'_> for MyAge {
-    fn try_from_param(value: &str) -> Result<Self, ConvertError> {
+    fn try_from_param(value: &str) -> Result<Self, ParseHandlerParamError> {
         let a = value.parse::<i32>().map_err(|_| ConvertError {
             from: value.into(),
             to: "MyAge".into(),

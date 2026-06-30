@@ -21,6 +21,7 @@ pub use path_param::path_param;
 pub use redirect::redirect;
 pub use search_param::search_param;
 pub use stream::stream;
+use custom_res::custom_res;
 
 pub fn test_handlers() -> Vec<HandlerModifier> {
     handlers!(
@@ -33,7 +34,7 @@ pub fn test_handlers() -> Vec<HandlerModifier> {
         from_request,
         redirect,
         stream,
-        // custom_res,
+        custom_res,
         // custom_res2
     )
 }

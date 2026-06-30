@@ -4,10 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    handler::types::HttpHandlerError,
-    request::{HttpRequest, TryFromRequest},
-};
+use crate::
+    request::{HttpRequest, TryFromRequest, error::ParseHandlerParamError}
+;
 pub type Shared<T> = Arc<T>;
 
 pub struct FromRequest<T>(T);
@@ -30,7 +29,7 @@ impl<T> DerefMut for FromRequest<T> {
 }
 
 impl<'a, T: TryFromRequest<'a>> TryFromRequest<'a> for FromRequest<T> {
-    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
         let a: T = T::try_from_request(req)?;
         Ok(Self(a))
     }

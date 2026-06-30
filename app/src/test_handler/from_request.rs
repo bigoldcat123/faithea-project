@@ -1,7 +1,8 @@
 use faithea::data::inbound::FromRequest;
-use faithea::handler::types::HttpHandlerError;
+// use faithea::handler::types::HttpHandlerError;
 use faithea::request::HttpRequest;
 use faithea::request::TryFromRequest;
+use faithea::request::error::ParseHandlerParamError;
 use faithea::{data::Json, post};
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +13,7 @@ pub struct Stu {
 }
 
 impl<'a> TryFromRequest<'a> for Stu {
-    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+    fn try_from_request(_req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
         // let body = _req.body().as_mut().unwrap();
         Ok(Stu {
             name: "from req".into(),

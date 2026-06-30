@@ -3,7 +3,7 @@ use http::header::{CONTENT_LENGTH, CONTENT_TYPE, InvalidHeaderValue};
 use thiserror::Error;
 
 use crate::{
-    request::ConvertError,
+    request::error::{ParseHandlerParamError, ParseHttpRequestError},
     response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody},
 };
 
@@ -20,43 +20,39 @@ pub enum Error {
     InvalidJsonStr(#[from] serde_json::Error),
 }
 impl Error {
-    pub fn before_handler_incompatible_request_body_type() -> Self {
-        log::error!("body type is incompatible");
-        Self::BeforeHandler(BeforeHandlerError::IncompatibleBodyType)
-    }
-    pub fn before_handler_invalid_param<C: AsRef<str>>(cause: C) -> Self {
-        log::error!("invalid param: {}", cause.as_ref());
-        Self::BeforeHandler(BeforeHandlerError::InvalidParam(cause.as_ref().to_string()))
-    }
-    pub fn before_handler_param_not_exist() -> Self {
-        log::error!("param_not_exist");
-        Self::BeforeHandler(BeforeHandlerError::ParamNotExist)
-    }
-    pub fn before_handler_empty_request_body() -> Self {
-        log::error!("empty request body");
-        Self::BeforeHandler(BeforeHandlerError::EmpeyRequestBody)
-    }
-    pub fn before_handler_multipart_field_not_exist() -> Self {
-        log::error!("multipart field not exist");
-        Self::BeforeHandler(BeforeHandlerError::MultipartError(
-            MultipartError::FieldNotExist,
-        ))
-    }
-    pub fn before_handler_multipart_incompatible_type<C: AsRef<str>>(cause: C) -> Self {
-        log::error!("multipart incompatible type: {}", cause.as_ref());
-        Self::BeforeHandler(BeforeHandlerError::MultipartError(
-            MultipartError::IncompatibleType(cause.as_ref().to_string()),
-        ))
-    }
-    pub fn before_handler_multipart_can_not_parse_from_part<C: AsRef<str>>(cause: C) -> Self {
-        log::error!(
-            "multipart cat not parse from part cause -> {}",
-            cause.as_ref()
-        );
-        Self::BeforeHandler(BeforeHandlerError::MultipartError(
-            MultipartError::CanNotParseFromPart(cause.as_ref().to_string()),
-        ))
-    }
+    // pub fn before_handler_incompatible_request_body_type() -> Self {
+    //     log::error!("body type is incompatible");
+    //     Self::BeforeHandler(BeforeHandlerError::IncompatibleBodyType)
+    // }
+    // pub fn before_handler_param_not_exist() -> Self {
+    //     log::error!("param_not_exist");
+    //     Self::BeforeHandler(BeforeHandlerError::ParamNotExist)
+    // }
+    // pub fn before_handler_empty_request_body() -> Self {
+    //     log::error!("empty request body");
+    //     Self::BeforeHandler(BeforeHandlerError::EmpeyRequestBody)
+    // }
+    // pub fn before_handler_multipart_field_not_exist() -> Self {
+    //     log::error!("multipart field not exist");
+    //     Self::BeforeHandler(BeforeHandlerError::MultipartError(
+    //         MultipartError::FieldNotExist,
+    //     ))
+    // }
+    // pub fn before_handler_multipart_incompatible_type<C: AsRef<str>>(cause: C) -> Self {
+    //     log::error!("multipart incompatible type: {}", cause.as_ref());
+    //     Self::BeforeHandler(BeforeHandlerError::MultipartError(
+    //         MultipartError::IncompatibleType(cause.as_ref().to_string()),
+    //     ))
+    // }
+    // pub fn before_handler_multipart_can_not_parse_from_part<C: AsRef<str>>(cause: C) -> Self {
+    //     log::error!(
+    //         "multipart cat not parse from part cause -> {}",
+    //         cause.as_ref()
+    //     );
+    //     Self::BeforeHandler(BeforeHandlerError::MultipartError(
+    //         MultipartError::CanNotParseFromPart(cause.as_ref().to_string()),
+    //     ))
+    // }
     pub fn after_handler_incompatible_body_type() -> Self {
         log::error!("after handler incompatible body type");
         Self::AfterHandler(ModifierError::IncompatibleBodyType)
@@ -67,25 +63,31 @@ impl Error {
         Self::AfterHandler(ModifierError::FileNotExists(file_path))
     }
 }
+
+// TODO add update errors that may happen before handler
 #[derive(Debug, Error)]
 pub enum BeforeHandlerError {
     #[error("ParseParamError: {0}")]
-    ParseParamError(#[from] ConvertError),
-    #[error("")]
-    InvalidParam(String),
-    #[error("")]
-    ParamNotExist,
-    #[error("")]
-    EmpeyRequestBody,
-    #[error("")]
-    IncompatibleBodyType,
-    #[error("")]
-    MultipartError(MultipartError),
+    ParseHandlerParamError(#[from] ParseHandlerParamError),
+
+    #[error("ParseHttpRequestError: {0}")]
+    ParseHttpRequestError(#[from] ParseHttpRequestError)
+    // #[error("")]
+    // ParamNotExist,
+    // #[error("")]
+    // EmpeyRequestBody,
+    // #[error("")]
+    // IncompatibleBodyType,
+    // #[error("")]
+    // MultipartError(MultipartError),
 }
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum MultipartError {
+    #[error("field not exit")]
     FieldNotExist,
+    #[error("CanNotParseFromPart {0}")]
     CanNotParseFromPart(String),
+    #[error("IncompatibleType {0}")]
     IncompatibleType(String),
 }
 #[derive(Debug, Error)]

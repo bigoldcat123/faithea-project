@@ -21,7 +21,7 @@ impl HttpResponseModifier for MyCustomType {
 }
 
 #[get("/custom_res")]
-async fn custom_res() {
+pub  async fn custom_res() {
     log::info!("{}","hello");
     MyCustomType {
         name: "Hello".into(),

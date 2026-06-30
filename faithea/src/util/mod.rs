@@ -2,7 +2,11 @@ pub(crate) mod trie;
 use std::path::Path;
 
 use crate::{
-    data::outbound::StaticFile, error::Error, request::HttpRequest, res_modifiers, response::HttpResponseModifier
+    data::outbound::StaticFile,
+    error::{BeforeHandlerError, Error},
+    request::HttpRequest,
+    res_modifiers,
+    response::HttpResponseModifier,
 };
 
 /// # how to use
@@ -60,7 +64,7 @@ impl Index {
         let mut path_str = format!("{}/{}", p.as_ref(), seg.as_ref());
         if path_str.ends_with("/") {
             path_str.push_str("index.html");
-        }else {
+        } else {
             path_str.push_str("/index.html");
         }
 
@@ -89,7 +93,11 @@ impl HTML {
         if path.exists() && path.is_file() {
             return Ok(res_modifiers!(StaticFile(path_str)));
         } else {
-            Err(Error::before_handler_invalid_param("static file not exit"))
+            Err(Error::BeforeHandler(
+                BeforeHandlerError::ParseHandlerParamError(
+                    crate::request::error::ParseHandlerParamError::ParamNotExist,
+                ),
+            ))
         }
     }
 }

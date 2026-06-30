@@ -6,7 +6,8 @@ use http::{
 use hyper::body::Incoming;
 
 use crate::{
-    request::HttpRequest,
+    error::BeforeHandlerError,
+    request::{HttpRequest, error::ParseHttpRequestError},
     response::ResponseBody,
     server::{HyperIncommingBytesSource, ServerFuncProvider},
     service::{guard_request, handle_request, handle_websocket},
@@ -35,7 +36,9 @@ async fn handle_http(
     if req.get_header(CONTENT_LENGTH).is_some() {
         let body = crate::request::parse_body_frame(bs, &mut buf, req._inner.headers())
             .await
-            .map_err(crate::error::Error::before_handler_invalid_param)?;
+            .map_err(|_| {
+                BeforeHandlerError::ParseHttpRequestError(ParseHttpRequestError::ParseBodyError)
+            })?;
         *req._inner.body_mut() = Some(body);
     }
 

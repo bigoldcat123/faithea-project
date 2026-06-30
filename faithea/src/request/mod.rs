@@ -1,5 +1,6 @@
 pub mod content_type;
 pub mod cookie;
+pub mod error;
 // pub mod method;
 pub mod path_param;
 pub mod search_param;
@@ -19,11 +20,14 @@ use crate::{
     handler::types::HttpHandlerError,
     map_str,
     request::{
-        content_type::ContentType, cookie::Cookie, path_param::PathParam, search_param::SearchParam,
+        content_type::ContentType, cookie::Cookie, error::ParseHandlerParamError,
+        path_param::PathParam, search_param::SearchParam,
     },
     route::{Route, RouteComponent},
     server::BytesSource,
 };
+
+pub enum ParseRequestBodyError {}
 
 pub enum RequestBody {
     Simple(Bytes),
@@ -49,7 +53,7 @@ pub struct ConvertError {
     pub to: String,
 }
 pub trait TryFromParam<'a>: Sized {
-    fn try_from_param(value: &'a str) -> Result<Self, ConvertError>;
+    fn try_from_param(value: &'a str) -> Result<Self, ParseHandlerParamError>;
 }
 // impl<T: TryFromParam> TryConvertFrom<&String> for T {
 //     fn try_convert_from(value: &String) -> Result<Self, HttpHandlerError> {
@@ -57,12 +61,14 @@ pub trait TryFromParam<'a>: Sized {
 //     }
 // }
 pub trait TryFromRequest<'a>: Sized {
-    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, HttpHandlerError>;
+    fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError>;
 }
 impl<'a, T: TryFromRequest<'a>> TryConvertFrom<&'a mut HttpRequest> for T {
     type Error = HttpHandlerError;
-    fn try_convert_from(value: &'a mut HttpRequest) -> Result<Self, HttpHandlerError> {
+    fn try_convert_from(value: &'a mut HttpRequest) -> Result<Self, Self::Error> {
         Self::try_from_request(value)
+            .map_err(Into::<BeforeHandlerError>::into)
+            .map_err(Into::into)
     }
 }
 
@@ -208,9 +214,9 @@ macro_rules! impl_convert_from_param {
 
         $(
             impl <'a> $crate::request::TryFromParam<'a> for  $t {
-                fn try_from_param(value:&'a str) -> Result<Self,ConvertError> {
-                    use  $crate::request::ConvertError;
-                    value.parse::<$t>().map_err(|_| ConvertError {from:value.to_string(),to:stringify!($t).to_string()})
+                fn try_from_param(value:&'a str) -> Result<Self,$crate::request::error::ParseHandlerParamError> {
+                    use $crate::request::ConvertError;
+                    value.parse::<$t>().map_err(|_| ConvertError {from:value.to_string(),to:stringify!($t).to_string()}).map_err(Into::into)
                     // value.parse::<$t>().map_err(|_| $crate::error::Error::before_handler_invalid_param(format!("can not convert String \"{}\" to type {}",value,stringify!($t))))
                 }
             }
@@ -222,7 +228,7 @@ impl_convert_from_param!(
     i8, i16, i32, i64, i128, isize, usize, f32, f64, u8, u16, u32, u64, u128, bool
 );
 impl<'a> TryFromParam<'a> for &'a str {
-    fn try_from_param(value: &'a str) -> Result<Self, ConvertError> {
+    fn try_from_param(value: &'a str) -> Result<Self, ParseHandlerParamError> {
         Ok(value)
     }
 }
@@ -232,7 +238,7 @@ impl<'a> TryFromParam<'a> for &'a str {
 //     }
 // }
 impl<'a> TryFromParam<'a> for String {
-    fn try_from_param(value: &'a str) -> Result<Self, ConvertError> {
+    fn try_from_param(value: &'a str) -> Result<Self, ParseHandlerParamError> {
         Ok(value.to_string())
     }
 }
@@ -242,10 +248,13 @@ impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for T {
     fn try_convert_from(value: Option<&'a String>) -> Result<Self, Self::Error> {
         if let Some(value) = value {
             T::try_from_param(value)
+                .map_err(Into::<ParseHandlerParamError>::into)
                 .map_err(Into::<BeforeHandlerError>::into)
                 .map_err(Into::<Self::Error>::into)
         } else {
-            Err(HttpHandlerError::before_handler_param_not_exist())
+            Err(Into::<Self::Error>::into(Into::<BeforeHandlerError>::into(
+                ParseHandlerParamError::ParamNotExist,
+            )))
         }
     }
 }
@@ -255,6 +264,7 @@ impl<'a, T: TryFromParam<'a>> TryConvertFrom<Option<&'a String>> for Option<T> {
         if let Some(value) = value {
             T::try_from_param(value)
                 .map(|x| Some(x))
+                .map_err(Into::<ParseHandlerParamError>::into)
                 .map_err(Into::<BeforeHandlerError>::into)
                 .map_err(Into::<Self::Error>::into)
         } else {
