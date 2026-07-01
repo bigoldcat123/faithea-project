@@ -26,7 +26,7 @@ pub mod data;
 pub mod guard;
 pub mod handler;
 pub mod header;
-mod proxy;
+// mod proxy;
 pub mod request;
 pub mod response;
 pub mod route;

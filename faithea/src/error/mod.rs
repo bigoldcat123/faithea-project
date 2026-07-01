@@ -51,8 +51,6 @@ pub enum Error {
     AfterHandler(#[from] ModifierError),
     #[error("BeforeHandlerError: {0}")]
     BeforeHandler(#[from] BeforeHandlerError),
-    #[error("{0}")]
-    InvalidJsonStr(#[from] serde_json::Error),
 }
 impl Error {
     // pub fn before_handler_incompatible_request_body_type() -> Self {
@@ -133,6 +131,8 @@ pub enum ModifierError {
     IncompatibleBodyType,
     #[error("io error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("json error: {0}")]
+    JsonError(String),
     #[error("file not exist: {0}")]
     FileNotExists(String),
 }
@@ -145,6 +145,13 @@ impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         log::error!("std::io::Error -> {}", value);
         Self::AfterHandler(ModifierError::IoError(value))
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        log::error!("serde_json::Error -> {}", e);
+        Self::AfterHandler(ModifierError::JsonError(e.to_string()))
     }
 }
 
