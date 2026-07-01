@@ -9,7 +9,6 @@ use crate::{
 
 /// Errors that occur during low-level body/multipart parsing.
 #[derive(Debug, Error)]
-// #[allow(dead_code)]
 pub enum BodyParseError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -28,6 +27,18 @@ impl From<BodyParseError> for Error {
         Self::BeforeHandler(BeforeHandlerError::ParseHttpRequestError(
             ParseHttpRequestError::ParseBodyError(e),
         ))
+    }
+}
+
+impl From<String> for BodyParseError {
+    fn from(s: String) -> Self {
+        BodyParseError::Other(s)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for BodyParseError {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        BodyParseError::Other(e.to_string())
     }
 }
 

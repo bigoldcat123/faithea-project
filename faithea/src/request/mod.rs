@@ -16,9 +16,8 @@ use thiserror::Error;
 use crate::{
     TryConvertFrom,
     data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser},
-    error::BeforeHandlerError,
+    error::{BeforeHandlerError, BodyParseError},
     handler::types::HttpHandlerError,
-    map_str,
     request::{
         content_type::ContentType, cookie::Cookie, error::ParseHandlerParamError,
         path_param::PathParam, search_param::SearchParam,
@@ -187,7 +186,7 @@ pub async fn parse_body_frame<SOURCE: BytesSource>(
     bs: SOURCE,
     buf: &mut BytesMut,
     headers: &HeaderMap<HeaderValue>,
-) -> Result<RequestBody, String> {
+) -> Result<RequestBody, BodyParseError> {
     use ContentType::*;
     let content_type = ContentType::try_from(headers)?;
     match content_type {
@@ -200,13 +199,13 @@ pub async fn parse_body_frame<SOURCE: BytesSource>(
 async fn parse_simple_body<R: BytesSource>(
     mut r: R,
     buf: &mut BytesMut,
-) -> Result<RequestBody, String> {
+) -> Result<RequestBody, BodyParseError> {
     loop {
         if r.is_end() {
             let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
-        let _len = r.read_buf2(buf).await.map_err(map_str!())?;
+        let _len = r.read_buf2(buf).await?;
     }
 }
 macro_rules! impl_convert_from_param {

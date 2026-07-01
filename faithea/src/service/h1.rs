@@ -6,8 +6,7 @@ use http::{
 use hyper::body::Incoming;
 
 use crate::{
-    error::BodyParseError,
-    request::{HttpRequest},
+    request::HttpRequest,
     response::ResponseBody,
     server::{HyperIncommingBytesSource, ServerFuncProvider},
     service::{guard_request, handle_request, handle_websocket},
@@ -34,9 +33,7 @@ async fn handle_http(
     let mut req = HttpRequest::new(parts, None);
 
     if req.get_header(CONTENT_LENGTH).is_some() {
-        let body = crate::request::parse_body_frame(bs, &mut buf, req._inner.headers())
-            .await
-            .map_err(|e| BodyParseError::Other(e))?;
+        let body = crate::request::parse_body_frame(bs, &mut buf, req._inner.headers()).await?;
         *req._inner.body_mut() = Some(body);
     }
 
