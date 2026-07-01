@@ -7,6 +7,30 @@ use crate::{
     response::{HttpResponseModifier, HttpResponseModifierFuture, ResponseBody},
 };
 
+/// Errors that occur during low-level body/multipart parsing.
+#[derive(Debug, Error)]
+// #[allow(dead_code)]
+pub enum BodyParseError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("invalid multipart boundary")]
+    InvalidBoundary,
+    #[error("unexpected EOF while reading body")]
+    UnexpectedEof,
+    #[error("invalid UTF-8 in body: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<BodyParseError> for Error {
+    fn from(e: BodyParseError) -> Self {
+        Self::BeforeHandler(BeforeHandlerError::ParseHttpRequestError(
+            ParseHttpRequestError::ParseBodyError(e),
+        ))
+    }
+}
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {

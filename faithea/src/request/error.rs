@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{error::MultipartError, request::ConvertError};
+use crate::{error::{BodyParseError, MultipartError}, request::ConvertError};
 
 #[derive(Debug, Error)]
 pub enum ParseHandlerParamError {
@@ -17,6 +17,6 @@ pub enum ParseHandlerParamError {
 
 #[derive(Debug,Error)]
 pub enum ParseHttpRequestError {
-    #[error("parse body error")]
-    ParseBodyError
+    #[error("parse body error: {0}")]
+    ParseBodyError(#[from] BodyParseError)
 }
