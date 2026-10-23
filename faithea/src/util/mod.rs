@@ -1,8 +1,13 @@
 pub(crate) mod trie;
-use std::path::Path;
+use std::{
+    io::{self, ErrorKind},
+    path::{Component, Path},
+};
+
+use http::StatusCode;
 
 use crate::{
-    data::outbound::StaticFile,
+    data::outbound::MappedStaticFile,
     error::{BeforeHandlerError, Error},
     request::HttpRequest,
     res_modifiers,
@@ -18,6 +23,8 @@ use crate::{
 ///     static_map(_req,"path/to/static/directory").await;
 /// }
 /// ```
+/// Paths containing parent-directory or absolute components, and symlinks resolving
+/// outside the mapped directory, are rejected with `403 Forbidden`.
 pub async fn static_map<P: AsRef<str>>(
     _req: &HttpRequest,
     path: P,
@@ -30,74 +37,69 @@ pub async fn static_map<P: AsRef<str>>(
         // 2. /hello/something/index.html
         // 3. /hello/something.html
         //
-        match Exact::parse(path, multi_seg_param) {
-            Ok(res) => res,
-            Err(e) => {
-                res_modifiers!(e)
+        match resolve_static_file(Path::new(path.as_ref()), &multi_seg_param).await {
+            Ok(Some(file)) => res_modifiers!(file),
+            Ok(None) => res_modifiers!(Error::BeforeHandler(
+                BeforeHandlerError::ParseHandlerParamError(
+                    crate::request::error::ParseHandlerParamError::ParamNotExist,
+                ),
+            )),
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+                res_modifiers!(StatusCode::FORBIDDEN, "forbidden")
             }
+            Err(e) => res_modifiers!(Error::from(e)),
         }
     } else {
         res_modifiers!("no multi_seg_param found try to use /abc/** route!")
     }
 }
-struct Exact;
-impl Exact {
-    fn parse<P: AsRef<str>, S: AsRef<str>>(
-        p: P,
-        seg: S,
-    ) -> Result<Vec<Box<dyn HttpResponseModifier + Send + Sync>>, Error> {
-        let path_str = format!("{}/{}", p.as_ref(), seg.as_ref());
-        let path = Path::new(&path_str);
-        if path.exists() && path.is_file() {
-            Ok(res_modifiers!(StaticFile(path_str)))
-        } else {
-            Index::parse(p, seg)
+async fn resolve_static_file(root: &Path, segment: &str) -> io::Result<Option<MappedStaticFile>> {
+    // Validate after URL decoding, including encoded separators and Windows prefixes.
+    if Path::new(segment).components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(io::Error::from(ErrorKind::PermissionDenied));
+    }
+
+    let root = match tokio::fs::canonicalize(root).await {
+        Ok(root) => root,
+        Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    };
+    let exact = root.join(segment);
+    let candidates = [
+        exact.clone(),
+        exact.join("index.html"),
+        root.join(format!(
+            "{}.html",
+            segment.strip_suffix('/').unwrap_or(segment)
+        )),
+    ];
+    for candidate in candidates {
+        let resolved = match tokio::fs::canonicalize(&candidate).await {
+            Ok(resolved) => resolved,
+            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        // Path::starts_with compares components, so a sibling such as public-private
+        // cannot pass a check against public. Check every fallback after symlinks resolve.
+        if !resolved.starts_with(&root) {
+            return Err(io::Error::from(ErrorKind::PermissionDenied));
+        }
+        if tokio::fs::metadata(&resolved).await?.is_file() {
+            // Open the resolved path rather than following the original symlink again.
+            return Ok(Some(MappedStaticFile {
+                resolved_path: resolved,
+                requested_path: candidate,
+            }));
         }
     }
-}
-struct Index;
-impl Index {
-    fn parse<P: AsRef<str>, S: AsRef<str>>(
-        p: P,
-        seg: S,
-    ) -> Result<Vec<Box<dyn HttpResponseModifier + Send + Sync>>, Error> {
-        let mut path_str = format!("{}/{}", p.as_ref(), seg.as_ref());
-        if path_str.ends_with("/") {
-            path_str.push_str("index.html");
-        } else {
-            path_str.push_str("/index.html");
-        }
-
-        let path = Path::new(&path_str);
-        if path.exists() && path.is_file() {
-            Ok(res_modifiers!(StaticFile(path_str)))
-        } else {
-            Html::parse(p, seg)
-        }
-    }
-}
-
-struct Html;
-impl Html {
-    fn parse<P: AsRef<str>, S: AsRef<str>>(
-        path: P,
-        seg: S,
-    ) -> Result<Vec<Box<dyn HttpResponseModifier + Send + Sync>>, Error> {
-        let mut path_str = format!("{}/{}", path.as_ref(), seg.as_ref());
-        if path_str.ends_with("/") {
-            path_str.pop();
-        }
-        path_str.push_str(".html");
-
-        let path = Path::new(&path_str);
-        if path.exists() && path.is_file() {
-            Ok(res_modifiers!(StaticFile(path_str)))
-        } else {
-            Err(Error::BeforeHandler(
-                BeforeHandlerError::ParseHandlerParamError(
-                    crate::request::error::ParseHandlerParamError::ParamNotExist,
-                ),
-            ))
-        }
-    }
+    Ok(None)
 }

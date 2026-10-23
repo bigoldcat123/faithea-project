@@ -1,4 +1,7 @@
-use std::{ffi::OsStr, path::Path};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use bytes::Bytes;
 use http::{
@@ -93,6 +96,29 @@ impl HttpResponseModifier for String {
 }
 
 pub struct StaticFile<T: AsRef<Path>>(pub T);
+
+pub(crate) struct MappedStaticFile {
+    pub(crate) resolved_path: PathBuf,
+    pub(crate) requested_path: PathBuf,
+}
+
+impl HttpResponseModifier for MappedStaticFile {
+    fn modify<'a>(
+        &'a mut self,
+        res: &'a mut crate::response::HttpResponse,
+    ) -> HttpResponseModifierFuture<'a> {
+        Box::pin(async move {
+            StaticFile(&self.resolved_path).modify(res).await?;
+            // A symlink can have a different extension from its target. Keep the
+            // content type of the mapped filename while opening the resolved path.
+            res.add_header(
+                CONTENT_TYPE,
+                HeaderValue::from_static(mime_type(&self.requested_path)),
+            );
+            Ok(())
+        })
+    }
+}
 
 impl<T: AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
     fn modify<'a>(

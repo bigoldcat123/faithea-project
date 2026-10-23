@@ -1,4 +1,5 @@
 use std::{
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -22,7 +23,7 @@ use crate::{
     io::TokioIo,
     request::{HttpRequest, RequestBody, TryFromRequest},
     response::{HttpResponse, ResponseBody},
-    server::ServerContext,
+    server::{HttpServer, Server, ServerContext},
 };
 
 struct TestConnection {
@@ -141,6 +142,130 @@ fn response_bodies(mut wire: &[u8]) -> Vec<&[u8]> {
         wire = &wire[end + len..];
     }
     bodies
+}
+
+fn static_handlers(root: &Path) -> HandlerTrie {
+    let root = Box::leak(root.to_str().unwrap().to_owned().into_boxed_str());
+    let Server::H1Server(server) = HttpServer::builder().static_map("/static/**", root).build()
+    else {
+        unreachable!()
+    };
+    Arc::try_unwrap(server.handlers).ok().unwrap()
+}
+
+async fn assert_static_forbidden(root: &Path, path: &str) {
+    let response = exchange(static_handlers(root), &request("GET", path, "", b"", true)).await;
+    let response = String::from_utf8(response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 403 Forbidden\r\n"),
+        "{path}: {response}"
+    );
+    assert!(!response.contains("PRIVATE_CONTENT"), "{path}: {response}");
+}
+
+#[tokio::test]
+async fn static_mapping_rejects_plain_and_encoded_parent_paths() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path().join("public");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(fixture.path().join("outside.txt"), "PRIVATE_CONTENT").unwrap();
+    for path in [
+        "/static/../outside.txt",
+        "/static/%2e%2e/outside.txt",
+        "/static/%2E%2E%2Foutside.txt",
+        "/static/nested/../../outside.txt",
+        "/static/%2fetc/passwd",
+    ] {
+        assert_static_forbidden(&root, path).await;
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn static_mapping_rejects_symlink_escape_in_all_file_candidates() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path().join("public");
+    // The sibling deliberately shares the root's string prefix.
+    let outside = fixture.path().join("public-private");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join("secret.txt"), "PRIVATE_CONTENT").unwrap();
+    std::fs::write(outside.join("index.html"), "PRIVATE_CONTENT").unwrap();
+    std::fs::create_dir(root.join("page")).unwrap();
+    for (target, link) in [
+        (outside.join("secret.txt"), root.join("linked.txt")),
+        (outside.clone(), root.join("directory")),
+        (outside.join("index.html"), root.join("page/index.html")),
+        (outside.join("index.html"), root.join("about.html")),
+    ] {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+    for path in [
+        "/static/linked.txt",
+        "/static/directory/secret.txt",
+        "/static/directory",
+        "/static/page",
+        "/static/about",
+    ] {
+        assert_static_forbidden(&root, path).await;
+    }
+}
+
+#[tokio::test]
+async fn static_mapping_preserves_files_unicode_and_html_fallbacks() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    std::fs::create_dir(root.join("page")).unwrap();
+    for (path, contents) in [
+        ("main.js", "console.log('ok')"),
+        ("你好.txt", "UNICODE_CONTENT"),
+        ("page/index.html", "PAGE_CONTENT"),
+        ("about.html", "ABOUT_CONTENT"),
+    ] {
+        std::fs::write(root.join(path), contents).unwrap();
+    }
+    for (path, contents, mime) in [
+        ("/static/main.js", "console.log('ok')", "text/javascript"),
+        (
+            "/static/%E4%BD%A0%E5%A5%BD.txt",
+            "UNICODE_CONTENT",
+            "text/plain",
+        ),
+        ("/static/page", "PAGE_CONTENT", "text/html"),
+        ("/static/page/", "PAGE_CONTENT", "text/html"),
+        ("/static/about", "ABOUT_CONTENT", "text/html"),
+    ] {
+        let response = exchange(static_handlers(root), &request("GET", path, "", b"", true)).await;
+        assert_eq!(response_bodies(&response), [contents.as_bytes()]);
+        assert!(
+            String::from_utf8(response)
+                .unwrap()
+                .contains(&format!("content-type: {mime}\r\n"))
+        );
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn static_mapping_allows_symlinks_within_the_root_and_a_symlinked_root() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path().join("public");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("target.txt"), "PUBLIC_CONTENT").unwrap();
+    std::os::unix::fs::symlink("target.txt", root.join("linked.js")).unwrap();
+    let root_link = fixture.path().join("public-link");
+    std::os::unix::fs::symlink(root, &root_link).unwrap();
+    let response = exchange(
+        static_handlers(&root_link),
+        &request("GET", "/static/linked.js", "", b"", true),
+    )
+    .await;
+    assert_eq!(response_bodies(&response), [b"PUBLIC_CONTENT".as_slice()]);
+    assert!(
+        String::from_utf8(response)
+            .unwrap()
+            .contains("content-type: text/javascript\r\n")
+    );
 }
 
 #[tokio::test]
