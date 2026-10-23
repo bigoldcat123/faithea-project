@@ -15,7 +15,7 @@ use thiserror::Error;
 
 use crate::{
     TryConvertFrom,
-    data::inbound::multipart::{MultipartDataMap, parser::h1::MultiPartBodyParser},
+    data::inbound::multipart::{MultipartDataMap, parser::h1::MultipartBodyParser},
     error::BodyParseError,
     handler::types::HttpHandlerError,
     request::{
@@ -30,14 +30,14 @@ pub enum ParseRequestBodyError {}
 
 pub enum RequestBody {
     Simple(Bytes),
-    MultiPart(MultipartDataMap),
+    Multipart(MultipartDataMap),
     Stream(PathBuf), // the path to a file saved on the disk
 }
 impl Debug for RequestBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Simple(_) => write!(f, "Simple(Bytes)")?,
-            Self::MultiPart(_) => write!(f, "MultiPart(MultipartDataMap)")?,
+            Self::Multipart(_) => write!(f, "Multipart(MultipartDataMap)")?,
             Self::Stream(_) => write!(f, "Stream(PathBuf)")?,
         }
         Ok(())
@@ -66,7 +66,7 @@ impl<'a, T: TryFromRequest<'a>> TryConvertFrom<&'a mut HttpRequest> for T {
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    pub(crate) _inner: Request<Option<RequestBody>>,
+    pub(crate) inner: Request<Option<RequestBody>>,
     pub(crate) path_param: Option<PathParam>,
     pub(crate) search_param: Option<SearchParam>,
     pub(crate) multi_seg_param: Option<String>,
@@ -75,25 +75,25 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn new(parts: http::request::Parts, body: Option<RequestBody>) -> Self {
         Self {
-            _inner: Request::from_parts(parts, body),
+            inner: Request::from_parts(parts, body),
             path_param: None,
             multi_seg_param: None,
             search_param: None,
         }
     }
     pub fn body(&mut self) -> &mut Option<RequestBody> {
-        self._inner.body_mut()
+        self.inner.body_mut()
     }
     pub fn from_req(req: Request<Option<RequestBody>>) -> Self {
         Self {
-            _inner: req,
+            inner: req,
             path_param: None,
             multi_seg_param: None,
             search_param: None,
         }
     }
     pub fn cookies<'a>(&'a self) -> Option<Cookie<'a>> {
-        if let Some(cookie) = self._inner.headers().get(COOKIE) {
+        if let Some(cookie) = self.inner.headers().get(COOKIE) {
             if let Ok(cookie) = cookie.to_str() {
                 Some(Cookie::from_cookie_header(cookie))
             } else {
@@ -106,7 +106,7 @@ impl HttpRequest {
     pub fn fake() -> Self {
         let body = Some(RequestBody::Simple(Bytes::from("request payload")));
         Self {
-            _inner: Request::builder()
+            inner: Request::builder()
                 .method(http::Method::POST)
                 .version(http::Version::HTTP_11)
                 .uri("/api/data")
@@ -117,20 +117,20 @@ impl HttpRequest {
             multi_seg_param: None,
         }
     }
-    fn assamble_path_param(&mut self, handler_route: &Route, incoming_route: &Route) {
+    fn assemble_path_param(&mut self, handler_route: &Route, incoming_route: &Route) {
         if let Ok(p) = PathParam::try_from_route(handler_route, incoming_route) {
             self.path_param = Some(p)
         }
     }
-    fn assamble_multi_seg_param(&mut self, handler_route: &Route, incoming_route: &Route) {
+    fn assemble_multi_seg_param(&mut self, handler_route: &Route, incoming_route: &Route) {
         if handler_route
-            .r
-            .ends_with(&[RouteComponent::MultiSegWildCard])
+            .components
+            .ends_with(&[RouteComponent::MultiSegmentWildcard])
         {
             let mut s = vec![];
-            for i in 0..incoming_route.r.len() {
-                if i >= handler_route.r.len() - 1
-                    && let RouteComponent::Exact(ref p) = incoming_route.r[i]
+            for i in 0..incoming_route.components.len() {
+                if i >= handler_route.components.len() - 1
+                    && let RouteComponent::Exact(ref p) = incoming_route.components[i]
                 {
                     s.push(p.as_str());
                 }
@@ -139,18 +139,18 @@ impl HttpRequest {
         }
     }
     pub fn get_header<K: AsHeaderName>(&self, k: K) -> Option<&HeaderValue> {
-        self._inner.headers().get(k)
+        self.inner.headers().get(k)
     }
     pub(crate) fn process_routes(&mut self, handler_route: &Route, incoming_route: &Route) {
-        self.assamble_path_param(handler_route, incoming_route);
-        self.assamble_multi_seg_param(handler_route, incoming_route);
+        self.assemble_path_param(handler_route, incoming_route);
+        self.assemble_multi_seg_param(handler_route, incoming_route);
     }
 
     pub(crate) fn process_search_param(&mut self) {
-        self.search_param = Some(SearchParam::from_query(self._inner.uri().query()));
+        self.search_param = Some(SearchParam::from_query(self.inner.uri().query()));
     }
 
-    pub fn get_pathparam<S: AsRef<str>>(&self, key: S) -> Option<&String> {
+    pub fn get_path_param<S: AsRef<str>>(&self, key: S) -> Option<&String> {
         if let Some(ref p) = self.path_param {
             p.get(key)
         } else {
@@ -159,20 +159,20 @@ impl HttpRequest {
     }
 
     pub fn uri(&self) -> &Uri {
-        self._inner.uri()
+        self.inner.uri()
     }
 
     pub fn get_search_param<S: AsRef<str>>(&self, _key: S) -> Option<&String> {
         if let Some(s) = self.search_param.as_ref() {
-            s._inner.get(_key.as_ref())
+            s.inner.get(_key.as_ref())
         } else {
             None
         }
     }
 }
 
-pub async fn parse_body_frame<SOURCE: BytesSource>(
-    bs: SOURCE,
+pub async fn parse_body_frame<Source: BytesSource>(
+    bs: Source,
     buf: &mut BytesMut,
     headers: &HeaderMap<HeaderValue>,
 ) -> Result<RequestBody, BodyParseError> {
@@ -180,21 +180,21 @@ pub async fn parse_body_frame<SOURCE: BytesSource>(
     let content_type = ContentType::try_from(headers)?;
     match content_type {
         ApplicationJson => parse_simple_body(bs, buf).await,
-        MultipartFormData(boundary) => MultiPartBodyParser::parse(bs, buf, boundary).await,
+        MultipartFormData(boundary) => MultipartBodyParser::parse(bs, buf, boundary).await,
         _ => parse_simple_body(bs, buf).await,
     }
 }
 
 async fn parse_simple_body<R: BytesSource>(
-    mut r: R,
+    mut source: R,
     buf: &mut BytesMut,
 ) -> Result<RequestBody, BodyParseError> {
     loop {
-        if r.is_end() {
+        if source.is_end() {
             let body = buf.split_to(buf.remaining()).freeze();
             return Ok(RequestBody::Simple(body));
         }
-        let _len = r.read_buf2(buf).await?;
+        let _len = source.read_bytes(buf).await?;
     }
 }
 macro_rules! impl_convert_from_param {

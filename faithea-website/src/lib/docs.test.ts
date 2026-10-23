@@ -112,7 +112,7 @@ describe("documentation content pipeline", () => {
     expect(guides[1]?.headings.map((heading) => heading.text)).toContain(
       "自定义 Multipart 字段",
     );
-    expect(guides[1]?.html).toContain("MultiPartFile");
+    expect(guides[1]?.html).toContain("MultipartFile");
   });
 
   test("renders all localized advanced guides", async () => {

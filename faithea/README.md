@@ -79,7 +79,7 @@ struct StuInfo {
     pub name: String,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: MultiPartFile,
+    pub profile: MultipartFile,
 }
 
 #[post("/multipart")]
@@ -143,14 +143,14 @@ async fn fromRequest(stu:FromRequest<Stu>) {
 use std::{collections::HashMap, sync::LazyLock};
 
 use bytes::Bytes;
-use faithea::{request::HttpRequest, websocket::{data::WebSocketDataPayLoad, socket::WebSocket}};
+use faithea::{request::HttpRequest, websocket::{data::WebSocketPayload, socket::WebSocket}};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{
     Mutex,
     mpsc::Sender,
 };
 
-static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
+static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketPayload>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Serialize, Deserialize)]
@@ -166,7 +166,7 @@ pub async fn ws(
     req: HttpRequest,
 ) {
     let  (mut r,s) = websocket.split();
-    let name = req.get_pathparam("name").unwrap();
+    let name = req.get_path_param("name").unwrap();
     {
         let mut map = WS_SENDERS.lock().await;
         map.insert(name.clone(), s.clone());
@@ -176,7 +176,7 @@ pub async fn ws(
         let map = WS_SENDERS.lock().await;
         if let Some(sender) = map.get(&data.to) {
             let a:Bytes = serde_json::to_vec(&data).unwrap().into();
-            sender.send(WebSocketDataPayLoad::new(a)).await.unwrap();
+            sender.send(WebSocketPayload::new(a)).await.unwrap();
         }
     }
 }
@@ -186,7 +186,7 @@ pub async fn ws(
 
 2. global error handler
 ```rust
-        .globale_error_handler(async |e:faithea::error::Error|
+        .global_error_handler(async |e:faithea::error::Error|
             res_modifiers!(format!("some error~~ {:?}",e))
         )
 ```
@@ -270,6 +270,6 @@ struct StuInfo {
     pub name: Vec<A>,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: Vec<MultiPartFile>,
+    pub profile: Vec<MultipartFile>,
 }
 ```

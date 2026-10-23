@@ -7,59 +7,58 @@ use crate::{
     response::{HttpResponse, HttpResponseModifier},
 };
 
-pub trait HttphandlerErrorTrait: HttpResponseModifier + Send + Sync {}
-impl<T: HttpResponseModifier + Send + Sync> HttphandlerErrorTrait for T {}
+pub trait HttpHandlerErrorModifier: HttpResponseModifier + Send + Sync {}
+impl<T: HttpResponseModifier + Send + Sync> HttpHandlerErrorModifier for T {}
 
 pub type HttpHandlerError = crate::error::Error;
 
-pub type HttpHandlerResultOutput = Result<HttpResponse, HttpHandlerError>;
-pub trait HttpHandlerResultTrait:
-    Future<Output = HttpHandlerResultOutput> + Send + 'static
+pub type HttpHandlerResult = Result<HttpResponse, HttpHandlerError>;
+pub trait HttpHandlerFuture: Future<Output = HttpHandlerResult> + Send + 'static {}
+impl<T: Future<Output = HttpHandlerResult> + Send + 'static> HttpHandlerFuture for T {}
+
+type BoxedHttpHandlerFuture = Pin<Box<dyn HttpHandlerFuture>>;
+
+pub trait HttpHandlerTrait:
+    Fn(HttpRequest) -> BoxedHttpHandlerFuture + Send + Sync + 'static
 {
 }
-impl<T: Future<Output = HttpHandlerResultOutput> + Send + 'static> HttpHandlerResultTrait for T {}
-
-type HttpHandlerResult = Pin<Box<dyn HttpHandlerResultTrait>>;
-
-pub trait HttpHandlerTrait: Fn(HttpRequest) -> HttpHandlerResult + Send + Sync + 'static {}
-impl<T: Fn(HttpRequest) -> HttpHandlerResult + Send + Sync + 'static> HttpHandlerTrait for T {}
-pub trait RawHttpHandlerTrait<R: HttpHandlerResultTrait>:
+impl<T: Fn(HttpRequest) -> BoxedHttpHandlerFuture + Send + Sync + 'static> HttpHandlerTrait for T {}
+pub trait RawHttpHandlerTrait<R: HttpHandlerFuture>:
     Fn(HttpRequest) -> R + Send + Sync + 'static
 {
 }
-impl<R: HttpHandlerResultTrait, T: Fn(HttpRequest) -> R + Send + Sync + 'static>
-    RawHttpHandlerTrait<R> for T
+impl<R: HttpHandlerFuture, T: Fn(HttpRequest) -> R + Send + Sync + 'static> RawHttpHandlerTrait<R>
+    for T
 {
 }
 pub type HttpHandler = Box<dyn HttpHandlerTrait>;
 
 //####### WS HANDLER
 //
-pub trait WebSocketHandlerResultTrait: Future<Output = ()> + Send + 'static {}
-impl<T: Future<Output = ()> + Send + 'static> WebSocketHandlerResultTrait for T {}
+pub trait WebSocketHandlerFuture: Future<Output = ()> + Send + 'static {}
+impl<T: Future<Output = ()> + Send + 'static> WebSocketHandlerFuture for T {}
 
-pub trait WebSocketHandlerTarit:
-    Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerResultTrait>> + Send + Sync + 'static
+pub trait WebSocketHandlerTrait:
+    Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerFuture>> + Send + Sync + 'static
 {
 }
-impl<
-    T: Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerResultTrait>> + Send + Sync + 'static,
-> WebSocketHandlerTarit for T
+impl<T: Fn(WebSocket, HttpRequest) -> Pin<Box<dyn WebSocketHandlerFuture>> + Send + Sync + 'static>
+    WebSocketHandlerTrait for T
 {
 }
 
-pub trait RawWebSocketHandlerTarit<R: WebSocketHandlerResultTrait>:
+pub trait RawWebSocketHandlerTrait<R: WebSocketHandlerFuture>:
     Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static
 {
 }
 
-impl<R: WebSocketHandlerResultTrait, T: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static>
-    RawWebSocketHandlerTarit<R> for T
+impl<R: WebSocketHandlerFuture, T: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static>
+    RawWebSocketHandlerTrait<R> for T
 {
 }
 
-pub type WebSocketHandler = Box<dyn WebSocketHandlerTarit>;
+pub type WebSocketHandler = Box<dyn WebSocketHandlerTrait>;
 pub enum Handler {
     Http(HttpHandler),
-    WbeSocket(WebSocketHandler),
+    WebSocket(WebSocketHandler),
 }

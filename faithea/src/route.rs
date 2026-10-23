@@ -4,9 +4,9 @@ pub enum RouteComponent {
 
     PathParam(String),
 
-    SingleSegWildCard,
+    SingleSegmentWildcard,
 
-    MultiSegWildCard,
+    MultiSegmentWildcard,
 }
 
 /// Exact > Path parameters > Single-segment wildcard > Multi-segment wildcard.
@@ -18,8 +18,8 @@ impl Ord for RouteComponent {
             match c {
                 RouteComponent::Exact(_) => 4,
                 RouteComponent::PathParam(_) => 3,
-                RouteComponent::SingleSegWildCard => 2,
-                RouteComponent::MultiSegWildCard => 1,
+                RouteComponent::SingleSegmentWildcard => 2,
+                RouteComponent::MultiSegmentWildcard => 1,
             }
         }
 
@@ -61,9 +61,9 @@ impl From<&str> for RouteComponent {
             // Assumes the string ends with "}" as validated during route parsing
             Self::PathParam(value[1..value.len() - 1].to_string())
         } else if value == "*" {
-            Self::SingleSegWildCard
+            Self::SingleSegmentWildcard
         } else if value == "**" {
-            Self::MultiSegWildCard
+            Self::MultiSegmentWildcard
         } else {
             Self::Exact(value.to_string())
         }
@@ -73,7 +73,7 @@ impl From<&str> for RouteComponent {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Default)]
 pub struct Route {
     /// The sequence of route components that make up this route pattern.
-    pub r: Vec<RouteComponent>,
+    pub components: Vec<RouteComponent>,
 }
 
 impl From<&str> for Route {
@@ -85,19 +85,19 @@ impl From<&str> for Route {
         if v.ends_with("/") && v.len() != 1 {
             v.pop();
         }
-        let mut r: Vec<RouteComponent> = vec![];
+        let mut components: Vec<RouteComponent> = vec![];
 
         if let Some((url, _)) = v.split_once("?") {
             for p in url.split("/") {
-                r.push(p.into());
+                components.push(p.into());
             }
         } else {
             for p in v.split("/") {
-                r.push(p.into());
+                components.push(p.into());
             }
         }
 
-        Self { r }
+        Self { components }
     }
 }
 
@@ -107,20 +107,20 @@ mod tests {
     #[test]
     fn create() {
         use super::RouteComponent::*;
-        let r = "/hello/abc/*/{efg}/**";
-        let a = Route::from(r);
+        let pattern = "/hello/abc/*/{efg}/**";
+        let route = Route::from(pattern);
         assert_eq!(
             Route {
-                r: vec![
+                components: vec![
                     Exact("".to_string()),
                     Exact("hello".to_string()),
                     Exact("abc".to_string()),
-                    SingleSegWildCard,
+                    SingleSegmentWildcard,
                     PathParam("efg".to_string()),
-                    MultiSegWildCard
+                    MultiSegmentWildcard
                 ]
             },
-            a
+            route
         );
     }
 }

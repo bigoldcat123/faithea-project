@@ -56,7 +56,7 @@ impl HttpResponseModifier for Cookie {
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), HttpHandlerError>> + 'a + Send + Sync>>
     {
         Box::pin(async move {
-            res._inner.headers_mut().insert(
+            res.inner.headers_mut().insert(
                 SET_COOKIE,
                 HeaderValue::from_maybe_shared(format!("{:?}", self))?,
             );

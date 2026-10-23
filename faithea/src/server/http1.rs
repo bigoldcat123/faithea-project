@@ -10,27 +10,27 @@ use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 
 use crate::{
-    guard::GuardTire,
-    handler::HandlerTire,
+    guard::GuardTrie,
+    handler::HandlerTrie,
     io::TokioIo,
     server::{
-        ServerFuncProvider,
+        ServerContext,
         builder::{GlobalErrorHandler, TlsConfig},
     },
-    service::{self, my_service_fn},
+    service::{self, server_service},
 };
 
 pub struct H1Server {
     pub(crate) tls: Option<TlsConfig>,
     pub(crate) addr: SocketAddr,
-    pub(crate) handlers: Arc<HandlerTire>,
+    pub(crate) handlers: Arc<HandlerTrie>,
     /// Shared reference to guard middleware trie
-    pub(crate) guards: Arc<GuardTire>,
+    pub(crate) guards: Arc<GuardTrie>,
     pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 impl H1Server {
-    fn fun_provider(&self) -> ServerFuncProvider {
-        ServerFuncProvider::new(
+    fn server_context(&self) -> ServerContext {
+        ServerContext::new(
             self.handlers.clone(),
             self.guards.clone(),
             self.error_handler.clone(),
@@ -59,8 +59,8 @@ impl H1Server {
 
     async fn run_tls(&self, server: TcpListener, cfg: &TlsConfig) -> Result<(), Box<dyn Error>> {
         let acceptor = cfg.tls_acceptor()?;
-        let provider = self.fun_provider();
-        let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
+        let context = self.server_context();
+        let s = ServiceBuilder::new().service(server_service(service::h1::serve_http1, context));
         loop {
             if let Ok((socket, _addr)) = server.accept().await
                 && let Ok(socket) = acceptor.clone().accept(socket).await
@@ -82,8 +82,8 @@ impl H1Server {
     }
 
     async fn run_plain(&self, server: TcpListener) -> Result<(), Box<dyn Error>> {
-        let provider = self.fun_provider();
-        let s = ServiceBuilder::new().service(my_service_fn(service::h1::serve_http1, provider));
+        let context = self.server_context();
+        let s = ServiceBuilder::new().service(server_service(service::h1::serve_http1, context));
         loop {
             if let Ok((socket, _addr)) = server.accept().await {
                 let s = s.clone();

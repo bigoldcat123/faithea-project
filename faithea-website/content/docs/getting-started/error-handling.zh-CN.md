@@ -29,7 +29,7 @@ async fn get_user(id: u64) {
 
 ## 添加全局错误处理器
 
-在服务构建器上使用 `globale_error_handler`，将框架错误转换为统一响应：
+在服务构建器上使用 `global_error_handler`，将框架错误转换为统一响应：
 
 ```rust
 use faithea::{
@@ -56,7 +56,7 @@ async fn get_user(id: u64) {
 async fn main() {
     HttpServer::builder()
         .mount("/", handlers!(get_user))
-        .globale_error_handler(async |error: faithea::error::Error| {
+        .global_error_handler(async |error: faithea::error::Error| {
             res_modifiers!(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorBody {

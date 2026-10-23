@@ -1,5 +1,7 @@
 # Faithea
 
+The current source includes breaking API renames; see the [naming migration guide](blogs/naming-migration.md).
+
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.78+-orange.svg)](https://www.rust-lang.org)
 [![Crates.io](https://img.shields.io/crates/v/faithea.svg)](https://crates.io/crates/faithea)
@@ -158,7 +160,7 @@ async fn create_user(user: Json<User>) {
 
 ```rust
 use faithea::{
-    data::inbound::multipart::{MultiPartFile, Multipart, Part, TryFromParts},
+    data::inbound::multipart::{MultipartFile, Multipart, Part, TryFromParts},
     error::MultipartError, MultipartData, post,
 };
 
@@ -186,7 +188,7 @@ struct UploadData {
     pub name: Vec<String>,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: Vec<MultiPartFile>,
+    pub profile: Vec<MultipartFile>,
 }
 
 #[post("/upload")]
@@ -245,12 +247,12 @@ async fn get_user(name: String, age: MyAge) {
 use std::{collections::HashMap, sync::LazyLock};
 use faithea::{
     request::HttpRequest,
-    websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
+    websocket::{data::WebSocketPayload, socket::WebSocket},
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc::Sender};
 
-static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketDataPayLoad>>>> =
+static WS_SENDERS: LazyLock<Mutex<HashMap<String, Sender<WebSocketPayload>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Serialize, Deserialize)]
@@ -263,7 +265,7 @@ struct WsDataMessage {
 
 pub async fn ws(websocket: WebSocket, req: HttpRequest) {
     let (mut r, s) = websocket.split();
-    let name = req.get_pathparam("name").unwrap();
+    let name = req.get_path_param("name").unwrap();
     {
         let mut map = WS_SENDERS.lock().await;
         map.insert(name.clone(), s.clone());
@@ -273,7 +275,7 @@ pub async fn ws(websocket: WebSocket, req: HttpRequest) {
             let map = WS_SENDERS.lock().await;
             if let Some(sender) = map.get(&data.to) {
                 let a: String = serde_json::to_string(&data).unwrap();
-                sender.send(WebSocketDataPayLoad::text(a)).await.unwrap();
+                sender.send(WebSocketPayload::text(a)).await.unwrap();
             }
         }
     }
@@ -417,7 +419,7 @@ async fn main() {
 use faithea::{HttpServer, res_modifiers};
 
 HttpServer::builder()
-    .globale_error_handler(async |e: faithea::error::Error| {
+    .global_error_handler(async |e: faithea::error::Error| {
         res_modifiers!(format!("Error: {:?}", e))
     })
     // ... other configurations

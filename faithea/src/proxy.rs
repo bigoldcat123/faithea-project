@@ -54,8 +54,8 @@
 //     ) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
 //         let remainder = req.multi_seg_param.as_deref();
 //         let target = self.target_url(remainder, req.uri().query());
-//         let (parts, body) = req._inner.into_parts();
-//         let is_multipart = matches!(body, Some(RequestBody::MultiPart(_)));
+//         let (parts, body) = req.inner.into_parts();
+//         let is_multipart = matches!(body, Some(RequestBody::Multipart(_)));
 //         let method = parts.method.clone();
 
 //         let mut request = self.client.request(parts.method, target);
@@ -119,7 +119,7 @@
 // //     match body {
 // //         Some(RequestBody::Simple(body)) => Ok(request.body(body)),
 // //         Some(RequestBody::Stream(path)) => Ok(request.body(tokio::fs::read(path).await?)),
-// //         Some(RequestBody::MultiPart(fields)) => {
+// //         Some(RequestBody::Multipart(fields)) => {
 // //             let mut form = Form::new();
 // //             for (name, parts) in fields {
 // //                 for part in parts {

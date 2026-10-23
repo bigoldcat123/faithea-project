@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{BytesSource, websocket::data::WebSocketDataPayLoad};
+use crate::{BytesSource, websocket::data::WebSocketPayload};
 
 pub mod data;
 pub mod socket;
@@ -238,7 +238,7 @@ impl MessageAssembler {
         }
     }
 
-    fn push_frame(&mut self, frame: Frame) -> Result<Option<WebSocketDataPayLoad>, ProtocolError> {
+    fn push_frame(&mut self, frame: Frame) -> Result<Option<WebSocketPayload>, ProtocolError> {
         match frame.opcode {
             WebSocketMessageType::Text | WebSocketMessageType::Binary => {
                 if let Some(message_type) = self.current_type {
@@ -250,9 +250,9 @@ impl MessageAssembler {
                     if frame.opcode == WebSocketMessageType::Text {
                         std::str::from_utf8(&frame.payload)
                             .map_err(|_| ProtocolError::InvalidUtf8)?;
-                        Ok(Some(WebSocketDataPayLoad::_text(frame.payload)))
+                        Ok(Some(WebSocketPayload::_text(frame.payload)))
                     } else {
-                        Ok(Some(WebSocketDataPayLoad::binary(frame.payload)))
+                        Ok(Some(WebSocketPayload::binary(frame.payload)))
                     }
                 } else {
                     self.current_type = Some(frame.opcode);
@@ -274,14 +274,14 @@ impl MessageAssembler {
                 self.current_type = None;
                 if message_type == WebSocketMessageType::Text {
                     std::str::from_utf8(&payload).map_err(|_| ProtocolError::InvalidUtf8)?;
-                    Ok(Some(WebSocketDataPayLoad::_text(payload)))
+                    Ok(Some(WebSocketPayload::_text(payload)))
                 } else {
-                    Ok(Some(WebSocketDataPayLoad::binary(payload)))
+                    Ok(Some(WebSocketPayload::binary(payload)))
                 }
             }
-            WebSocketMessageType::Ping => Ok(Some(WebSocketDataPayLoad::ping(frame.payload))),
-            WebSocketMessageType::Pong => Ok(Some(WebSocketDataPayLoad::pong(frame.payload))),
-            WebSocketMessageType::Close => Ok(Some(WebSocketDataPayLoad::close(frame.payload))),
+            WebSocketMessageType::Ping => Ok(Some(WebSocketPayload::ping(frame.payload))),
+            WebSocketMessageType::Pong => Ok(Some(WebSocketPayload::pong(frame.payload))),
+            WebSocketMessageType::Close => Ok(Some(WebSocketPayload::close(frame.payload))),
         }
     }
 
@@ -303,27 +303,27 @@ impl MessageAssembler {
     }
 }
 
-pub struct WebSocketIncommingMessageParser<SOURCE> {
-    incomming_message_stream_source: SOURCE,
-    incomming_message_sender: Sender<WebSocketDataPayLoad>,
-    outcomming_message_sender: Sender<WebSocketDataPayLoad>,
+pub struct WebSocketIncomingMessageParser<Source> {
+    incoming_message_stream_source: Source,
+    incoming_message_sender: Sender<WebSocketPayload>,
+    outgoing_message_sender: Sender<WebSocketPayload>,
 }
 
-impl<SOURCE> WebSocketIncommingMessageParser<SOURCE>
+impl<Source> WebSocketIncomingMessageParser<Source>
 where
-    SOURCE: BytesSource + 'static,
+    Source: BytesSource + 'static,
 {
     pub fn new(
-        incomming_message_stream_source: SOURCE,
-        outcomming_message_sender: Sender<WebSocketDataPayLoad>,
-    ) -> (Self, Receiver<WebSocketDataPayLoad>) {
+        incoming_message_stream_source: Source,
+        outgoing_message_sender: Sender<WebSocketPayload>,
+    ) -> (Self, Receiver<WebSocketPayload>) {
         let (incoming_sender, incoming_receiver) = tokio::sync::mpsc::channel(100);
 
         (
             Self {
-                incomming_message_stream_source,
-                incomming_message_sender: incoming_sender,
-                outcomming_message_sender,
+                incoming_message_stream_source,
+                incoming_message_sender: incoming_sender,
+                outgoing_message_sender,
             },
             incoming_receiver,
         )
@@ -331,21 +331,19 @@ where
 
     pub fn start(self) {
         tokio::spawn(read_loop(
-            self.incomming_message_stream_source,
-            self.incomming_message_sender,
-            self.outcomming_message_sender,
+            self.incoming_message_stream_source,
+            self.incoming_message_sender,
+            self.outgoing_message_sender,
         ));
     }
 }
 
-pub type WebSocketIncomingMessageParser<SOURCE> = WebSocketIncommingMessageParser<SOURCE>;
-
-async fn read_loop<SOURCE>(
-    mut source: SOURCE,
-    incoming_sender: Sender<WebSocketDataPayLoad>,
-    control_sender: Sender<WebSocketDataPayLoad>,
+async fn read_loop<Source>(
+    mut source: Source,
+    incoming_sender: Sender<WebSocketPayload>,
+    control_sender: Sender<WebSocketPayload>,
 ) where
-    SOURCE: BytesSource,
+    Source: BytesSource,
 {
     let mut codec = FrameCodec::new();
     let mut assembler = MessageAssembler::new();
@@ -363,7 +361,7 @@ async fn read_loop<SOURCE>(
             Ok(DriverAction::Close) => break,
             Err(_) => {
                 let _ = control_sender
-                    .send(WebSocketDataPayLoad::close(Bytes::new()))
+                    .send(WebSocketPayload::close(Bytes::new()))
                     .await;
                 break;
             }
@@ -373,12 +371,12 @@ async fn read_loop<SOURCE>(
             break;
         }
 
-        match source.read_buf2(codec.buffer_mut()).await {
+        match source.read_bytes(codec.buffer_mut()).await {
             Ok(0) => break,
             Ok(_) => {}
             Err(_) => {
                 let _ = control_sender
-                    .send(WebSocketDataPayLoad::close(Bytes::new()))
+                    .send(WebSocketPayload::close(Bytes::new()))
                     .await;
                 break;
             }
@@ -395,14 +393,14 @@ enum DriverAction {
 async fn drain_frames(
     codec: &mut FrameCodec,
     assembler: &mut MessageAssembler,
-    incoming_sender: &Sender<WebSocketDataPayLoad>,
-    control_sender: &Sender<WebSocketDataPayLoad>,
+    incoming_sender: &Sender<WebSocketPayload>,
+    control_sender: &Sender<WebSocketPayload>,
 ) -> Result<DriverAction, ProtocolError> {
     while let Some(frame) = codec.next_frame()? {
         match assembler.push_frame(frame)? {
-            Some(message) if message.r#type == WebSocketMessageType::Ping => {
+            Some(message) if message.message_type == WebSocketMessageType::Ping => {
                 control_sender
-                    .send(WebSocketDataPayLoad::pong(Bytes::copy_from_slice(
+                    .send(WebSocketPayload::pong(Bytes::copy_from_slice(
                         message.as_bytes(),
                     )))
                     .await
@@ -412,9 +410,9 @@ async fn drain_frames(
                     .await
                     .map_err(|err| ProtocolError::Io(err.to_string()))?;
             }
-            Some(message) if message.r#type == WebSocketMessageType::Close => {
+            Some(message) if message.message_type == WebSocketMessageType::Close => {
                 control_sender
-                    .send(WebSocketDataPayLoad::close(Bytes::copy_from_slice(
+                    .send(WebSocketPayload::close(Bytes::copy_from_slice(
                         message.as_bytes(),
                     )))
                     .await
@@ -470,7 +468,7 @@ mod tests {
     }
 
     impl BytesSource for MemorySource {
-        fn read_buf2<'a>(
+        fn read_bytes<'a>(
             &'a mut self,
             buf: &'a mut BytesMut,
         ) -> Pin<Box<dyn Future<Output = Result<usize, String>> + Send + 'a>> {
@@ -512,7 +510,7 @@ mod tests {
     }
 
     impl BytesSink for MemorySink {
-        fn write_all2<'a>(
+        fn write_bytes<'a>(
             &'a mut self,
             buf: &'a [u8],
         ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
@@ -522,7 +520,7 @@ mod tests {
             })
         }
 
-        fn flush2(&mut self) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + '_>> {
+        fn flush_bytes(&mut self) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + '_>> {
             Box::pin(async move { Ok(()) })
         }
     }
@@ -674,7 +672,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(message.r#type, WebSocketMessageType::Text);
+        assert_eq!(message.message_type, WebSocketMessageType::Text);
         assert_eq!(message.as_str().unwrap(), "hello");
     }
 
@@ -704,7 +702,7 @@ mod tests {
         let sink_view = sink.clone();
         let mut sink_writer = sink.clone();
         let (outgoing, _outgoing_rx) = tokio::sync::mpsc::channel(10);
-        let (parser, mut incoming) = WebSocketIncommingMessageParser::new(source, outgoing);
+        let (parser, mut incoming) = WebSocketIncomingMessageParser::new(source, outgoing);
         parser.start();
 
         let msg = timeout(Duration::from_secs(1), incoming.recv())
@@ -714,7 +712,7 @@ mod tests {
         assert_eq!(msg.as_str().unwrap(), "hi");
 
         let sink_writer_dyn: &mut dyn BytesSink = &mut sink_writer;
-        WebSocketDataPayLoad::binary(Bytes::from_static(&[1, 2, 3]))
+        WebSocketPayload::binary(Bytes::from_static(&[1, 2, 3]))
             .serialize_to_socket(sink_writer_dyn)
             .await
             .unwrap();
@@ -729,31 +727,31 @@ mod tests {
             masked_frame(WebSocketMessageType::Close, true, b""),
         ]);
         let (outgoing, mut outgoing_rx) = tokio::sync::mpsc::channel(10);
-        let (parser, mut incoming) = WebSocketIncommingMessageParser::new(source, outgoing);
+        let (parser, mut incoming) = WebSocketIncomingMessageParser::new(source, outgoing);
         parser.start();
 
         let ping = timeout(Duration::from_secs(1), incoming.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(ping.r#type, WebSocketMessageType::Ping);
+        assert_eq!(ping.message_type, WebSocketMessageType::Ping);
         let close = timeout(Duration::from_secs(1), incoming.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(close.r#type, WebSocketMessageType::Close);
+        assert_eq!(close.message_type, WebSocketMessageType::Close);
 
         let auto_pong = timeout(Duration::from_secs(1), outgoing_rx.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(auto_pong.r#type, WebSocketMessageType::Pong);
+        assert_eq!(auto_pong.message_type, WebSocketMessageType::Pong);
         assert_eq!(auto_pong.as_bytes(), b"ok");
 
         let auto_close = timeout(Duration::from_secs(1), outgoing_rx.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(auto_close.r#type, WebSocketMessageType::Close);
+        assert_eq!(auto_close.message_type, WebSocketMessageType::Close);
     }
 }

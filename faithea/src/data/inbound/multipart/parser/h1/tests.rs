@@ -26,7 +26,7 @@ impl ChunkedSource {
 }
 
 impl BytesSource for ChunkedSource {
-    fn read_buf2<'a>(
+    fn read_bytes<'a>(
         &'a mut self,
         buf: &'a mut BytesMut,
     ) -> Pin<Box<dyn Future<Output = Result<usize, String>> + Send + 'a>> {
@@ -65,8 +65,8 @@ fn file_body() -> Vec<u8> {
 
 async fn parse(source: ChunkedSource) -> Result<MultipartDataMap, BodyParseError> {
     let mut buf = BytesMut::new();
-    match MultiPartBodyParser::parse(source, &mut buf, BOUNDARY).await? {
-        RequestBody::MultiPart(map) => Ok(map),
+    match MultipartBodyParser::parse(source, &mut buf, BOUNDARY).await? {
+        RequestBody::Multipart(map) => Ok(map),
         body => panic!("expected multipart body, got {body:?}"),
     }
 }

@@ -29,7 +29,7 @@ pub trait TryFromMultipartDataMap: Sized {
 #[derive(Debug)]
 pub enum Part {
     Lit(String),
-    File(MultiPartFile),
+    File(MultipartFile),
 }
 pub(crate) trait TryFromPart: Sized {
     fn try_from_part(part: Part) -> Result<Self, MultipartError>;
@@ -101,19 +101,19 @@ impl<T: TryFromParts> TryFromParts for Vec<T> {
     }
 }
 #[derive(Debug)]
-pub struct MultiPartFile {
+pub struct MultipartFile {
     pub file_name: Option<String>,
     pub temp_path: String,
     pub mime_type: Option<String>,
 }
 
-impl Drop for MultiPartFile {
+impl Drop for MultipartFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(self.temp_path.as_str());
     }
 }
 
-impl TryFromPart for MultiPartFile {
+impl TryFromPart for MultipartFile {
     fn try_from_part(value: Part) -> Result<Self, MultipartError> {
         if let Part::File(f) = value {
             Ok(f)
@@ -122,7 +122,7 @@ impl TryFromPart for MultiPartFile {
         }
     }
 }
-impl TryFromParts for MultiPartFile {
+impl TryFromParts for MultipartFile {
     fn try_from_parts(parts: Option<Vec<Part>>) -> Result<Self, MultipartError> {
         if let Some(mut parts) = parts
             && let Some(Part::File(f)) = parts.pop()
@@ -156,8 +156,8 @@ impl<T: TryFromMultipartDataMap> DerefMut for Multipart<T> {
 }
 impl<'a, T: TryFromMultipartDataMap> TryFromRequest<'a> for Multipart<T> {
     fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
-        match req._inner.body_mut() {
-            Some(RequestBody::MultiPart(body)) => {
+        match req.inner.body_mut() {
+            Some(RequestBody::Multipart(body)) => {
                 Ok(Multipart(T::try_from_multipart_data_map(body)?))
             }
             _ => Err(ParseHandlerParamError::BodyNotExist),
@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(a, vec!["hello"])
     }
     #[test]
-    fn convert_to_optiong() {
+    fn convert_to_option() {
         let p = Some(vec![Part::Lit("hello".into())]);
         let a: Option<String> = TryFromParts::try_from_parts(p).unwrap();
         assert_eq!(a, Some("hello".to_string()))

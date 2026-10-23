@@ -1,7 +1,7 @@
 pub mod h1;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum MultiPartBodyParserState {
+pub(crate) enum MultipartBodyParserState {
     Start,
     Header,
     Body,

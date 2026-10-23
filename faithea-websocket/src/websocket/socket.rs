@@ -1,20 +1,17 @@
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::websocket::data::WebSocketDataPayLoad;
+use crate::websocket::data::WebSocketPayload;
 
 pub struct WebSocket {
-    sender: Sender<WebSocketDataPayLoad>,
-    reciver: Receiver<WebSocketDataPayLoad>,
+    sender: Sender<WebSocketPayload>,
+    receiver: Receiver<WebSocketPayload>,
 }
 
 impl WebSocket {
-    pub fn new(
-        sender: Sender<WebSocketDataPayLoad>,
-        reciver: Receiver<WebSocketDataPayLoad>,
-    ) -> Self {
-        Self { sender, reciver }
+    pub fn new(sender: Sender<WebSocketPayload>, receiver: Receiver<WebSocketPayload>) -> Self {
+        Self { sender, receiver }
     }
-    pub fn split(self) -> (Receiver<WebSocketDataPayLoad>, Sender<WebSocketDataPayLoad>) {
-        (self.reciver, self.sender)
+    pub fn split(self) -> (Receiver<WebSocketPayload>, Sender<WebSocketPayload>) {
+        (self.receiver, self.sender)
     }
 }

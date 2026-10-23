@@ -127,14 +127,14 @@ Faithea 使用 `Multipart<T>` 和 `MultipartData` 派生宏，将 Multipart 表�
 
 使用 `Option<T>` 表示可选字段，使用 `Vec<T>` 表示重复字段或多个文件。表单字段与 Rust 字段名称不同时，可以使用 `#[faithea(rename = "...")]` 重命名。
 
-上传文件会存储在临时路径中。`MultiPartFile` 被释放时会删除临时文件，因此需要保留的文件必须及时移动或复制。
+上传文件会存储在临时路径中。`MultipartFile` 被释放时会删除临时文件，因此需要保留的文件必须及时移动或复制。
 
 ### 定义路由
 
 ```rust
 use faithea::{
     MultipartData, post,
-    data::inbound::multipart::{MultiPartFile, Multipart},
+    data::inbound::multipart::{MultipartFile, Multipart},
 };
 
 #[derive(MultipartData, Debug)]
@@ -143,7 +143,7 @@ struct UploadForm {
     display_name: String,
     public: Option<bool>,
     tags: Vec<String>,
-    files: Vec<MultiPartFile>,
+    files: Vec<MultipartFile>,
 }
 
 #[post("/upload")]

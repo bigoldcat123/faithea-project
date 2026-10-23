@@ -9,10 +9,10 @@ This crate does not perform HTTP upgrade handshakes. It assumes your stream is a
 The library keeps a channel-oriented design:
 
 - `BytesSource` reads raw bytes from any async transport.
-- `WebSocketIncommingMessageParser::new(source, outgoing_tx)` starts a parser over that source.
-- The returned `incoming_rx` receives parsed `WebSocketDataPayLoad` messages.
+- `WebSocketIncomingMessageParser::new(source, outgoing_tx)` starts a parser over that source.
+- The returned `incoming_rx` receives parsed `WebSocketPayload` messages.
 - Automatic `pong` and `close` replies are sent into the `outgoing_tx` you provide.
-- `WebSocketDataPayLoad::serialize_to_socket(&mut sink)` writes server frames to any `BytesSink`.
+- `WebSocketPayload::serialize_to_socket(&mut sink)` writes server frames to any `BytesSink`.
 
 The crate is intentionally unaware of TCP, TLS, HTTP, routing, or handshake policy.
 
@@ -20,17 +20,17 @@ The crate is intentionally unaware of TCP, TLS, HTTP, routing, or handshake poli
 
 ```rust
 use tokio::sync::mpsc;
-use websocket::{WebSocketDataPayLoad, WebSocketIncommingMessageParser};
+use faithea_websocket::{WebSocketPayload, WebSocketIncomingMessageParser};
 
 # async fn run<S>(source: S)
 # where
-#     S: websocket::BytesSource + 'static,
+#     S: faithea_websocket::BytesSource + 'static,
 # {
-let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<WebSocketDataPayLoad>(32);
+let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<WebSocketPayload>(32);
 let app_outgoing_tx = outgoing_tx.clone();
 
 let (parser, mut incoming_rx) =
-    WebSocketIncommingMessageParser::new(source, outgoing_tx);
+    WebSocketIncomingMessageParser::new(source, outgoing_tx);
 parser.start();
 
 tokio::spawn(async move {
@@ -46,10 +46,10 @@ To write outgoing messages, consume your outgoing receiver and serialize each pa
 ```rust
 # async fn write_loop<W>(
 #     mut writer: W,
-#     mut outgoing_rx: tokio::sync::mpsc::Receiver<websocket::WebSocketDataPayLoad>,
+#     mut outgoing_rx: tokio::sync::mpsc::Receiver<faithea_websocket::WebSocketPayload>,
 # ) -> Result<(), String>
 # where
-#     W: websocket::BytesSink,
+#     W: faithea_websocket::BytesSink,
 # {
 while let Some(message) = outgoing_rx.recv().await {
     message.serialize_to_socket(&mut writer).await?;
@@ -96,8 +96,7 @@ cargo run --example tcp_echo
 
 - `BytesSource`: async byte input abstraction.
 - `BytesSink`: async byte output abstraction.
-- `WebSocketIncommingMessageParser`: parser/driver for incoming server messages.
-- `WebSocketIncomingMessageParser`: correctly-spelled alias.
-- `WebSocketDataPayLoad`: text/binary/ping/pong/close payload.
+- `WebSocketIncomingMessageParser`: parser/driver for incoming server messages.
+- `WebSocketPayload`: text/binary/ping/pong/close payload.
 - `WebSocketMessageType`: message opcode/type.
 - `ProtocolError`: internal protocol validation error type.

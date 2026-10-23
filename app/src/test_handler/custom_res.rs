@@ -1,5 +1,9 @@
 use faithea::{
-    data::Json, get, header::{CONTENT_LENGTH, HeaderValue}, res_modifiers, response::{HttpResponseModifier, HttpResponseModifierFuture, cors::CORS}
+    data::Json,
+    get,
+    header::{CONTENT_LENGTH, HeaderValue},
+    res_modifiers,
+    response::{HttpResponseModifier, HttpResponseModifierFuture, cors::CORS},
 };
 use serde_json::json;
 
@@ -21,8 +25,8 @@ impl HttpResponseModifier for MyCustomType {
 }
 
 #[get("/custom_res")]
-pub  async fn custom_res() {
-    log::info!("{}","hello");
+pub async fn custom_res() {
+    log::info!("{}", "hello");
     MyCustomType {
         name: "Hello".into(),
     }

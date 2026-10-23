@@ -4,9 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::
-    request::{HttpRequest, TryFromRequest, error::ParseHandlerParamError}
-;
+use crate::request::{HttpRequest, TryFromRequest, error::ParseHandlerParamError};
 pub type Shared<T> = Arc<T>;
 
 pub struct FromRequest<T>(T);

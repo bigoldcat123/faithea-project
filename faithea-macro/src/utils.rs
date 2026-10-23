@@ -22,7 +22,7 @@ impl FromHttpRequest {
         match self {
             PathParam(name) => {
                 quote! {
-                    faithea::TryConvertInto::try_convert_into(_req.get_pathparam(#name))?,
+                    faithea::TryConvertInto::try_convert_into(_req.get_path_param(#name))?,
                 }
             }
             Body => {
@@ -44,7 +44,7 @@ impl FromHttpRequest {
     }
 }
 
-pub fn generate_from_httprequest_list(args: &mut Punctuated<FnArg, Comma>) -> Vec<FromHttpRequest> {
+pub fn extract_request_args(args: &mut Punctuated<FnArg, Comma>) -> Vec<FromHttpRequest> {
     args.iter_mut().filter_map(parse_arg).collect()
 }
 
@@ -74,14 +74,14 @@ fn parse_arg(arg: &mut FnArg) -> Option<FromHttpRequest> {
 fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
     if let FnArg::Typed(t) = arg {
         let mut is_search_param = false;
-        let mut rarg_name = None;
+        let mut arg_name = None;
         for i in 0..t.attrs.len() {
             let x = &t.attrs[i];
             let a = &x.meta;
             let name = quote! {#a}.to_string();
             if name.starts_with("search_param") {
-                if let Ok(arg_name) = x.parse_args::<LitStr>() {
-                    rarg_name = Some(arg_name);
+                if let Ok(renamed_arg) = x.parse_args::<LitStr>() {
+                    arg_name = Some(renamed_arg);
                 }
                 is_search_param = true;
                 t.attrs.remove(0);
@@ -90,10 +90,10 @@ fn extract_ident_and_type(arg: &mut FnArg) -> Option<(LitStr, &Type, bool)> {
         }
 
         if let Pat::Ident(PatIdent { ident, .. }) = t.pat.as_ref() {
-            if rarg_name.is_none() {
-                rarg_name = Some(LitStr::new(&ident.to_string(), ident.span()));
+            if arg_name.is_none() {
+                arg_name = Some(LitStr::new(&ident.to_string(), ident.span()));
             }
-            return Some((rarg_name.unwrap(), t.ty.as_ref(), is_search_param));
+            return Some((arg_name.unwrap(), t.ty.as_ref(), is_search_param));
         }
     }
     None
@@ -111,9 +111,13 @@ fn create_handler_fn_name(sig: &str) -> Ident {
     let new_fn_name = format!("{}_handler", sig);
     Ident::new(&new_fn_name, Span::call_site())
 }
-fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -> TokenStream {
-    let new_fn_name = create_handler_fn_name(orign_name);
-    let ipt_args = args.into_iter().map(FromHttpRequest::into_token_stream);
+fn generate_handler_wrapper(
+    f: &ItemFn,
+    args: Vec<FromHttpRequest>,
+    original_name: &str,
+) -> TokenStream {
+    let new_fn_name = create_handler_fn_name(original_name);
+    let input_args = args.into_iter().map(FromHttpRequest::into_token_stream);
     let inner_handler_name = &f.sig.ident;
     quote! {
         async fn #new_fn_name(mut _req: faithea::request::HttpRequest) -> Result<faithea::response::HttpResponse, faithea::handler::types::HttpHandlerError> {
@@ -124,7 +128,7 @@ fn conbine_outter_fn(f: &ItemFn, args: Vec<FromHttpRequest>, orign_name: &str) -
             let mut res = faithea::response::HttpResponse::new();
 
             let mut res_modifier = #inner_handler_name(
-                #(#ipt_args)*
+                #(#input_args)*
                 &_req
             )
             .await;
@@ -139,25 +143,25 @@ fn add_req_param(f: &mut ItemFn) {
         .inputs
         .push(parse_quote!(_req:&faithea::request::HttpRequest));
 }
-pub fn handler_fn(f: &mut ItemFn, name: &str, ipt_args: Vec<FromHttpRequest>) -> TokenStream {
+pub fn handler_fn(f: &mut ItemFn, name: &str, input_args: Vec<FromHttpRequest>) -> TokenStream {
     add_req_param(f);
-    conbine_outter_fn(f, ipt_args, name)
+    generate_handler_wrapper(f, input_args, name)
 }
 
 pub fn handler_modifier_fn(
     handler_fn: TokenStream,
     route: LitStr,
     method: &str,
-    origin_name: &str,
+    original_name: &str,
 ) -> TokenStream {
-    let handler_modifier_fn_name = Ident::new(origin_name, Span::call_site());
-    let handler_fn_name = create_handler_fn_name(origin_name);
+    let handler_modifier_fn_name = Ident::new(original_name, Span::call_site());
+    let handler_fn_name = create_handler_fn_name(original_name);
     let method_name = Ident::new(method, Span::call_site());
     quote! {
-        pub fn #handler_modifier_fn_name(h:&mut faithea::handler::HandlerTire,pre_fix:&str) {
+        pub fn #handler_modifier_fn_name(h:&mut faithea::handler::HandlerTrie,prefix:&str) {
 
             #handler_fn
-            let mut r = format!("{}{}",pre_fix,#route);
+            let mut r = format!("{}{}",prefix,#route);
             if r.ends_with("/") {
                 r.pop();
             }
@@ -223,7 +227,7 @@ fn check(route: &LitStr, args: &[FromHttpRequest]) -> Option<TokenStream> {
     None
 }
 pub fn expand_macro(mut f: ItemFn, route: LitStr, method: &str) -> TokenStream {
-    let args = generate_from_httprequest_list(&mut f.sig.inputs);
+    let args = extract_request_args(&mut f.sig.inputs);
     if let Some(err) = check(&route, &args) {
         return err;
     }

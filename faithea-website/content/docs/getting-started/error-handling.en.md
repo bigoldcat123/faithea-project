@@ -29,7 +29,7 @@ Requesting `/users/not-a-number` fails during parameter extraction, before `get_
 
 ## Add a global error handler
 
-Use `globale_error_handler` on the server builder to transform framework errors into a shared response:
+Use `global_error_handler` on the server builder to transform framework errors into a shared response:
 
 ```rust
 use faithea::{
@@ -56,7 +56,7 @@ async fn get_user(id: u64) {
 async fn main() {
     HttpServer::builder()
         .mount("/", handlers!(get_user))
-        .globale_error_handler(async |error: faithea::error::Error| {
+        .global_error_handler(async |error: faithea::error::Error| {
             res_modifiers!(
                 StatusCode::BAD_REQUEST,
                 Json(ErrorBody {

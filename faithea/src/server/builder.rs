@@ -23,26 +23,26 @@ use faithea_websocket::WebSocket;
 
 use crate::{
     ResponseModifier,
-    guard::{GuardResultTrait, GuardTire, RawGuardTrait},
-    handler::HandlerTire,
+    guard::{GuardFuture, GuardTrie, RawGuardTrait},
+    handler::HandlerTrie,
     request::HttpRequest,
     response::{HttpResponse, HttpResponseModifier},
     server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
     util::static_map,
 };
-pub trait GlobaleHandlerResponseRaw: Future<Output = ResponseModifier> + Send + 'static {}
-impl<T: Future<Output = ResponseModifier> + Send + 'static> GlobaleHandlerResponseRaw for T {}
-pub trait GlobaleHandlerRaw<R: GlobaleHandlerResponseRaw>:
+pub trait GlobalErrorHandlerFuture: Future<Output = ResponseModifier> + Send + 'static {}
+impl<T: Future<Output = ResponseModifier> + Send + 'static> GlobalErrorHandlerFuture for T {}
+pub trait RawGlobalErrorHandler<R: GlobalErrorHandlerFuture>:
     Fn(crate::error::Error) -> R + Send + Sync + 'static
 {
 }
-impl<R: GlobaleHandlerResponseRaw, T: Fn(crate::error::Error) -> R + Send + Sync + 'static>
-    GlobaleHandlerRaw<R> for T
+impl<R: GlobalErrorHandlerFuture, T: Fn(crate::error::Error) -> R + Send + Sync + 'static>
+    RawGlobalErrorHandler<R> for T
 {
 }
 
 pub(crate) type GlobalErrorHandler = Box<
-    dyn Fn(crate::error::Error) -> Pin<Box<dyn GlobaleHandlerResponseRaw>> + Send + Sync + 'static,
+    dyn Fn(crate::error::Error) -> Pin<Box<dyn GlobalErrorHandlerFuture>> + Send + Sync + 'static,
 >;
 
 pub(crate) struct TlsConfig {
@@ -72,18 +72,18 @@ impl TlsConfig {
 }
 
 pub struct HttpServerBuilder {
-    handlers: HandlerTire,
-    guards: GuardTire,
+    handlers: HandlerTrie,
+    guards: GuardTrie,
     addr: SocketAddr,
     tls: Option<TlsConfig>,
     h2: bool,
     error_handler: Option<GlobalErrorHandler>,
 }
 impl HttpServerBuilder {
-    pub fn globale_error_handler<H, R>(mut self, handler: H) -> Self
+    pub fn global_error_handler<H, R>(mut self, handler: H) -> Self
     where
-        H: GlobaleHandlerRaw<R>,
-        R: GlobaleHandlerResponseRaw,
+        H: RawGlobalErrorHandler<R>,
+        R: GlobalErrorHandlerFuture,
     {
         self.error_handler = Some(Box::new(move |err| Box::pin(handler(err))));
         self
@@ -102,15 +102,15 @@ impl HttpServerBuilder {
     pub fn guard<F, O, P>(mut self, route: P, f: F) -> Self
     where
         F: RawGuardTrait<O>,
-        O: GuardResultTrait,
+        O: GuardFuture,
         P: AsRef<str>,
     {
         self.guards.add(route, f);
         self
     }
 
-    pub fn mount(mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) -> Self {
-        self.handlers.mount(pre_fix, handlers);
+    pub fn mount(mut self, prefix: &'static str, handlers: Vec<HandlerModifier>) -> Self {
+        self.handlers.mount(prefix, handlers);
         self
     }
 
@@ -168,8 +168,8 @@ impl HttpServerBuilder {
         F: Fn(WebSocket, HttpRequest) -> R + Send + Sync + 'static + Copy,
         R: Future<Output = ()> + 'static + Send,
     {
-        self.handlers.websoekct_h2(route, ws_handler);
-        self.handlers.websoekct_h1(route, ws_handler);
+        self.handlers.websocket_h2(route, ws_handler);
+        self.handlers.websocket_h1(route, ws_handler);
         self
     }
 

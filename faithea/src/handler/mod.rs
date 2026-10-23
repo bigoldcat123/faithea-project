@@ -4,10 +4,10 @@ use http::Method;
 
 use crate::{
     handler::types::{
-        Handler, HttpHandlerResultTrait, RawHttpHandlerTrait, RawWebSocketHandlerTarit,
-        WebSocketHandlerResultTrait,
+        Handler, HttpHandlerFuture, RawHttpHandlerTrait, RawWebSocketHandlerTrait,
+        WebSocketHandlerFuture,
     },
-    regulate_url_path,
+    normalize_url_path,
     request::HttpRequest,
     response::HttpResponse,
     route::{Route, RouteComponent},
@@ -16,55 +16,54 @@ use crate::{
 };
 pub mod types;
 
-pub type HandlerTire = Trie<HashMap<Method, Handler>, RouteComponent>;
+pub type HandlerTrie = Trie<HashMap<Method, Handler>, RouteComponent>;
 // #[derive(Default)]
-// pub struct HandlerTire {
+// pub struct HandlerTrie {
 //     /// Child nodes in the routing trie, keyed by route components
 //     path: HashMap<RouteComponent, Box<Self>>,
 //     /// Handler function stored at this node (if this is a terminal node)
 //     f: HashMap<Method, Handler>,
 // }
-impl HandlerTire {
-    /// m just format!("{}{}",route,pre_fix)
-    /// so here to make sure pre_fix is not '/'-ended!,since route is '/'-started
-    pub fn mount(&mut self, pre_fix: &'static str, handlers: Vec<HandlerModifier>) {
-        let pre_fix = if let Some(pre_fix) = pre_fix.strip_suffix("/") {
-            pre_fix
+impl HandlerTrie {
+    /// Mount handlers under a prefix, removing its trailing slash before joining routes.
+    pub fn mount(&mut self, prefix: &'static str, handlers: Vec<HandlerModifier>) {
+        let prefix = if let Some(prefix) = prefix.strip_suffix("/") {
+            prefix
         } else {
-            pre_fix
+            prefix
         };
         for m in handlers {
-            m(self, pre_fix);
+            m(self, prefix);
         }
     }
 
     pub fn get<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
-        O: HttpHandlerResultTrait,
+        O: HttpHandlerFuture,
         P: AsRef<str>,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            route.components,
+            Handler::Http(Box::new(move |request: HttpRequest| Box::pin(f(request)))),
             Method::GET,
         );
     }
     pub fn post<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
-        O: HttpHandlerResultTrait,
+        O: HttpHandlerFuture,
         P: AsRef<str>,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            route.components,
+            Handler::Http(Box::new(move |request: HttpRequest| Box::pin(f(request)))),
             Method::POST,
         );
     }
@@ -72,15 +71,15 @@ impl HandlerTire {
     pub fn put<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
-        O: HttpHandlerResultTrait,
+        O: HttpHandlerFuture,
         P: AsRef<str>,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            route.components,
+            Handler::Http(Box::new(move |request: HttpRequest| Box::pin(f(request)))),
             Method::PUT,
         );
     }
@@ -88,15 +87,15 @@ impl HandlerTire {
     pub fn delete<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
-        O: HttpHandlerResultTrait,
+        O: HttpHandlerFuture,
         P: AsRef<str>,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            route.components,
+            Handler::Http(Box::new(move |request: HttpRequest| Box::pin(f(request)))),
             Method::DELETE,
         );
     }
@@ -104,21 +103,21 @@ impl HandlerTire {
     pub fn options<F, O, P>(&mut self, url: P, f: F)
     where
         F: RawHttpHandlerTrait<O>,
-        O: HttpHandlerResultTrait,
+        O: HttpHandlerFuture,
         P: AsRef<str>,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::Http(Box::new(move |r: HttpRequest| Box::pin(f(r)))),
+            route.components,
+            Handler::Http(Box::new(move |request: HttpRequest| Box::pin(f(request)))),
             Method::OPTIONS,
         );
     }
 
     // pub(crate) fn proxy<P: AsRef<str>>(&mut self, url: P, target: &str) {
-    //     let url = regulate_url_path(url);
+    //     let url = normalize_url_path(url);
     //     let proxy = Proxy::new(target);
     //     for method in [
     //         Method::GET,
@@ -131,10 +130,10 @@ impl HandlerTire {
     //         Method::TRACE,
     //     ] {
     //         let mut route = Route::from(url.as_str());
-    //         route.r.reverse();
+    //         route.components.reverse();
     //         let proxy = proxy.clone();
     //         self.add_route(
-    //             route.r,
+    //             route.components,
     //             Handler::Http(Box::new(move |req| {
     //                 let proxy = proxy.clone();
     //                 Box::pin(async move { Ok(proxy.forward(req).await) })
@@ -144,56 +143,63 @@ impl HandlerTire {
     //     }
     // }
     // Fn(
-    //         Receiver<WebSocketDataPayLoad>,
-    //         Sender<WebSocketDataPayLoad>,
+    //         Receiver<WebSocketPayload>,
+    //         Sender<WebSocketPayload>,
     //         HttpRequest,
     //     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>
-    pub fn websoekct_h1<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
+    pub fn websocket_h1<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
-        F: RawWebSocketHandlerTarit<R>,
-        R: WebSocketHandlerResultTrait,
+        F: RawWebSocketHandlerTrait<R>,
+        R: WebSocketHandlerFuture,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::WbeSocket(Box::new(move |ws, req| Box::pin(ws_handler(ws, req)))),
+            route.components,
+            Handler::WebSocket(Box::new(move |ws, req| Box::pin(ws_handler(ws, req)))),
             Method::GET,
         );
     }
 
-    pub fn websoekct_h2<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
+    pub fn websocket_h2<P: AsRef<str>, F, R>(&mut self, url: P, ws_handler: F)
     where
-        F: RawWebSocketHandlerTarit<R>,
-        R: WebSocketHandlerResultTrait,
+        F: RawWebSocketHandlerTrait<R>,
+        R: WebSocketHandlerFuture,
     {
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let mut route = Route::from(url.as_str());
-        route.r.reverse();
+        route.components.reverse();
         self.add_route(
-            route.r,
-            Handler::WbeSocket(Box::new(move |ws, req| Box::pin(ws_handler(ws, req)))),
+            route.components,
+            Handler::WebSocket(Box::new(move |ws, req| Box::pin(ws_handler(ws, req)))),
             Method::CONNECT,
         );
     }
     fn add_route(&mut self, mut url: Vec<RouteComponent>, f: Handler, method: Method) {
         if let Some(next) = url.pop() {
-            if !self.next.contains_key(&next) {
-                self.next.insert(next.clone(), Default::default());
+            if !self.children.contains_key(&next) {
+                self.children.insert(next.clone(), Default::default());
             }
-            assert!(self.next.get_mut(&next).is_some());
+            assert!(self.children.get_mut(&next).is_some());
             if url.is_empty() {
-                self.next.get_mut(&next).unwrap().value.insert(method, f);
+                self.children
+                    .get_mut(&next)
+                    .unwrap()
+                    .value
+                    .insert(method, f);
                 let handler: Handler =
                     Handler::Http(Box::new(|_| Box::pin(async { Ok(HttpResponse::new()) })));
-                self.next
+                self.children
                     .get_mut(&next)
                     .unwrap()
                     .value
                     .insert(Method::HEAD, handler);
             } else {
-                self.next.get_mut(&next).unwrap().add_route(url, f, method);
+                self.children
+                    .get_mut(&next)
+                    .unwrap()
+                    .add_route(url, f, method);
             }
         }
     }
@@ -204,10 +210,16 @@ impl HandlerTire {
         } else {
             url
         };
-        let url = regulate_url_path(url);
+        let url = normalize_url_path(url);
         let url_parts: Vec<&str> = url.split("/").collect();
         let mut candidates: Vec<(Route, &Handler)> = vec![];
-        self.get_candidates(&url_parts, &mut candidates, 0, Route { r: vec![] }, method);
+        self.get_candidates(
+            &url_parts,
+            &mut candidates,
+            0,
+            Route { components: vec![] },
+            method,
+        );
 
         candidates.sort_by(|a, b| a.0.cmp(&b.0));
         // Debug logging (commented out in production):
@@ -229,28 +241,28 @@ impl HandlerTire {
         if idx < url_parts.len() {
             let url_part = url_parts[idx];
             for (component, child) in self
-                .next
+                .children
                 .iter()
                 .filter(|(comp, _)| comp.match_url(url_part))
             {
                 if idx + 1 < url_parts.len() {
-                    if *component == RouteComponent::MultiSegWildCard {
+                    if *component == RouteComponent::MultiSegmentWildcard {
                         // Multi-segment wildcard matches the rest of the path
                         if let Some(f) = child.value.get(&method) {
                             let mut path = current_path.clone();
-                            path.r.push(component.clone());
+                            path.components.push(component.clone());
                             candidates.push((path, f));
                         }
                     } else {
                         // Continue matching deeper path segments
                         let mut path = current_path.clone();
-                        path.r.push(component.clone());
+                        path.components.push(component.clone());
                         child.get_candidates(url_parts, candidates, idx + 1, path, method.clone());
                     }
                 } else if let Some(f) = child.value.get(&method) {
                     // Reached the end of the URL, add handler if present
                     let mut path = current_path.clone();
-                    path.r.push(component.clone());
+                    path.components.push(component.clone());
                     candidates.push((path, f));
                 }
             }
@@ -262,7 +274,7 @@ mod test {
     use http::Method;
 
     use crate::{
-        handler::{HandlerTire, types::HttpHandlerError},
+        handler::{HandlerTrie, types::HttpHandlerError},
         request::HttpRequest,
         response::HttpResponse,
     };
@@ -275,11 +287,11 @@ mod test {
     /// Tests that route matching follows the correct precedence rules.
     ///
     /// This test verifies that when multiple patterns match a URL, the
-    /// most specific one (according to Exact > PathParam > SingleSegWildCard > MultiSegWildCard)
+    /// most specific one (according to Exact > PathParam > SingleSegmentWildcard > MultiSegmentWildcard)
     /// is selected.
     #[test]
     fn test_route_precedence() {
-        let mut handler = HandlerTire::default();
+        let mut handler = HandlerTrie::default();
 
         // Register various route patterns
         handler.get("/url/abc/efg", test_handler);
@@ -293,14 +305,14 @@ mod test {
 
         // Should match the path parameter pattern, not the wildcards
         assert_eq!(
-            "Route { r: [Exact(\"\"), Exact(\"url\"), PathParam(\"abc\"), PathParam(\"efg\")] }",
+            "Route { components: [Exact(\"\"), Exact(\"url\"), PathParam(\"abc\"), PathParam(\"efg\")] }",
             format!("{:?}", matched_route)
         );
     }
 
     // #[test]
     // fn proxy_registers_common_http_methods() {
-    //     let mut handlers = HandlerTire::default();
+    //     let mut handlers = HandlerTrie::default();
     //     handlers.proxy("/api/**", "http://localhost:7799/api/v1");
 
     //     for method in [

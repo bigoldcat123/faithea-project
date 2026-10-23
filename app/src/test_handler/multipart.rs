@@ -1,7 +1,7 @@
 use faithea::MultipartData;
-use faithea::data::inbound::multipart::MultiPartFile;
 use faithea::data::inbound::multipart::Multipart;
 use faithea::data::inbound::multipart::MultipartError;
+use faithea::data::inbound::multipart::MultipartFile;
 use faithea::data::inbound::multipart::Part;
 use faithea::data::inbound::multipart::TryFromParts;
 use faithea::post;
@@ -23,14 +23,14 @@ impl TryFromParts for A {
     }
 }
 
-#[derive(Debug,MultipartData)]
+#[derive(Debug, MultipartData)]
 struct StuInfo {
     #[faithea(rename = "otherInfo")]
     pub other_info: A,
     pub name: Vec<String>,
     pub age: i32,
     pub merried: Option<bool>,
-    pub profile: Vec<MultiPartFile>,
+    pub profile: Vec<MultipartFile>,
 }
 
 // impl faithea::data::inbound::multipart::TryFromMultipartDataMap for StuInfo {

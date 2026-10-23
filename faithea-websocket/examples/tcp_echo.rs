@@ -1,8 +1,6 @@
 use std::error::Error;
 
-use faithea_websocket::{
-    WebSocketDataPayLoad, WebSocketIncommingMessageParser, WebSocketMessageType,
-};
+use faithea_websocket::{WebSocketIncomingMessageParser, WebSocketMessageType, WebSocketPayload};
 use tokio::{net::TcpListener, sync::mpsc};
 
 #[tokio::main]
@@ -17,11 +15,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         tokio::spawn(async move {
             let (reader, mut writer) = tokio::io::split(stream);
-            let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<WebSocketDataPayLoad>(32);
+            let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<WebSocketPayload>(32);
             let app_outgoing_tx = outgoing_tx.clone();
 
             let (parser, mut incoming_rx) =
-                WebSocketIncommingMessageParser::new(reader, outgoing_tx);
+                WebSocketIncomingMessageParser::new(reader, outgoing_tx);
             parser.start();
 
             let writer_task = tokio::spawn(async move {

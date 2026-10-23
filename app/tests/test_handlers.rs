@@ -1,7 +1,7 @@
 use std::{net::TcpListener, time::Duration};
 
 use chenzhonghai_app::test_handler::test_handlers;
-use faithea::server::HttpServer;
+use faithea::server::{HttpServer, builder::HttpServerBuilder};
 use reqwest::{
     Client, StatusCode,
     header::{ACCESS_CONTROL_ALLOW_ORIGIN, COOKIE, LOCATION},
@@ -18,11 +18,15 @@ struct TestServer {
 
 impl TestServer {
     async fn start() -> Self {
+        Self::start_with_builder(HttpServer::builder()).await
+    }
+
+    async fn start_with_builder(builder: HttpServerBuilder) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("reserve a test port");
         let port = listener.local_addr().unwrap().port();
         drop(listener);
 
-        let server = HttpServer::builder()
+        let server = builder
             .host("127.0.0.1")
             .port(port)
             .mount("/", test_handlers())
@@ -64,6 +68,24 @@ async fn hello_world_returns_body_and_cors_headers() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[ACCESS_CONTROL_ALLOW_ORIGIN], "*");
     assert_eq!(response.text().await.unwrap(), "Hello,World");
+}
+
+#[tokio::test]
+async fn global_error_handler_maps_parameter_errors_to_custom_responses() {
+    let builder = HttpServer::builder().global_error_handler(async |error| {
+        faithea::res_modifiers!(StatusCode::BAD_REQUEST, format!("handled: {error}"))
+    });
+    let server = TestServer::start_with_builder(builder).await;
+    let response = Client::new()
+        .get(server.url("/pathParam/Alice/invalid"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response.text().await.unwrap();
+    assert!(body.starts_with("handled: before handler error:"));
+    assert!(body.contains("invalid"));
 }
 
 #[tokio::test]

@@ -27,7 +27,7 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
 
     let assigns = named_fields.iter().map(|f| {
         let field_ident = f.ident.as_ref().unwrap();
-        let field_name = extra_rename(&f.attrs).unwrap_or(field_ident.to_string());
+        let field_name = extract_rename(&f.attrs).unwrap_or(field_ident.to_string());
         quote! {
             #field_ident:
             TryFromParts::try_from_parts(data
@@ -57,15 +57,15 @@ pub fn expand_multipart(input: &DeriveInput) -> Result<TokenStream, Error> {
 }
 
 // #[faithea(rename="newName")]
-fn extra_rename(attr: &Vec<Attribute>) -> Option<String> {
+fn extract_rename(attr: &Vec<Attribute>) -> Option<String> {
     for a in attr {
         let m = &a.meta;
         let m_name = quote! {#m}.to_string();
         if m_name.starts_with("faithea") {
             let a = a.parse_args::<Expr>().unwrap();
-            if let Expr::Assign(asign) = a
-                && let Expr::Path(left) = asign.left.as_ref()
-                && let Expr::Lit(right) = asign.right.as_ref()
+            if let Expr::Assign(assignment) = a
+                && let Expr::Path(left) = assignment.left.as_ref()
+                && let Expr::Lit(right) = assignment.right.as_ref()
                 && let Some(rename) = left.path.get_ident()
                 && rename == "rename"
                 && let Lit::Str(l) = &right.lit

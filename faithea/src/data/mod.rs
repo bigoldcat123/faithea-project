@@ -1,10 +1,8 @@
 use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    request::{
-        ConvertError, HttpRequest, RequestBody, TryFromRequest, error::ParseHandlerParamError,
-    },
+use crate::request::{
+    ConvertError, HttpRequest, RequestBody, TryFromRequest, error::ParseHandlerParamError,
 };
 
 pub mod inbound;
@@ -14,11 +12,11 @@ pub mod outbound;
 pub struct Json<T>(pub T);
 impl<'a, T: Deserialize<'a>> TryFromRequest<'a> for Json<T> {
     fn try_from_request(req: &'a mut HttpRequest) -> Result<Self, ParseHandlerParamError> {
-        if let Some(RequestBody::Simple(body)) = req._inner.body() {
+        if let Some(RequestBody::Simple(body)) = req.inner.body() {
             Ok(Self(serde_json::from_slice::<T>(body.chunk()).map_err(
                 |_| {
                     ParseHandlerParamError::ConvertError(ConvertError {
-                        from: format!("{:?}",body),
+                        from: format!("{:?}", body),
                         to: "Json Data".into(),
                     })
                 },
@@ -72,14 +70,14 @@ mod tests {
             name: "hello".to_string(),
         })
         .unwrap();
-        *req._inner.body_mut() = Some(RequestBody::Simple(body.into()));
+        *req.inner.body_mut() = Some(RequestBody::Simple(body.into()));
         if let Ok(j) = Json::<Stu>::try_convert_from(&mut req) {
             println!("{:?}", j);
         }
     }
 
     #[tokio::test]
-    async fn constuct_response() {
+    async fn construct_response() {
         let mut res = HttpResponse::new();
 
         let mut header = HeaderMap::new();

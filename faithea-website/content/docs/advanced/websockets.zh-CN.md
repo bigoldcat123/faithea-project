@@ -10,12 +10,12 @@ description: 通过持久连接处理双向消息。
 ```rust
 use faithea::{
     request::HttpRequest,
-    websocket::{data::WebSocketDataPayLoad, socket::WebSocket},
+    websocket::{data::WebSocketPayload, socket::WebSocket},
 };
 
 async fn echo(websocket: WebSocket, req: HttpRequest) {
     let name = req
-        .get_pathparam("name")
+        .get_path_param("name")
         .cloned()
         .unwrap_or_else(|| "anonymous".into());
     let (mut receiver, sender) = websocket.split();
@@ -23,7 +23,7 @@ async fn echo(websocket: WebSocket, req: HttpRequest) {
     while let Some(message) = receiver.recv().await {
         let text = String::from_utf8_lossy(message.as_bytes());
         if sender
-            .send(WebSocketDataPayLoad::text(format!("{name}: {text}")))
+            .send(WebSocketPayload::text(format!("{name}: {text}")))
             .await
             .is_err()
         {

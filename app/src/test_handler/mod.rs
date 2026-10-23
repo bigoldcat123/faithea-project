@@ -13,6 +13,7 @@ pub mod stream;
 
 // Re-export all handlers
 pub use cookie::cookie;
+use custom_res::custom_res;
 pub use from_request::from_request;
 pub use hello_world::hello_world;
 pub use json::json_test;
@@ -21,7 +22,6 @@ pub use path_param::path_param;
 pub use redirect::redirect;
 pub use search_param::search_param;
 pub use stream::stream;
-use custom_res::custom_res;
 
 pub fn test_handlers() -> Vec<HandlerModifier> {
     handlers!(

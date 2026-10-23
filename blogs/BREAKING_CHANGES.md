@@ -1,5 +1,9 @@
 # Breaking Changes
 
+## Unreleased: naming cleanup
+
+Public Rust identifiers have been renamed across routing, handler futures, multipart, WebSocket, and shared I/O. See the [complete migration table](naming-migration.md) before updating downstream code. Current READMEs and website examples use the renamed API; the version-specific notes below describe v0.1.9.
+
 This document lists all breaking changes between the README documentation and the current API (v0.1.9).
 
 ---

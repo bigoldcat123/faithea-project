@@ -9,13 +9,13 @@
 //! The original channel-oriented design is kept:
 //!
 //! ```no_run
-//! # use faithea_websocket::{BytesSource, WebSocketDataPayLoad, WebSocketIncommingMessageParser};
-//! # async fn demo<S>(source: S, outgoing_tx: tokio::sync::mpsc::Sender<WebSocketDataPayLoad>)
+//! # use faithea_websocket::{BytesSource, WebSocketPayload, WebSocketIncomingMessageParser};
+//! # async fn demo<S>(source: S, outgoing_tx: tokio::sync::mpsc::Sender<WebSocketPayload>)
 //! # where
 //! #     S: BytesSource + 'static,
 //! # {
 //! let (parser, mut incoming_rx) =
-//!     WebSocketIncommingMessageParser::new(source, outgoing_tx);
+//!     WebSocketIncomingMessageParser::new(source, outgoing_tx);
 //! parser.start();
 //!
 //! while let Some(message) = incoming_rx.recv().await {
@@ -30,36 +30,36 @@ pub mod websocket;
 
 pub use faithea_io_core::{BytesSink, BytesSource};
 pub use websocket::{
-    ProtocolError, WebSocketIncomingMessageParser, WebSocketIncommingMessageParser,
-    WebSocketMessageType, data::WebSocketDataPayLoad, socket::WebSocket,
+    ProtocolError, WebSocketIncomingMessageParser, WebSocketMessageType, data::WebSocketPayload,
+    socket::WebSocket,
 };
 
-pub struct Handle {
-    pub outcomming_message_receiver: mpsc::Receiver<WebSocketDataPayLoad>,
+pub struct WebSocketHandle {
+    pub outgoing_message_receiver: mpsc::Receiver<WebSocketPayload>,
     pub websocket: WebSocket,
 }
 
-impl Handle {
+impl WebSocketHandle {
     fn new(
-        outcomming_message_receiver: mpsc::Receiver<WebSocketDataPayLoad>,
-        outcomming_message_sender: mpsc::Sender<WebSocketDataPayLoad>,
-        incoming_message_receiver: mpsc::Receiver<WebSocketDataPayLoad>,
+        outgoing_message_receiver: mpsc::Receiver<WebSocketPayload>,
+        outgoing_message_sender: mpsc::Sender<WebSocketPayload>,
+        incoming_message_receiver: mpsc::Receiver<WebSocketPayload>,
     ) -> Self {
         Self {
-            outcomming_message_receiver,
-            websocket: WebSocket::new(outcomming_message_sender, incoming_message_receiver),
+            outgoing_message_receiver,
+            websocket: WebSocket::new(outgoing_message_sender, incoming_message_receiver),
         }
     }
 }
 
-pub fn start_websocket<IO: BytesSource + 'static>(source: IO) -> Handle {
-    let (outcomming_message_sender, outcomming_message_receiver) = mpsc::channel(10);
-    let (p, incoming_receiver) =
-        WebSocketIncommingMessageParser::new(source, outcomming_message_sender.clone());
-    p.start();
-    Handle::new(
-        outcomming_message_receiver,
-        outcomming_message_sender,
+pub fn start_websocket<Source: BytesSource + 'static>(source: Source) -> WebSocketHandle {
+    let (outgoing_message_sender, outgoing_message_receiver) = mpsc::channel(10);
+    let (parser, incoming_receiver) =
+        WebSocketIncomingMessageParser::new(source, outgoing_message_sender.clone());
+    parser.start();
+    WebSocketHandle::new(
+        outgoing_message_receiver,
+        outgoing_message_sender,
         incoming_receiver,
     )
 }

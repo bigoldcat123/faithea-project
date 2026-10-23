@@ -60,10 +60,7 @@ impl HttpResponseModifier for &str {
     ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
-            res.add_header(
-                CONTENT_TYPE,
-                HeaderValue::from_maybe_shared("text/plain")?,
-            );
+            res.add_header(CONTENT_TYPE, HeaderValue::from_maybe_shared("text/plain")?);
             // res.add_header(("content-length".to_string(), self.len().to_string()));
             res.add_header(
                 CONTENT_LENGTH,
@@ -82,10 +79,7 @@ impl HttpResponseModifier for String {
     ) -> HttpResponseModifierFuture<'a> {
         Box::pin(async move {
             // res.add_header(("content-type".to_string(), "text/plain".to_string()));
-            res.add_header(
-                CONTENT_TYPE,
-                HeaderValue::from_maybe_shared("text/plain")?,
-            );
+            res.add_header(CONTENT_TYPE, HeaderValue::from_maybe_shared("text/plain")?);
             // res.add_header(("content-length".to_string(), self.len().to_string()));
             res.add_header(
                 CONTENT_LENGTH,
@@ -129,11 +123,11 @@ impl<T: AsRef<Path> + Send + Sync> HttpResponseModifier for StaticFile<T> {
 }
 fn mime_type(path: &Path) -> &'static str {
     match path.extension() {
-        Some(e) => get_mime_type_by_extention(e),
+        Some(e) => mime_type_from_extension(e),
         None => "application/octet-stream",
     }
 }
-fn get_mime_type_by_extention(e: &OsStr) -> &'static str {
+fn mime_type_from_extension(e: &OsStr) -> &'static str {
     if let Some(e) = e.to_str() {
         match e {
             "html" => "text/html",

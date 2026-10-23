@@ -1,9 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    data::inbound::multipart::MultipartError,
-    error::BodyParseError,
-    request::ConvertError,
+    data::inbound::multipart::MultipartError, error::BodyParseError, request::ConvertError,
 };
 
 #[derive(Debug, Error)]

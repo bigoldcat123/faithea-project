@@ -43,7 +43,7 @@ pub mod websocket {
     pub use faithea_websocket::*;
 
     pub mod data {
-        pub use faithea_websocket::WebSocketDataPayLoad;
+        pub use faithea_websocket::WebSocketPayload;
     }
 
     pub mod socket {
@@ -58,16 +58,16 @@ macro_rules! map_str {
     };
 }
 
-pub fn regulate_url_path<T: AsRef<str>>(s: T) -> String {
-    let a: &str = s.as_ref();
-    let mut v = a.into();
-    if !a.starts_with("/") {
-        v = format!("/{}", a);
+pub fn normalize_url_path<T: AsRef<str>>(path: T) -> String {
+    let path: &str = path.as_ref();
+    let mut normalized = path.into();
+    if !path.starts_with("/") {
+        normalized = format!("/{}", path);
     }
-    if v.ends_with("/") && v.len() != 1 {
-        v.pop();
+    if normalized.ends_with("/") && normalized.len() != 1 {
+        normalized.pop();
     }
-    v.to_string()
+    normalized.to_string()
 }
 
 pub type ResponseModifier = Vec<Box<dyn crate::response::HttpResponseModifier + Send + Sync>>;

@@ -13,8 +13,8 @@ use hyper::body::{Body, Incoming};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
-    guard::GuardTire,
-    handler::HandlerTire,
+    guard::GuardTrie,
+    handler::HandlerTrie,
     server::{
         builder::{GlobalErrorHandler, HttpServerBuilder},
         http1::H1Server,
@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-pub type HandlerModifier = Box<dyn Fn(&mut HandlerTire, &str)>;
+pub type HandlerModifier = Box<dyn Fn(&mut HandlerTrie, &str)>;
 
 pub enum Server {
     H1Server(H1Server),
@@ -30,15 +30,15 @@ pub enum Server {
     // O(HttpServer)
 }
 #[derive(Clone)]
-pub struct ServerFuncProvider {
-    handlers: Arc<HandlerTire>,
-    guards: Arc<GuardTire>,
+pub struct ServerContext {
+    handlers: Arc<HandlerTrie>,
+    guards: Arc<GuardTrie>,
     error_handler: Option<Arc<GlobalErrorHandler>>,
 }
-impl ServerFuncProvider {
+impl ServerContext {
     pub(crate) fn new(
-        handlers: Arc<HandlerTire>,
-        guards: Arc<GuardTire>,
+        handlers: Arc<HandlerTrie>,
+        guards: Arc<GuardTrie>,
         error_handler: Option<Arc<GlobalErrorHandler>>,
     ) -> Self {
         Self {
@@ -47,10 +47,10 @@ impl ServerFuncProvider {
             error_handler,
         }
     }
-    pub(crate) fn handlers(&self) -> Arc<HandlerTire> {
+    pub(crate) fn handlers(&self) -> Arc<HandlerTrie> {
         self.handlers.clone()
     }
-    pub(crate) fn guards(&self) -> Arc<GuardTire> {
+    pub(crate) fn guards(&self) -> Arc<GuardTrie> {
         self.guards.clone()
     }
     pub(crate) fn error_handler(&self) -> Option<Arc<GlobalErrorHandler>> {
@@ -76,21 +76,21 @@ impl HttpServer {
     }
 }
 
-pub struct HyperIncommingBytesSource {
+pub struct HyperIncomingBytesSource {
     inner: Incoming,
     is_end: bool,
 }
-impl HyperIncommingBytesSource {
-    pub(crate) fn new(incomming: Incoming) -> Self {
-        HyperIncommingBytesSource {
-            inner: incomming,
+impl HyperIncomingBytesSource {
+    pub(crate) fn new(incoming: Incoming) -> Self {
+        HyperIncomingBytesSource {
+            inner: incoming,
             is_end: false,
         }
     }
 }
 
-impl BytesSource for HyperIncommingBytesSource {
-    fn read_buf2<'a>(
+impl BytesSource for HyperIncomingBytesSource {
+    fn read_bytes<'a>(
         &'a mut self,
         buf: &'a mut BytesMut,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
@@ -120,16 +120,16 @@ impl BytesSource for HyperIncommingBytesSource {
     }
 }
 
-pub(crate) struct Http1BytesSource<SOURCE: AsyncRead + Unpin> {
-    source: SOURCE,
+pub(crate) struct Http1BytesSource<Source: AsyncRead + Unpin> {
+    source: Source,
 }
-impl<SOURCE: AsyncRead + Unpin> Http1BytesSource<SOURCE> {
-    pub(crate) fn stream(source: SOURCE) -> Self {
+impl<Source: AsyncRead + Unpin> Http1BytesSource<Source> {
+    pub(crate) fn stream(source: Source) -> Self {
         Self { source }
     }
 }
-impl<SOURCE: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<SOURCE> {
-    fn read_buf2<'a>(
+impl<Source: AsyncRead + Unpin + Send> BytesSource for Http1BytesSource<Source> {
+    fn read_bytes<'a>(
         &'a mut self,
         buf: &'a mut BytesMut,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {

@@ -127,14 +127,14 @@ Faithea parses multipart forms into typed Rust structures using `Multipart<T>` a
 
 Use `Option<T>` for optional fields and `Vec<T>` for repeated fields or multiple files. Rename a form field with `#[faithea(rename = "...")]` when it differs from the Rust field name.
 
-Uploaded files are stored in temporary paths. `MultiPartFile` removes its temporary file when the value is dropped, so move or copy files you need to retain.
+Uploaded files are stored in temporary paths. `MultipartFile` removes its temporary file when the value is dropped, so move or copy files you need to retain.
 
 ### Define routes
 
 ```rust
 use faithea::{
     MultipartData, post,
-    data::inbound::multipart::{MultiPartFile, Multipart},
+    data::inbound::multipart::{MultipartFile, Multipart},
 };
 
 #[derive(MultipartData, Debug)]
@@ -143,7 +143,7 @@ struct UploadForm {
     display_name: String,
     public: Option<bool>,
     tags: Vec<String>,
-    files: Vec<MultiPartFile>,
+    files: Vec<MultipartFile>,
 }
 
 #[post("/upload")]

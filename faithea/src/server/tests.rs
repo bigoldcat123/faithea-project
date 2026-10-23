@@ -73,17 +73,17 @@ fn multipart_request() -> Request<()> {
 async fn http2_empty_data_frames_are_skipped_until_data_and_real_eof() {
     timeout(Duration::from_secs(5), async {
         let mut connection = connect_http2(|req| async move {
-            let mut source = HyperIncommingBytesSource::new(req.into_body());
+            let mut source = HyperIncomingBytesSource::new(req.into_body());
             let mut buf = BytesMut::from(&b"prefix:"[..]);
 
-            assert_eq!(source.read_buf2(&mut buf).await.unwrap(), 5);
+            assert_eq!(source.read_bytes(&mut buf).await.unwrap(), 5);
             assert_eq!(&buf[..], b"prefix:hello");
             assert!(!source.is_end());
 
-            assert_eq!(source.read_buf2(&mut buf).await.unwrap(), 0);
+            assert_eq!(source.read_bytes(&mut buf).await.unwrap(), 0);
             assert!(source.is_end());
             assert_eq!(&buf[..], b"prefix:hello");
-            Ok(HttpResponse::new()._inner)
+            Ok(HttpResponse::new().inner)
         })
         .await;
 
@@ -108,9 +108,9 @@ async fn http2_empty_data_frames_are_skipped_until_data_and_real_eof() {
 #[tokio::test]
 async fn http2_multipart_accepts_empty_data_frames_between_body_fragments() {
     timeout(Duration::from_secs(5), async {
-        let mut handlers = HandlerTire::default();
+        let mut handlers = HandlerTrie::default();
         handlers.post("/upload", |mut req: HttpRequest| async move {
-            let Some(RequestBody::MultiPart(map)) = req.body() else {
+            let Some(RequestBody::Multipart(map)) = req.body() else {
                 panic!("expected a multipart request");
             };
             assert_eq!(map.len(), 1);
@@ -119,13 +119,13 @@ async fn http2_multipart_accepts_empty_data_frames_between_body_fragments() {
             assert!(matches!(&parts[0], Part::Lit(value) if value == "hello 世界"));
             Ok(HttpResponse::new())
         });
-        let provider = ServerFuncProvider::new(
+        let context = ServerContext::new(
             Arc::new(handlers),
-            Arc::new(GuardTire::default()),
+            Arc::new(GuardTrie::default()),
             None,
         );
         let mut connection = connect_http2(move |req| {
-            crate::service::h2::serve_http2(req, provider.clone())
+            crate::service::h2::serve_http2(req, context.clone())
         })
         .await;
 
@@ -157,13 +157,13 @@ async fn http2_truncated_multipart_still_returns_unexpected_eof() {
     timeout(Duration::from_secs(5), async {
         let mut connection = connect_http2(|req| async move {
             let (parts, body) = req.into_parts();
-            let source = HyperIncommingBytesSource::new(body);
+            let source = HyperIncomingBytesSource::new(body);
             let mut buf = BytesMut::new();
             assert!(matches!(
                 parse_body_frame(source, &mut buf, &parts.headers).await,
                 Err(BodyParseError::UnexpectedEof)
             ));
-            Ok(HttpResponse::new()._inner)
+            Ok(HttpResponse::new().inner)
         })
         .await;
 

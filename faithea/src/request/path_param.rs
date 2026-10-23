@@ -4,30 +4,34 @@ use crate::route::Route;
 
 #[derive(Debug, Default)]
 pub struct PathParam {
-    pub(crate) _inner: HashMap<String, String>,
+    pub(crate) inner: HashMap<String, String>,
 }
 impl PathParam {
     pub fn get<S: AsRef<str>>(&self, key: S) -> Option<&String> {
-        self._inner.get(key.as_ref())
+        self.inner.get(key.as_ref())
     }
     pub(crate) fn try_from_route(
         handler_route: &Route,
         incoming_route: &Route,
     ) -> Result<Self, String> {
         use crate::route::RouteComponent::*;
-        let mut _inner = HashMap::new();
-        if handler_route.r.len() != incoming_route.r.len() {
+        let mut inner = HashMap::new();
+        if handler_route.components.len() != incoming_route.components.len() {
             return Err("route len not match!".to_string());
         }
-        for cmp in handler_route.r.iter().zip(incoming_route.r.iter()) {
+        for cmp in handler_route
+            .components
+            .iter()
+            .zip(incoming_route.components.iter())
+        {
             if let (PathParam(p), Exact(v)) = cmp {
-                _inner.insert(p.to_string(), v.to_string());
+                inner.insert(p.to_string(), v.to_string());
             }
         }
-        if _inner.is_empty() {
+        if inner.is_empty() {
             Err("no path params".to_string())
         } else {
-            Ok(Self { _inner })
+            Ok(Self { inner })
         }
     }
 }

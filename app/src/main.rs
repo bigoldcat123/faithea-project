@@ -17,7 +17,7 @@ async fn main() {
             Ok(e)
         })
         .websocket("/ws/{name}", ws)
-        // .globale_error_handler(async |e: faithea::error::Error| {
+        // .global_error_handler(async |e: faithea::error::Error| {
         //     res_modifiers!(format!("some error~~ {}", e))
         // })
         .static_map(

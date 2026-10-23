@@ -5,12 +5,12 @@ use bytes::{BufMut, Bytes, BytesMut};
 use crate::{BytesSink, websocket::WebSocketMessageType};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct WebSocketDataPayLoad {
-    pub r#type: WebSocketMessageType,
+pub struct WebSocketPayload {
+    pub message_type: WebSocketMessageType,
     inner: Bytes,
 }
 
-impl WebSocketDataPayLoad {
+impl WebSocketPayload {
     pub fn text<D: Display>(payload: D) -> Self {
         Self::_text(payload.to_string().into())
     }
@@ -18,35 +18,35 @@ impl WebSocketDataPayLoad {
     pub(crate) fn _text(payload: Bytes) -> Self {
         Self {
             inner: payload,
-            r#type: WebSocketMessageType::Text,
+            message_type: WebSocketMessageType::Text,
         }
     }
 
     pub fn ping(payload: Bytes) -> Self {
         Self {
             inner: payload,
-            r#type: WebSocketMessageType::Ping,
+            message_type: WebSocketMessageType::Ping,
         }
     }
 
     pub fn pong(payload: Bytes) -> Self {
         Self {
             inner: payload,
-            r#type: WebSocketMessageType::Pong,
+            message_type: WebSocketMessageType::Pong,
         }
     }
 
     pub fn close(payload: Bytes) -> Self {
         Self {
             inner: payload,
-            r#type: WebSocketMessageType::Close,
+            message_type: WebSocketMessageType::Close,
         }
     }
 
     pub fn binary(payload: Bytes) -> Self {
         Self {
             inner: payload,
-            r#type: WebSocketMessageType::Binary,
+            message_type: WebSocketMessageType::Binary,
         }
     }
 
@@ -59,13 +59,13 @@ impl WebSocketDataPayLoad {
     }
 
     pub fn message_type(&self) -> WebSocketMessageType {
-        self.r#type
+        self.message_type
     }
 
     fn generate_head_frame(&self) -> Bytes {
         let payload = &self.inner;
         let mut buf = BytesMut::new();
-        let op: u8 = self.r#type.into();
+        let op: u8 = self.message_type.into();
         buf.put_u8(0x80 | op);
 
         if payload.len() < 126 {
@@ -92,19 +92,19 @@ impl WebSocketDataPayLoad {
         data: &[u8],
         socket: &mut W,
     ) -> Result<(), String> {
-        socket.write_all2(data).await
+        socket.write_bytes(data).await
     }
 
     pub async fn serialize_to_socket<W: BytesSink + ?Sized>(
         self,
         socket: &mut W,
     ) -> Result<(), String> {
-        if self.r#type.is_control() && self.inner.len() > 125 {
+        if self.message_type.is_control() && self.inner.len() > 125 {
             return Err("control frame payload must be 125 bytes or less".to_string());
         }
         let head_frame = self.generate_head_frame();
         Self::write_to_socket(&head_frame, socket).await?;
         Self::write_to_socket(&self.inner, socket).await?;
-        socket.flush2().await
+        socket.flush_bytes().await
     }
 }
