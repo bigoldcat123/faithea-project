@@ -9,6 +9,7 @@ struct ChunkedSource {
     eof_reads: usize,
     signal_end: bool,
     fail_at_eof: bool,
+    stall_at_eof: bool,
 }
 
 impl ChunkedSource {
@@ -21,6 +22,7 @@ impl ChunkedSource {
             eof_reads: 0,
             signal_end: false,
             fail_at_eof: false,
+            stall_at_eof: false,
         }
     }
 }
@@ -34,6 +36,9 @@ impl BytesSource for ChunkedSource {
             if let Some(chunk) = self.chunks.pop_front() {
                 buf.extend_from_slice(&chunk);
                 return Ok(chunk.len());
+            }
+            if self.stall_at_eof {
+                return std::future::pending().await;
             }
             self.eof_reads += 1;
             // Bound erroneous EOF loops so a regression fails instead of hanging.
@@ -57,10 +62,17 @@ fn text_body(value: &str) -> Vec<u8> {
 }
 
 fn file_body() -> Vec<u8> {
-    format!(
-        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"sample.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nfile data\r\n--{BOUNDARY}--"
+    file_body_with_content(b"file data")
+}
+
+fn file_body_with_content(content: &[u8]) -> Vec<u8> {
+    let mut body = format!(
+        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"sample.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n"
     )
-    .into_bytes()
+    .into_bytes();
+    body.extend_from_slice(content);
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--").as_bytes());
+    body
 }
 
 async fn parse(source: ChunkedSource) -> Result<MultipartDataMap, BodyParseError> {
@@ -153,7 +165,89 @@ async fn file_request_parses_at_every_chunk_split() {
         };
         assert_eq!(file.file_name.as_deref(), Some("sample.bin"));
         assert_eq!(file.mime_type.as_deref(), Some("application/octet-stream"));
+        assert_eq!(std::fs::read(&file.temp_path).unwrap(), b"file data");
+        let path = std::path::PathBuf::from(&file.temp_path);
+        drop(map);
+        assert!(!path.exists(), "file leaked after multipart was dropped");
     }
+}
+
+#[tokio::test]
+async fn uploaded_files_remain_readable_and_are_removed_on_drop() {
+    let large_content: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+    for content in [Vec::new(), b"hello\0\xffupload".to_vec(), large_content] {
+        let body = file_body_with_content(&content);
+        for chunk_size in [body.len(), 4093] {
+            let map = parse(ChunkedSource::new(
+                body.chunks(chunk_size).map(|chunk| chunk.to_vec()),
+            ))
+            .await
+            .unwrap();
+            let Part::File(file) = &map["upload"][0] else {
+                panic!("expected a file part");
+            };
+            let path = std::path::PathBuf::from(&file.temp_path);
+            assert_eq!(std::fs::read(&path).unwrap(), content);
+            drop(map);
+            assert!(!path.exists(), "file leaked after multipart was dropped");
+        }
+    }
+}
+
+fn file_followed_by_truncated_header() -> Vec<u8> {
+    let mut body = file_body();
+    body.truncate(body.len() - 2);
+    body.extend_from_slice(b"\r\nContent-Disposition: form-data;");
+    body
+}
+
+#[tokio::test]
+async fn uploaded_files_are_removed_if_a_later_part_is_truncated() {
+    let source = ChunkedSource::new([file_followed_by_truncated_header()]);
+    let mut buf = BytesMut::new();
+    let mut parser =
+        MultipartBodyParser::new_with_start_state(source, &mut buf, BOUNDARY.as_bytes());
+    parser.remove_multipart_body_prefix().await.unwrap();
+    parser.parse_header().await.unwrap();
+    parser.parse_body().await.unwrap();
+    let Part::File(file) = &parser.map.as_ref().unwrap()["upload"][0] else {
+        panic!("expected a file part");
+    };
+    let path = std::path::PathBuf::from(&file.temp_path);
+    assert!(path.exists());
+
+    assert!(matches!(
+        parser.process().await,
+        Err(BodyParseError::UnexpectedEof)
+    ));
+    drop(parser);
+    assert!(!path.exists(), "file leaked after parsing failed");
+}
+
+#[tokio::test]
+async fn uploaded_files_are_removed_when_parsing_is_cancelled() {
+    let mut source = ChunkedSource::new([file_followed_by_truncated_header()]);
+    source.stall_at_eof = true;
+    let mut buf = BytesMut::new();
+    let mut parser =
+        MultipartBodyParser::new_with_start_state(source, &mut buf, BOUNDARY.as_bytes());
+    parser.remove_multipart_body_prefix().await.unwrap();
+    parser.parse_header().await.unwrap();
+    parser.parse_body().await.unwrap();
+    let Part::File(file) = &parser.map.as_ref().unwrap()["upload"][0] else {
+        panic!("expected a file part");
+    };
+    let path = std::path::PathBuf::from(&file.temp_path);
+    assert!(path.exists());
+
+    let mut parsing = Box::pin(async move { parser.process().await });
+    std::future::poll_fn(|cx| {
+        assert!(parsing.as_mut().poll(cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(parsing);
+    assert!(!path.exists(), "file leaked after parsing was cancelled");
 }
 
 #[tokio::test]

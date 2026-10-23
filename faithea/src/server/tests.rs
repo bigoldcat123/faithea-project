@@ -113,10 +113,14 @@ async fn http2_multipart_accepts_empty_data_frames_between_body_fragments() {
             let Some(RequestBody::Multipart(map)) = req.body() else {
                 panic!("expected a multipart request");
             };
-            assert_eq!(map.len(), 1);
+            assert_eq!(map.len(), 2);
             let parts = map.get("text").unwrap();
             assert_eq!(parts.len(), 1);
             assert!(matches!(&parts[0], Part::Lit(value) if value == "hello 世界"));
+            let Part::File(file) = &map["upload"][0] else {
+                panic!("expected an uploaded file");
+            };
+            assert_eq!(std::fs::read(&file.temp_path).unwrap(), b"file\0bytes");
             Ok(HttpResponse::new())
         });
         let context = ServerContext::new(
@@ -134,7 +138,7 @@ async fn http2_multipart_accepts_empty_data_frames_between_body_fragments() {
             .send_request(multipart_request(), false)
             .unwrap();
         let body = format!(
-            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nhello 世界\r\n--{BOUNDARY}--\r\n"
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nhello 世界\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"sample.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nfile\0bytes\r\n--{BOUNDARY}--\r\n"
         );
         for chunk in body.as_bytes().chunks(7) {
             // Real HTTP/2 DATA frames, including empty frames without END_STREAM.

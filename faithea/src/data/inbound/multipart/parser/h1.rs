@@ -105,13 +105,8 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         let temp_file = tempfile::Builder::new()
             .prefix("faithea-multipart-")
             .tempfile()?;
-        let temp_path = temp_file.path().to_string_lossy().into_owned();
-        let multipart_file = MultipartFile {
-            temp_path,
-            file_name,
-            mime_type,
-        };
-        let mut f = tokio::fs::File::from_std(temp_file.into_file());
+        let (file, temp_path) = temp_file.into_parts();
+        let mut f = tokio::fs::File::from_std(file);
         let delimiter_len = self.boundary_with_prefix.len() + 2;
         loop {
             self.ensure_len(delimiter_len).await?;
@@ -119,16 +114,23 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
 
             if is_ended {
                 let mut b = self.buf.split_to(len);
-                f.write_buf(&mut b).await?;
+                f.write_all_buf(&mut b).await?;
                 self.consume_body_boundary();
                 break;
             } else {
                 // Retain a possible delimiter split across the next read.
                 let mut b = self.buf.split_to(self.buf.len() - (delimiter_len - 1));
-                f.write_buf(&mut b).await?;
+                f.write_all_buf(&mut b).await?;
             }
         }
-        Ok(multipart_file)
+        f.flush().await?;
+        // Transfer cleanup to MultipartFile only after every write has completed.
+        let temp_path = temp_path.keep().map_err(|err| err.error)?;
+        Ok(MultipartFile {
+            temp_path: temp_path.to_string_lossy().into_owned(),
+            file_name,
+            mime_type,
+        })
     }
 
     fn check_body_end(&self) -> (bool, usize) {

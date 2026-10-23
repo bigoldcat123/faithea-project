@@ -100,6 +100,7 @@ impl<T: TryFromParts> TryFromParts for Vec<T> {
         }
     }
 }
+/// An uploaded file, available at `temp_path` until this value is dropped.
 #[derive(Debug)]
 pub struct MultipartFile {
     pub file_name: Option<String>,
