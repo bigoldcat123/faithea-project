@@ -10,6 +10,10 @@ use crate::{
     request::RequestBody,
     server::BytesSource,
 };
+
+#[cfg(test)]
+mod tests;
+
 pub struct MultiPartBodyParser<'a, R> {
     r: R,
     buf: &'a mut BytesMut,
@@ -70,6 +74,31 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     fn is_file_body(&self) -> bool {
         self.header_info.file_name.is_some() || self.header_info.mime_type.is_some()
     }
+
+    async fn read_more(&mut self) -> Result<(), BodyParseError> {
+        if self.r.is_end() || self.r.read_buf2(self.buf).await? == 0 {
+            return Err(BodyParseError::UnexpectedEof);
+        }
+        Ok(())
+    }
+
+    async fn ensure_len(&mut self, len: usize) -> Result<(), BodyParseError> {
+        while self.buf.len() < len {
+            self.read_more().await?;
+        }
+        Ok(())
+    }
+
+    fn consume_body_boundary(&mut self) {
+        self.buf.advance(self.boundary_with_prefix.len());
+        self.state = if &self.buf[..2] == b"--" {
+            MultiPartBodyParserState::End
+        } else {
+            MultiPartBodyParserState::Header
+        };
+        self.buf.advance(2);
+    }
+
     async fn parse_file_body(&mut self) -> Result<MultiPartFile, BodyParseError> {
         let file_name = self.header_info.file_name.take();
         let mime_type = self.header_info.mime_type.take();
@@ -83,19 +112,19 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
             mime_type,
         };
         let mut f = tokio::fs::File::from_std(temp_file.into_file());
+        let delimiter_len = self.boundary_with_prefix.len() + 2;
         loop {
-            while self.buf.len() < self.boundary.len() + 7 {
-                let _read_len = self.r.read_buf2(self.buf).await?;
-            }
+            self.ensure_len(delimiter_len).await?;
             let (is_ended, len) = self.check_body_end();
 
             if is_ended {
                 let mut b = self.buf.split_to(len);
                 f.write_buf(&mut b).await?;
-                let _ = self.buf.split_to(self.boundary.len() + 2 + 2 + 2);
+                self.consume_body_boundary();
                 break;
             } else {
-                let mut b = self.buf.split_to(self.buf.len() - self.boundary.len() - 6);
+                // Retain a possible delimiter split across the next read.
+                let mut b = self.buf.split_to(self.buf.len() - (delimiter_len - 1));
                 f.write_buf(&mut b).await?;
             }
         }
@@ -105,7 +134,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
     fn check_body_end(&self) -> (bool, usize) {
         let mut i = 0;
         let mut j = 0;
-        while i < self.buf.len() && j < self.boundary_with_prefix.len() {
+        while i < self.buf.len() {
             if self.boundary_with_prefix[j] == self.buf[i] {
                 i += 1;
                 j += 1;
@@ -114,12 +143,14 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
             } else {
                 i += 1;
             }
-            if j == self.boundary_with_prefix.len()
-                && i + 1 < self.buf.len()
-                && ((self.buf[i] == b'\r' && self.buf[i + 1] == b'\n')
-                    || (self.buf[i] == b'-' && self.buf[i + 1] == b'-'))
-            {
-                return (true, i - self.boundary_with_prefix.len());
+            if j == self.boundary_with_prefix.len() {
+                if i + 1 < self.buf.len()
+                    && (&self.buf[i..i + 2] == b"\r\n" || &self.buf[i..i + 2] == b"--")
+                {
+                    return (true, i - self.boundary_with_prefix.len());
+                }
+                // A boundary-like payload must not hide a later real delimiter.
+                j = self.boundary_with_prefix_next[j - 1];
             }
         }
         (false, 0)
@@ -127,27 +158,21 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
 
     async fn parse_lit_body(&mut self) -> Result<Bytes, BodyParseError> {
         let mut simple_body = BytesMut::new();
+        let delimiter_len = self.boundary_with_prefix.len() + 2;
         loop {
-            while self.buf.len() <= self.boundary.len() + 6 {
-                let _read_len = self.r.read_buf2(self.buf).await?;
-            }
+            self.ensure_len(delimiter_len).await?;
             let (is_ended, len) = self.check_body_end();
             if is_ended {
                 let b = self.buf.split_to(len);
                 simple_body.extend_from_slice(&b[..]);
-                // /r/n --boundary /r/n => 2 + 2 + 2 + len
-                let _ = self.buf.split_to(self.boundary.len() + 2 + 2 + 2);
+                self.consume_body_boundary();
                 break;
             } else {
-                let b = self.buf.split_to(self.buf.len() - self.boundary.len() - 6);
+                let b = self.buf.split_to(self.buf.len() - (delimiter_len - 1));
                 simple_body.extend_from_slice(&b[..]);
             }
         }
         Ok(simple_body.freeze())
-    }
-
-    fn body_ends(&self) -> bool {
-        &self.buf[..] == b"\r\n" && self.r.is_end()
     }
 
     fn check_mutipart_header(&self) -> (bool, usize) {
@@ -212,11 +237,6 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 map.entry(key_name).or_default().push(Part::Lit(data));
             }
         }
-        self.state = MultiPartBodyParserState::Header;
-        if self.body_ends() {
-            self.state = MultiPartBodyParserState::End;
-            let _ = self.buf.split();
-        }
         Ok(())
     }
     fn generate_multipart(&mut self) -> MultipartDataMap {
@@ -230,11 +250,7 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
                 header_len = inner_header_len;
                 break;
             }
-            let read_len = self.r.read_buf2(self.buf).await?;
-            if read_len == 0 {
-                self.state = MultiPartBodyParserState::End;
-                return Ok(());
-            }
+            self.read_more().await?;
         }
         let b = self.buf.split_to(header_len);
         let b = str::from_utf8(&b)?;
@@ -247,17 +263,16 @@ impl<'a, R: BytesSource> MultiPartBodyParser<'a, R> {
         Ok(())
     }
     async fn remove_mutipart_body_prefix(&mut self) -> Result<(), BodyParseError> {
-        while self.buf.len() < self.boundary.len() + 2 {
-            let _read_len = self.r.read_buf2(self.buf).await?;
-        }
-        if &self.buf[..2] != b"--"
-            || &self.buf[2..2 + self.boundary.len()] != self.boundary
-            || &self.buf[2 + self.boundary.len()..2 + self.boundary.len() + 2] != b"\r\n"
-        {
+        self.ensure_len(self.boundary.len() + 4).await?;
+        if &self.buf[..2] != b"--" || &self.buf[2..2 + self.boundary.len()] != self.boundary {
             return Err(BodyParseError::InvalidBoundary);
         }
-        self.buf.advance(2 + self.boundary.len() + 2);
-        self.state = MultiPartBodyParserState::Header;
+        self.state = match &self.buf[2 + self.boundary.len()..4 + self.boundary.len()] {
+            b"\r\n" => MultiPartBodyParserState::Header,
+            b"--" => MultiPartBodyParserState::End,
+            _ => return Err(BodyParseError::InvalidBoundary),
+        };
+        self.buf.advance(self.boundary.len() + 4);
         Ok(())
     }
 }
