@@ -56,10 +56,12 @@ impl RouteComponent {
 }
 impl From<&str> for RouteComponent {
     fn from(value: &str) -> Self {
-        if value.starts_with("{") {
-            // Extract the parameter name from between braces
-            // Assumes the string ends with "}" as validated during route parsing
-            Self::PathParam(value[1..value.len() - 1].to_string())
+        // Keep malformed brace expressions literal because this conversion is infallible.
+        if let Some(name) = value.strip_prefix('{').and_then(|v| v.strip_suffix('}'))
+            && !name.is_empty()
+            && !name.contains(['{', '}'])
+        {
+            Self::PathParam(name.to_string())
         } else if value == "*" {
             Self::SingleSegmentWildcard
         } else if value == "**" {
@@ -104,6 +106,29 @@ impl From<&str> for Route {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_parameters_are_literal_segments() {
+        for segment in ["{", "}", "{}", "{x", "x}", "{{x}}", "{x}y}", "{中", "{😀"] {
+            let route = Route::from(format!("/users/{segment}").as_str());
+            assert_eq!(
+                route.components.last(),
+                Some(&RouteComponent::Exact(segment.to_string())),
+                "segment: {segment:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_parameters_preserve_the_entire_name() {
+        for name in ["x", "id", "用户名", "😀"] {
+            assert_eq!(
+                RouteComponent::from(format!("{{{name}}}").as_str()),
+                RouteComponent::PathParam(name.to_string())
+            );
+        }
+    }
+
     #[test]
     fn create() {
         use super::RouteComponent::*;

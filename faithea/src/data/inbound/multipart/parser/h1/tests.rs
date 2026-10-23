@@ -90,6 +90,74 @@ fn assert_text(map: &MultipartDataMap, key: &str, expected: &str) {
 }
 
 #[tokio::test]
+async fn malformed_disposition_parameters_return_errors() {
+    for value in ["", "\"", "\"unfinished", "a\"", "中", "\"a\"junk"] {
+        for parameter in [
+            format!("name={value}"),
+            format!("name=\"upload\"; filename={value}"),
+        ] {
+            let body = format!(
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; {parameter}\r\n\r\npayload\r\n--{BOUNDARY}--"
+            );
+            for chunk_size in [1, body.len()] {
+                let result = parse(ChunkedSource::new(
+                    body.as_bytes()
+                        .chunks(chunk_size)
+                        .map(|chunk| chunk.to_vec()),
+                ))
+                .await;
+                assert!(
+                    matches!(result, Err(BodyParseError::Other(_))),
+                    "parameter {parameter:?}, chunk_size={chunk_size}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn valid_disposition_values_are_not_truncated() {
+    for (value, expected) in [
+        ("a", "a"),
+        ("abc", "abc"),
+        ("\"\"", ""),
+        ("\"中文😀\"", "中文😀"),
+        ("\"a;b\"", "a;b"),
+        ("\"a\\\"b\"", "a\"b"),
+    ] {
+        let body = format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name={value}\r\n\r\npayload\r\n--{BOUNDARY}--"
+        );
+        let map = parse(ChunkedSource::new(body.bytes().map(|byte| vec![byte])))
+            .await
+            .unwrap();
+        assert_text(&map, expected, "payload");
+    }
+}
+
+#[tokio::test]
+async fn valid_filenames_are_preserved() {
+    for (value, expected) in [
+        ("a", "a"),
+        ("\"\"", ""),
+        ("\"中文😀;文档.txt\"", "中文😀;文档.txt"),
+        ("\"a\\\"b.txt\"", "a\"b.txt"),
+    ] {
+        let body = format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"upload\"; filename={value}\r\n\r\npayload\r\n--{BOUNDARY}--"
+        );
+        let map = parse(ChunkedSource::new(body.bytes().map(|byte| vec![byte])))
+            .await
+            .unwrap();
+        let Part::File(file) = &map["upload"][0] else {
+            panic!("expected a file part");
+        };
+        assert_eq!(file.file_name.as_deref(), Some(expected));
+        assert_eq!(std::fs::read(&file.temp_path).unwrap(), b"payload");
+    }
+}
+
+#[tokio::test]
 async fn truncated_text_request_returns_unexpected_eof_at_every_offset() {
     let body = text_body("hello");
     for signal_end in [false, true] {

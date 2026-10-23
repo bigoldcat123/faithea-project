@@ -4,7 +4,7 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     data::inbound::multipart::{
         MultipartDataMap, MultipartFile, Part,
-        parser::{HeaderInfo, MultipartBodyParserState, build_boundary_next_array},
+        parser::{HeaderInfo, MultipartBodyParserState, build_boundary_next_array, disposition},
     },
     error::BodyParseError,
     request::RequestBody,
@@ -198,23 +198,23 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         (false, 0)
     }
 
-    fn process_multipart_header(&mut self, header_line: &str) {
+    fn process_multipart_header(&mut self, header_line: &str) -> Result<(), BodyParseError> {
         if let Some((k, v)) = header_line.split_once(":") {
             if k.eq_ignore_ascii_case("Content-Disposition") {
-                for kv in v.split(";") {
-                    if let Some((k, v)) = kv.split_once("=") {
-                        if k.trim() == "name" {
-                            self.header_info.name = Some(v[1..v.len() - 1].to_string());
-                        }
-                        if k.trim() == "filename" {
-                            self.header_info.file_name = Some(v[1..v.len() - 1].to_string())
-                        }
+                let parameters = disposition::parameters(v)
+                    .map_err(|message| BodyParseError::Other(message.to_string()))?;
+                for (name, value) in parameters {
+                    if name.eq_ignore_ascii_case("name") {
+                        self.header_info.name = Some(value);
+                    } else if name.eq_ignore_ascii_case("filename") {
+                        self.header_info.file_name = Some(value);
                     }
                 }
             } else if k.eq_ignore_ascii_case("Content-Type") {
                 self.header_info.mime_type = Some(v.trim().to_string())
             }
         }
+        Ok(())
     }
     fn current_state(&self) -> MultipartBodyParserState {
         self.state
@@ -258,7 +258,7 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         let b = str::from_utf8(&b)?;
         for l in b.split("\r\n") {
             if !l.is_empty() {
-                self.process_multipart_header(l);
+                self.process_multipart_header(l)?;
             }
         }
         self.state = MultipartBodyParserState::Body;
