@@ -1,6 +1,7 @@
 pub mod builder;
 mod http1;
 mod http2;
+mod tls;
 
 #[cfg(test)]
 mod tests;

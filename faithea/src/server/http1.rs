@@ -16,6 +16,7 @@ use crate::{
     server::{
         ServerContext,
         builder::{GlobalErrorHandler, TlsConfig},
+        tls::serve_tls,
     },
     service::{self, server_service},
 };
@@ -61,24 +62,22 @@ impl H1Server {
         let acceptor = cfg.tls_acceptor()?;
         let context = self.server_context();
         let s = ServiceBuilder::new().service(server_service(service::h1::serve_http1, context));
-        loop {
-            if let Ok((socket, _addr)) = server.accept().await
-                && let Ok(socket) = acceptor.clone().accept(socket).await
-            {
-                let s = s.clone();
-                tokio::spawn(async move {
-                    let io = TokioIo::new(socket);
-                    let s = TowerToHyperService::new(s);
-                    let res = http1::Builder::new()
-                        .serve_connection(io, s)
-                        .with_upgrades()
-                        .await;
-                    if let Err(e) = res {
-                        log::error!("{e:?}");
-                    }
-                });
+        serve_tls(server, acceptor, move |socket| {
+            let s = s.clone();
+            async move {
+                let io = TokioIo::new(socket);
+                let s = TowerToHyperService::new(s);
+                let res = http1::Builder::new()
+                    .serve_connection(io, s)
+                    .with_upgrades()
+                    .await;
+                if let Err(e) = res {
+                    log::error!("{e:?}");
+                }
             }
-        }
+        })
+        .await?;
+        Ok(())
     }
 
     async fn run_plain(&self, server: TcpListener) -> Result<(), Box<dyn Error>> {
