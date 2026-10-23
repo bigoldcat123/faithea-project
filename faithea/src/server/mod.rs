@@ -1,6 +1,10 @@
 pub mod builder;
 mod http1;
 mod http2;
+
+#[cfg(test)]
+mod tests;
+
 use std::{error::Error, future::poll_fn, pin::Pin, sync::Arc};
 
 use bytes::{BufMut, BytesMut};
@@ -91,21 +95,24 @@ impl BytesSource for HyperIncommingBytesSource {
         buf: &'a mut BytesMut,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
         Box::pin(async move {
-            if let Some(frame) = poll_fn(|cx| Pin::new(&mut self.inner).poll_frame(cx)).await {
+            while let Some(frame) = poll_fn(|cx| Pin::new(&mut self.inner).poll_frame(cx)).await {
                 if let Ok(frame) = frame {
                     let data = frame
                         .into_data()
                         .map_err(|_| "frame.into_data error".to_string())?;
+                    // Empty DATA frames are valid and do not signal transport EOF.
+                    if data.is_empty() {
+                        continue;
+                    }
                     let len = data.len();
                     buf.put(data);
-                    Ok(len)
+                    return Ok(len);
                 } else {
-                    Err("(0)    ".into())
+                    return Err("(0)    ".into());
                 }
-            } else {
-                self.is_end = true;
-                Ok(0)
             }
+            self.is_end = true;
+            Ok(0)
         })
     }
     fn is_end(&self) -> bool {
