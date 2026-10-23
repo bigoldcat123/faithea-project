@@ -97,9 +97,12 @@ impl BytesSource for HyperIncomingBytesSource {
         Box::pin(async move {
             while let Some(frame) = poll_fn(|cx| Pin::new(&mut self.inner).poll_frame(cx)).await {
                 if let Ok(frame) = frame {
-                    let data = frame
-                        .into_data()
-                        .map_err(|_| "frame.into_data error".to_string())?;
+                    let data = match frame.into_data() {
+                        Ok(data) => data,
+                        // Trailers carry metadata, not request payload bytes.
+                        Err(frame) if frame.is_trailers() => continue,
+                        Err(_) => return Err("frame.into_data error".to_string()),
+                    };
                     // Empty DATA frames are valid and do not signal transport EOF.
                     if data.is_empty() {
                         continue;
@@ -117,6 +120,19 @@ impl BytesSource for HyperIncomingBytesSource {
     }
     fn is_end(&self) -> bool {
         self.is_end
+    }
+}
+
+impl BytesSource for &mut HyperIncomingBytesSource {
+    fn read_bytes<'a>(
+        &'a mut self,
+        buf: &'a mut BytesMut,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<usize, String>> + Send + 'a>> {
+        (**self).read_bytes(buf)
+    }
+
+    fn is_end(&self) -> bool {
+        (**self).is_end()
     }
 }
 

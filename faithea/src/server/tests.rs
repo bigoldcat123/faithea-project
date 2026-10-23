@@ -1,5 +1,7 @@
 use std::{future::Future, time::Duration};
 
+mod http1;
+
 use bytes::Bytes;
 use h2::client::SendRequest;
 use http::{Request, Response, StatusCode};

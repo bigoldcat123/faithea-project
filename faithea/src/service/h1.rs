@@ -3,12 +3,13 @@ use http::{
     Request, Response,
     header::{CONNECTION, CONTENT_LENGTH, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
 };
-use hyper::body::Incoming;
+use hyper::body::{Body, Incoming};
 
 use crate::{
+    error::BodyParseError,
     request::HttpRequest,
     response::ResponseBody,
-    server::{HyperIncomingBytesSource, ServerContext},
+    server::{BytesSource, HyperIncomingBytesSource, ServerContext},
     service::{guard_request, handle_request, handle_websocket},
 };
 
@@ -27,13 +28,21 @@ async fn handle_http(
     context: ServerContext,
 ) -> Result<Response<ResponseBody>, crate::error::Error> {
     let (parts, body) = req.into_parts();
-    let bs = HyperIncomingBytesSource::new(body);
-    let mut buf = BytesMut::with_capacity(4096);
-
+    let has_body = !body.is_end_stream() || parts.headers.contains_key(CONTENT_LENGTH);
     let mut req = HttpRequest::new(parts, None);
 
-    if req.get_header(CONTENT_LENGTH).is_some() {
-        let body = crate::request::parse_body_frame(bs, &mut buf, req.inner.headers()).await?;
+    if has_body {
+        let mut bs = HyperIncomingBytesSource::new(body);
+        let mut buf = BytesMut::with_capacity(4096);
+        let body = crate::request::parse_body_frame(&mut bs, &mut buf, req.inner.headers()).await?;
+        // Multipart can finish before the HTTP body, including its trailers.
+        // Consume the remainder so the connection can serve the next request.
+        while !bs.is_end() {
+            buf.clear();
+            bs.read_bytes(&mut buf)
+                .await
+                .map_err(BodyParseError::from)?;
+        }
         *req.inner.body_mut() = Some(body);
     }
 
