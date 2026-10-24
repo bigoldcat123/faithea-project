@@ -390,3 +390,103 @@ async fn transport_read_errors_are_preserved() {
         Err(BodyParseError::Other(message)) if message == "unexpected read after EOF"
     ));
 }
+
+#[tokio::test]
+async fn multipart_fields_and_files_enforce_limits_at_all_chunk_sizes() {
+    for is_file in [false, true] {
+        for size in [4, 5] {
+            let body = if is_file {
+                file_body_with_content(&vec![b'x'; size])
+            } else {
+                text_body(&"x".repeat(size))
+            };
+            for chunk_size in [1, 7, body.len()] {
+                let mut buf = BytesMut::new();
+                let limits = BodyLimits {
+                    max_file_size: 4,
+                    max_field_size: 4,
+                    ..BodyLimits::default()
+                };
+                let result = MultipartBodyParser::parse_with_limits(
+                    ChunkedSource::new(body.chunks(chunk_size).map(|chunk| chunk.to_vec())),
+                    &mut buf,
+                    BOUNDARY,
+                    limits,
+                )
+                .await;
+                if size == 4 {
+                    assert!(result.is_ok(), "{result:?}");
+                } else {
+                    assert!(
+                        matches!(result, Err(BodyParseError::LimitExceeded { .. })),
+                        "{result:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn multipart_counts_duplicate_names_and_bounds_part_headers() {
+    let body = format!(
+        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"same\"\r\n\r\na\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"same\"\r\n\r\nb\r\n--{BOUNDARY}--"
+    );
+    for limits in [
+        BodyLimits {
+            max_parts: 1,
+            ..BodyLimits::default()
+        },
+        BodyLimits {
+            max_part_header_size: 16,
+            ..BodyLimits::default()
+        },
+    ] {
+        for chunk_size in [1, body.len()] {
+            let result = MultipartBodyParser::parse_with_limits(
+                ChunkedSource::new(
+                    body.as_bytes()
+                        .chunks(chunk_size)
+                        .map(|chunk| chunk.to_vec()),
+                ),
+                &mut BytesMut::new(),
+                BOUNDARY,
+                limits,
+            )
+            .await;
+            assert!(
+                matches!(result, Err(BodyParseError::LimitExceeded { .. })),
+                "{result:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn files_from_completed_parts_are_removed_when_a_later_limit_is_exceeded() {
+    let body = file_body();
+    let mut source = ChunkedSource::new([body.clone()]);
+    let mut buf = BytesMut::new();
+    // Parse the first part, retaining its file while preparing the next header.
+    source.chunks.clear();
+    let mut body = body[..body.len() - 2].to_vec();
+    body.extend_from_slice(b"\r\nContent-Disposition: form-data; name=\"next\"\r\n\r\nvalue");
+    source.chunks.push_back(body);
+    let mut parser =
+        MultipartBodyParser::new_with_start_state(source, &mut buf, BOUNDARY.as_bytes());
+    parser.limits.max_parts = 1;
+    parser.remove_multipart_body_prefix().await.unwrap();
+    parser.parse_header().await.unwrap();
+    parser.parse_body().await.unwrap();
+    let Part::File(file) = &parser.map.as_ref().unwrap()["upload"][0] else {
+        panic!("expected file")
+    };
+    let path = std::path::PathBuf::from(&file.temp_path);
+    assert!(path.exists());
+    assert!(matches!(
+        parser.process().await,
+        Err(BodyParseError::LimitExceeded { .. })
+    ));
+    drop(parser);
+    assert!(!path.exists(), "file leaked after exceeding the part limit");
+}

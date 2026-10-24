@@ -13,6 +13,7 @@ use crate::{
     guard::GuardTrie,
     handler::HandlerTrie,
     io::TokioIo,
+    request::BodyLimits,
     server::{
         ServerContext,
         builder::{GlobalErrorHandler, TlsConfig},
@@ -27,6 +28,8 @@ pub struct H1Server {
     pub(crate) handlers: Arc<HandlerTrie>,
     /// Shared reference to guard middleware trie
     pub(crate) guards: Arc<GuardTrie>,
+    pub(crate) pre_body_guards: Arc<GuardTrie>,
+    pub(crate) body_limits: BodyLimits,
     pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 impl H1Server {
@@ -36,6 +39,7 @@ impl H1Server {
             self.guards.clone(),
             self.error_handler.clone(),
         )
+        .with_body_config(self.pre_body_guards.clone(), self.body_limits)
     }
     pub(crate) async fn run(self) -> Result<(), Box<dyn Error>> {
         log::info!(

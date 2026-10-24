@@ -2,28 +2,28 @@ pub mod content_type;
 pub mod cookie;
 pub mod error;
 // pub mod method;
+mod body;
 pub mod path_param;
 pub mod search_param;
+pub use body::{BodyLimits, parse_body_frame, parse_body_frame_with_limits};
 use std::{fmt::Debug, path::PathBuf};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::Bytes;
 use http::{
-    HeaderMap, HeaderValue, Request, Uri,
+    HeaderValue, Request, Uri,
     header::{AsHeaderName, COOKIE},
 };
 use thiserror::Error;
 
 use crate::{
     TryConvertFrom,
-    data::inbound::multipart::{MultipartDataMap, parser::h1::MultipartBodyParser},
-    error::BodyParseError,
+    data::inbound::multipart::MultipartDataMap,
     handler::types::HttpHandlerError,
     request::{
-        content_type::ContentType, cookie::Cookie, error::ParseHandlerParamError,
-        path_param::PathParam, search_param::SearchParam,
+        cookie::Cookie, error::ParseHandlerParamError, path_param::PathParam,
+        search_param::SearchParam,
     },
     route::{Route, RouteComponent},
-    server::BytesSource,
 };
 
 pub enum ParseRequestBodyError {}
@@ -171,32 +171,6 @@ impl HttpRequest {
     }
 }
 
-pub async fn parse_body_frame<Source: BytesSource>(
-    bs: Source,
-    buf: &mut BytesMut,
-    headers: &HeaderMap<HeaderValue>,
-) -> Result<RequestBody, BodyParseError> {
-    use ContentType::*;
-    let content_type = ContentType::try_from(headers)?;
-    match content_type {
-        ApplicationJson => parse_simple_body(bs, buf).await,
-        MultipartFormData(boundary) => MultipartBodyParser::parse(bs, buf, boundary).await,
-        _ => parse_simple_body(bs, buf).await,
-    }
-}
-
-async fn parse_simple_body<R: BytesSource>(
-    mut source: R,
-    buf: &mut BytesMut,
-) -> Result<RequestBody, BodyParseError> {
-    loop {
-        if source.is_end() {
-            let body = buf.split_to(buf.remaining()).freeze();
-            return Ok(RequestBody::Simple(body));
-        }
-        let _len = source.read_bytes(buf).await?;
-    }
-}
 macro_rules! impl_convert_from_param {
     ($($t:ty),*) => {
 

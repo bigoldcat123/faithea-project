@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, sync::Arc, task::Poll};
 
 use faithea_websocket::{WebSocket, WebSocketIncomingMessageParser, WebSocketPayload};
-use http::{Request, Response};
+use http::{Request, Response, StatusCode, Version, header::CONNECTION};
 use hyper::{
     body::{Body, Incoming},
     upgrade::Upgraded,
@@ -9,6 +9,7 @@ use hyper::{
 use tokio::io::{AsyncWriteExt, split};
 
 use crate::{
+    error::BodyParseError,
     guard::GuardTrie,
     handler::{
         HandlerTrie,
@@ -23,6 +24,39 @@ use crate::{
 
 pub(crate) mod h1;
 pub(crate) mod h2;
+
+fn close_unread_body(mut response: HttpResponse, version: Version) -> Response<ResponseBody> {
+    // Do not drain a rejected upload to keep an HTTP/1 connection reusable.
+    // HTTP/2 discards only this stream and must not emit Connection headers.
+    if version != Version::HTTP_2 {
+        response.add_header(CONNECTION, http::HeaderValue::from_static("close"));
+    }
+    response.inner
+}
+
+fn body_error_response(
+    error: BodyParseError,
+    version: Version,
+) -> Result<Response<ResponseBody>, crate::error::Error> {
+    let (status, message) = match error {
+        BodyParseError::LimitExceeded { .. } => {
+            (StatusCode::PAYLOAD_TOO_LARGE, "payload too large")
+        }
+        BodyParseError::Timeout => (StatusCode::REQUEST_TIMEOUT, "request body timed out"),
+        error => return Err(error.into()),
+    };
+    let mut response = HttpResponse::new();
+    *response.inner.status_mut() = status;
+    if version == Version::HTTP_2 {
+        // Complete the rejection in HEADERS before HTTP/2 cancels the unread
+        // upload stream. No response DATA should race that cancellation.
+        response.add_header("content-length", http::HeaderValue::from_static("0"));
+    } else {
+        response.add_header("content-length", message.len().to_string().parse().unwrap());
+        response.set_body(ResponseBody::Simple(Some(message.into())));
+    }
+    Ok(close_unread_body(response, version))
+}
 
 pub(crate) async fn guard_request(
     guards: Arc<GuardTrie>,
@@ -40,6 +74,11 @@ pub async fn handle_websocket(
     let (parts, body) = req.into_parts();
     let req2 = HttpRequest::new(parts.clone(), None);
     let http_req = HttpRequest::new(parts, None);
+
+    let http_req = match guard_request(context.pre_body_guards(), http_req).await {
+        Ok(req) => req,
+        Err(response) => return Ok(response.inner),
+    };
 
     let response = HttpResponse::websocket_response(&http_req);
     let mut req = match guard_request(context.guards(), http_req).await {

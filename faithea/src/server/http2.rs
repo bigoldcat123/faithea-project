@@ -13,6 +13,7 @@ use crate::{
     guard::GuardTrie,
     handler::HandlerTrie,
     io::TokioIo,
+    request::BodyLimits,
     server::{
         ServerContext,
         builder::{GlobalErrorHandler, TlsConfig},
@@ -27,6 +28,8 @@ pub struct H2Server {
     pub(crate) handlers: Arc<HandlerTrie>,
     /// Shared reference to guard middleware trie
     pub(crate) guards: Arc<GuardTrie>,
+    pub(crate) pre_body_guards: Arc<GuardTrie>,
+    pub(crate) body_limits: BodyLimits,
     pub(crate) error_handler: Option<Arc<GlobalErrorHandler>>,
 }
 use hyper_util::rt::TokioExecutor;
@@ -38,6 +41,7 @@ impl H2Server {
             self.guards.clone(),
             self.error_handler.clone(),
         )
+        .with_body_config(self.pre_body_guards.clone(), self.body_limits)
     }
 
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
