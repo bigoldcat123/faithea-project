@@ -413,6 +413,42 @@ async fn main() {
 }
 ```
 
+### Request Body Limits and Early Authentication
+
+HTTP/1 and HTTP/2 default to **16 MiB** per request body, **8 MiB** per multipart
+file, **1 MiB** per text field, **128** total parts (including files and repeated
+field names), and **16 KiB** of headers per part. A **30-second** deadline covers
+the complete body, including multipart epilogues and trailers, starting when body
+reading begins. Exceeding a limit returns `413`; exceeding the deadline returns `408`.
+
+Configure these limits on the server builder:
+
+```rust
+use std::time::Duration;
+use faithea::{request::BodyLimits, server::HttpServer};
+
+let server = HttpServer::builder()
+    .body_limits(BodyLimits {
+        max_body_size: 32 * 1024 * 1024,
+        max_file_size: 16 * 1024 * 1024,
+        read_timeout: Duration::from_secs(60),
+        ..BodyLimits::default()
+    })
+    .build();
+```
+
+Use `.pre_body_guard(route, guard)` for header-based authentication. It runs before
+reading the body, creating upload files, or checking the Content-Length limit;
+`req.body()` is `None` at this stage. Existing `.guard()` middleware still runs
+after parsing and can inspect the body. Both stages use the existing route matching
+and guard ordering rules. Register existing header authentication guards with
+`pre_body_guard` to reject uploads before reading them.
+
+The total limit counts actual body bytes, including chunked uploads, multipart
+encoding overhead and epilogues. Rejecting an unfinished body closes its HTTP/1
+connection or stops only its HTTP/2 upload stream. Temporary files held by the
+parser are released on limit errors and timeouts.
+
 ### Global Error Handler
 
 ```rust

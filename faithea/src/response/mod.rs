@@ -15,7 +15,7 @@ use http::{
         UPGRADE,
     },
 };
-use hyper::body::{Body, Frame};
+use hyper::body::{Body, Frame, Incoming};
 use sha1::{Digest, Sha1};
 use tokio::{
     fs::File,
@@ -25,7 +25,11 @@ use tokio::{
 
 use faithea_websocket::WebSocketPayload;
 
-use crate::{handler::types::HttpHandlerError, request::HttpRequest};
+use crate::{
+    handler::types::HttpHandlerError,
+    request::{BodyLimits, HttpRequest},
+    server::{BytesSource, HyperIncomingBytesSource},
+};
 
 #[derive(Default, Debug)]
 pub struct HttpResponse {
@@ -144,6 +148,13 @@ pub enum ResponseBody {
     File(File),
     WsBody(Receiver<WebSocketPayload>),
     Stream(Receiver<Bytes>),
+    /// Keeps an unread HTTP/2 upload alive while an early response is sent.
+    #[doc(hidden)]
+    WithIncoming {
+        body: Box<ResponseBody>,
+        incoming: Option<Incoming>,
+        limits: BodyLimits,
+    },
 }
 
 impl Default for ResponseBody {
@@ -153,6 +164,13 @@ impl Default for ResponseBody {
 }
 
 impl ResponseBody {
+    pub(crate) fn with_incoming(self, incoming: Incoming, limits: BodyLimits) -> Self {
+        Self::WithIncoming {
+            body: Box::new(self),
+            incoming: Some(incoming),
+            limits,
+        }
+    }
     // async fn seriliaze_to_h2_stream(
     //     self,
     //     mut body_stream: SendStream<Bytes>,
@@ -221,6 +239,9 @@ impl ResponseBody {
                     socket.flush().await?;
                 }
             }
+            WithIncoming { body, .. } => {
+                Box::pin(body.serialize_to_h1_socket(socket)).await?;
+            }
             _ => {}
         }
         socket.flush().await?;
@@ -231,14 +252,53 @@ impl ResponseBody {
 impl Body for ResponseBody {
     type Data = Bytes;
     type Error = crate::error::Error;
-    // fn is_end_stream(&self) -> bool {
+    fn is_end_stream(&self) -> bool {
+        match self {
+            Self::Simple(None) => true,
+            Self::WithIncoming { body, incoming, .. } => incoming.is_none() || body.is_end_stream(),
+            _ => false,
+        }
+    }
 
-    // }
+    fn size_hint(&self) -> hyper::body::SizeHint {
+        match self {
+            Self::Simple(bytes) => hyper::body::SizeHint::with_exact(
+                bytes.as_ref().map_or(0, |bytes| bytes.len()) as u64,
+            ),
+            Self::WithIncoming { body, .. } => body.size_hint(),
+            _ => hyper::body::SizeHint::default(),
+        }
+    }
     fn poll_frame(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
         match *self {
+            ResponseBody::WithIncoming {
+                ref mut body,
+                ref mut incoming,
+                limits,
+            } => {
+                if incoming.is_none() {
+                    return Poll::Ready(None);
+                }
+                match std::task::ready!(std::pin::Pin::new(body.as_mut()).poll_frame(cx)) {
+                    Some(Ok(frame)) if body.is_end_stream() => Poll::Ready(Some(Ok(frame
+                        .map_data(|bytes| {
+                            Bytes::from_owner(IncomingFrame {
+                                bytes,
+                                incoming: incoming.take(),
+                                limits,
+                            })
+                        })))),
+                    None => Poll::Ready(Some(Ok(Frame::data(Bytes::from_owner(IncomingFrame {
+                        bytes: Bytes::new(),
+                        incoming: incoming.take(),
+                        limits,
+                    }))))),
+                    frame => Poll::Ready(frame),
+                }
+            }
             ResponseBody::Simple(ref mut bytes) => {
                 if let Some(bytes) = bytes.take() {
                     Poll::Ready(Some(Ok(Frame::data(bytes))))
@@ -274,6 +334,53 @@ impl Body for ResponseBody {
                     }
                 }
             },
+        }
+    }
+}
+
+// Hyper can drop a completed Body while its DATA frames are still queued in
+// HTTP/2. Retain the upload in those buffers as well, until they are written.
+struct IncomingFrame {
+    bytes: Bytes,
+    incoming: Option<Incoming>,
+    limits: BodyLimits,
+}
+
+impl AsRef<[u8]> for IncomingFrame {
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl Drop for IncomingFrame {
+    fn drop(&mut self) {
+        if let Some(incoming) = self.incoming.take() {
+            // h2 drops written buffers while holding its stream mutex. Release
+            // Incoming in a separate task to avoid re-entering the same mutex.
+            let limits = self.limits;
+            tokio::spawn(async move {
+                let mut source = HyperIncomingBytesSource::new(incoming);
+                let drain = async {
+                    let mut buf = BytesMut::with_capacity(4096);
+                    let mut remaining = limits.max_body_size;
+                    while !source.is_end() {
+                        buf.clear();
+                        let Ok(read) = source.read_bytes(&mut buf).await else {
+                            return;
+                        };
+                        if read > remaining {
+                            // Stop consuming an oversized rejected upload, but
+                            // keep it alive until the cleanup deadline rather
+                            // than resetting a response still read by the peer.
+                            std::future::pending::<()>().await;
+                        }
+                        remaining -= read;
+                    }
+                };
+                // Let the peer observe response EOF and finish/reset its upload.
+                // A stalled peer cannot keep this stream alive indefinitely.
+                let _ = tokio::time::timeout(limits.read_timeout, drain).await;
+            });
         }
     }
 }

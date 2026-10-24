@@ -4,10 +4,10 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     data::inbound::multipart::{
         MultipartDataMap, MultipartFile, Part,
-        parser::{HeaderInfo, MultipartBodyParserState, build_boundary_next_array},
+        parser::{HeaderInfo, MultipartBodyParserState, build_boundary_next_array, disposition},
     },
     error::BodyParseError,
-    request::RequestBody,
+    request::{BodyLimits, RequestBody},
     server::BytesSource,
 };
 
@@ -23,6 +23,8 @@ pub struct MultipartBodyParser<'a, R> {
     map: Option<MultipartDataMap>,
     state: MultipartBodyParserState,
     header_info: HeaderInfo,
+    limits: BodyLimits,
+    parts: usize,
 }
 impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
     fn new_with_start_state(source: R, buf: &'a mut BytesMut, boundary: &'a [u8]) -> Self {
@@ -43,6 +45,8 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
             state,
             map,
             header_info,
+            limits: BodyLimits::default(),
+            parts: 0,
         }
     }
     async fn process(&mut self) -> Result<RequestBody, BodyParseError> {
@@ -67,7 +71,17 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         buf: &'a mut BytesMut,
         boundary: &'a str,
     ) -> Result<RequestBody, BodyParseError> {
+        Self::parse_with_limits(source, buf, boundary, BodyLimits::default()).await
+    }
+
+    pub(crate) async fn parse_with_limits(
+        source: R,
+        buf: &'a mut BytesMut,
+        boundary: &'a str,
+        limits: BodyLimits,
+    ) -> Result<RequestBody, BodyParseError> {
         let mut state_machine = Self::new_with_start_state(source, buf, boundary.as_bytes());
+        state_machine.limits = limits;
         state_machine.process().await
     }
 
@@ -108,18 +122,23 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         let (file, temp_path) = temp_file.into_parts();
         let mut f = tokio::fs::File::from_std(file);
         let delimiter_len = self.boundary_with_prefix.len() + 2;
+        let mut written = 0;
         loop {
             self.ensure_len(delimiter_len).await?;
             let (is_ended, len) = self.check_body_end();
 
             if is_ended {
+                Self::check_size(written, len, self.limits.max_file_size, "multipart file")?;
                 let mut b = self.buf.split_to(len);
                 f.write_all_buf(&mut b).await?;
                 self.consume_body_boundary();
                 break;
             } else {
                 // Retain a possible delimiter split across the next read.
-                let mut b = self.buf.split_to(self.buf.len() - (delimiter_len - 1));
+                let len = self.buf.len() - (delimiter_len - 1);
+                Self::check_size(written, len, self.limits.max_file_size, "multipart file")?;
+                written += len;
+                let mut b = self.buf.split_to(len);
                 f.write_all_buf(&mut b).await?;
             }
         }
@@ -165,16 +184,41 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
             self.ensure_len(delimiter_len).await?;
             let (is_ended, len) = self.check_body_end();
             if is_ended {
+                Self::check_size(
+                    simple_body.len(),
+                    len,
+                    self.limits.max_field_size,
+                    "multipart field",
+                )?;
                 let b = self.buf.split_to(len);
                 simple_body.extend_from_slice(&b[..]);
                 self.consume_body_boundary();
                 break;
             } else {
-                let b = self.buf.split_to(self.buf.len() - (delimiter_len - 1));
+                let len = self.buf.len() - (delimiter_len - 1);
+                Self::check_size(
+                    simple_body.len(),
+                    len,
+                    self.limits.max_field_size,
+                    "multipart field",
+                )?;
+                let b = self.buf.split_to(len);
                 simple_body.extend_from_slice(&b[..]);
             }
         }
         Ok(simple_body.freeze())
+    }
+
+    fn check_size(
+        current: usize,
+        additional: usize,
+        limit: usize,
+        resource: &'static str,
+    ) -> Result<(), BodyParseError> {
+        if additional > limit.saturating_sub(current) {
+            return Err(BodyParseError::LimitExceeded { resource, limit });
+        }
+        Ok(())
     }
 
     fn check_multipart_header(&self) -> (bool, usize) {
@@ -198,23 +242,23 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         (false, 0)
     }
 
-    fn process_multipart_header(&mut self, header_line: &str) {
+    fn process_multipart_header(&mut self, header_line: &str) -> Result<(), BodyParseError> {
         if let Some((k, v)) = header_line.split_once(":") {
             if k.eq_ignore_ascii_case("Content-Disposition") {
-                for kv in v.split(";") {
-                    if let Some((k, v)) = kv.split_once("=") {
-                        if k.trim() == "name" {
-                            self.header_info.name = Some(v[1..v.len() - 1].to_string());
-                        }
-                        if k.trim() == "filename" {
-                            self.header_info.file_name = Some(v[1..v.len() - 1].to_string())
-                        }
+                let parameters = disposition::parameters(v)
+                    .map_err(|message| BodyParseError::Other(message.to_string()))?;
+                for (name, value) in parameters {
+                    if name.eq_ignore_ascii_case("name") {
+                        self.header_info.name = Some(value);
+                    } else if name.eq_ignore_ascii_case("filename") {
+                        self.header_info.file_name = Some(value);
                     }
                 }
             } else if k.eq_ignore_ascii_case("Content-Type") {
                 self.header_info.mime_type = Some(v.trim().to_string())
             }
         }
+        Ok(())
     }
     fn current_state(&self) -> MultipartBodyParserState {
         self.state
@@ -245,20 +289,39 @@ impl<'a, R: BytesSource> MultipartBodyParser<'a, R> {
         self.map.take().unwrap()
     }
     async fn parse_header(&mut self) -> Result<(), BodyParseError> {
+        if self.parts >= self.limits.max_parts {
+            return Err(BodyParseError::LimitExceeded {
+                resource: "multipart part count",
+                limit: self.limits.max_parts,
+            });
+        }
+        self.parts += 1;
         let header_len;
         loop {
             let (inner_is_ok, inner_header_len) = self.check_multipart_header();
             if inner_is_ok {
+                Self::check_size(
+                    0,
+                    inner_header_len,
+                    self.limits.max_part_header_size,
+                    "multipart part headers",
+                )?;
                 header_len = inner_header_len;
                 break;
             }
+            Self::check_size(
+                0,
+                self.buf.len(),
+                self.limits.max_part_header_size,
+                "multipart part headers",
+            )?;
             self.read_more().await?;
         }
         let b = self.buf.split_to(header_len);
         let b = str::from_utf8(&b)?;
         for l in b.split("\r\n") {
             if !l.is_empty() {
-                self.process_multipart_header(l);
+                self.process_multipart_header(l)?;
             }
         }
         self.state = MultipartBodyParserState::Body;

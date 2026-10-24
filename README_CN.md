@@ -413,6 +413,38 @@ async fn main() {
 }
 ```
 
+### 请求体限制与提前鉴权
+
+HTTP/1 和 HTTP/2 默认限制每次请求的总正文为 **16 MiB**、Multipart 单文件为
+**8 MiB**、单个文本字段为 **1 MiB**、总 part 数量为 **128**（包括文件和重名字段），
+每个 part 的头部为 **16 KiB**。读取整个正文（包括 Multipart 尾部和 trailers）的超时为
+**30 秒**，从开始读取正文时计时。超限返回 `413`，超时返回 `408`。
+
+可以通过构建器调整限制：
+
+```rust
+use std::time::Duration;
+use faithea::{request::BodyLimits, server::HttpServer};
+
+let server = HttpServer::builder()
+    .body_limits(BodyLimits {
+        max_body_size: 32 * 1024 * 1024,
+        max_file_size: 16 * 1024 * 1024,
+        read_timeout: Duration::from_secs(60),
+        ..BodyLimits::default()
+    })
+    .build();
+```
+
+对基于请求头的认证，使用 `.pre_body_guard(route, guard)`：它在读取正文、创建上传临时文件
+和校验 `Content-Length` 上限前运行，此时 `req.body()` 为 `None`。原来的 `.guard()`
+仍在解析正文后执行，适合需要读取正文的校验。两种 Guard 都沿用现有的路由匹配和链式执行规则。
+将现有的请求头鉴权 Guard 注册改为 `pre_body_guard` 即可提前拒绝上传。
+
+总大小按实际接收的正文计数，因此分块上传、Multipart 编码开销和 epilogue 也受限制。
+拒绝未读完的正文时，HTTP/1 关闭该连接，HTTP/2 仅终止当前上传流。
+超限或超时后会释放解析过程中持有的上传临时文件。
+
 ### 全局错误处理
 
 ```rust

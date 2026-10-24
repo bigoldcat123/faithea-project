@@ -25,7 +25,7 @@ use crate::{
     ResponseModifier,
     guard::{GuardFuture, GuardTrie, RawGuardTrait},
     handler::HandlerTrie,
-    request::HttpRequest,
+    request::{BodyLimits, HttpRequest},
     response::{HttpResponse, HttpResponseModifier},
     server::{HandlerModifier, Server, http1::H1Server, http2::H2Server},
     util::static_map,
@@ -74,12 +74,33 @@ impl TlsConfig {
 pub struct HttpServerBuilder {
     handlers: HandlerTrie,
     guards: GuardTrie,
+    pre_body_guards: GuardTrie,
+    body_limits: BodyLimits,
     addr: SocketAddr,
     tls: Option<TlsConfig>,
     h2: bool,
     error_handler: Option<GlobalErrorHandler>,
 }
 impl HttpServerBuilder {
+    /// Configures body limits for all routes, for both HTTP/1 and HTTP/2.
+    pub fn body_limits(mut self, limits: BodyLimits) -> Self {
+        self.body_limits = limits;
+        self
+    }
+
+    /// Runs before any body is read or multipart files are created. Use this
+    /// for header-based authentication. The request body is `None` here;
+    /// ordinary `guard` middleware still runs after body parsing.
+    pub fn pre_body_guard<F, O, P>(mut self, route: P, f: F) -> Self
+    where
+        F: RawGuardTrait<O>,
+        O: GuardFuture,
+        P: AsRef<str>,
+    {
+        self.pre_body_guards.add(route, f);
+        self
+    }
+
     pub fn global_error_handler<H, R>(mut self, handler: H) -> Self
     where
         H: RawGlobalErrorHandler<R>,
@@ -179,6 +200,8 @@ impl HttpServerBuilder {
                 addr: self.addr,
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
+                pre_body_guards: Arc::new(self.pre_body_guards),
+                body_limits: self.body_limits,
                 tls: self.tls,
                 error_handler: self.error_handler.map(Arc::new),
             })
@@ -187,6 +210,8 @@ impl HttpServerBuilder {
                 addr: self.addr,
                 handlers: Arc::new(self.handlers),
                 guards: Arc::new(self.guards),
+                pre_body_guards: Arc::new(self.pre_body_guards),
+                body_limits: self.body_limits,
                 tls: self.tls,
                 error_handler: self.error_handler.map(Arc::new),
             })
@@ -198,6 +223,8 @@ impl Default for HttpServerBuilder {
         Self {
             handlers: Default::default(),
             guards: Default::default(),
+            pre_body_guards: Default::default(),
+            body_limits: BodyLimits::default(),
             addr: "127.0.0.1:8899".to_socket_addrs().unwrap().next().unwrap(),
             tls: None,
             h2: false,

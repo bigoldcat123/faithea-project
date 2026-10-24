@@ -1,6 +1,7 @@
 pub mod builder;
 mod http1;
 mod http2;
+mod tls;
 
 #[cfg(test)]
 mod tests;
@@ -15,6 +16,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use crate::{
     guard::GuardTrie,
     handler::HandlerTrie,
+    request::BodyLimits,
     server::{
         builder::{GlobalErrorHandler, HttpServerBuilder},
         http1::H1Server,
@@ -34,6 +36,8 @@ pub struct ServerContext {
     handlers: Arc<HandlerTrie>,
     guards: Arc<GuardTrie>,
     error_handler: Option<Arc<GlobalErrorHandler>>,
+    pre_body_guards: Arc<GuardTrie>,
+    body_limits: BodyLimits,
 }
 impl ServerContext {
     pub(crate) fn new(
@@ -45,7 +49,20 @@ impl ServerContext {
             handlers,
             guards,
             error_handler,
+            pre_body_guards: Arc::new(GuardTrie::default()),
+            body_limits: BodyLimits::default(),
         }
+    }
+    pub(crate) fn with_body_config(mut self, guards: Arc<GuardTrie>, limits: BodyLimits) -> Self {
+        self.pre_body_guards = guards;
+        self.body_limits = limits;
+        self
+    }
+    pub(crate) fn pre_body_guards(&self) -> Arc<GuardTrie> {
+        self.pre_body_guards.clone()
+    }
+    pub(crate) fn body_limits(&self) -> BodyLimits {
+        self.body_limits
     }
     pub(crate) fn handlers(&self) -> Arc<HandlerTrie> {
         self.handlers.clone()

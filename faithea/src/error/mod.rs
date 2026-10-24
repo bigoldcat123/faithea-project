@@ -10,6 +10,15 @@ use crate::{
 /// Errors that occur during low-level body/multipart parsing.
 #[derive(Debug, Error)]
 pub enum BodyParseError {
+    #[error("{resource} exceeds limit of {limit}")]
+    LimitExceeded {
+        resource: &'static str,
+        limit: usize,
+    },
+
+    #[error("request body read timed out")]
+    Timeout,
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 

@@ -1,5 +1,6 @@
 use std::{future::Future, time::Duration};
 
+mod body_limits;
 mod http1;
 
 use bytes::Bytes;
